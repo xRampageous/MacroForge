@@ -45,7 +45,9 @@ def check_update(silent: bool = True) -> dict | None:
     Return manifest dict if a newer version is available, else None.
     If UPDATE_URL is empty, silently returns None.
     """
+    logger.info(f"check_update: UPDATE_URL={UPDATE_URL!r}, VERSION={VERSION!r}, TUPLE={VERSION_TUPLE}")
     if not UPDATE_URL.strip():
+        logger.warning("check_update: UPDATE_URL is empty — skipping")
         return None
 
     try:
@@ -64,17 +66,22 @@ def check_update(silent: bool = True) -> dict | None:
         return None
 
     remote_ver = data.get("version", "").strip()
+    logger.info(f"check_update: remote_ver={remote_ver!r}")
     if not remote_ver:
+        logger.info("check_update: remote version empty")
         return None
 
     try:
         remote_tuple = tuple(int(p) for p in remote_ver.split(".") if p.isdigit())
     except Exception:
+        logger.info("check_update: failed to parse remote version")
         return None
 
+    logger.info(f"check_update: compare {VERSION_TUPLE} vs {remote_tuple}")
     if remote_tuple > VERSION_TUPLE:
         logger.info(f"Update available: {VERSION} -> {remote_ver}")
         return data
+    logger.info(f"check_update: no update ({VERSION} >= {remote_ver})")
     return None
 
 

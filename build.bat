@@ -44,7 +44,7 @@ timeout /t 1 /nobreak >nul
 echo [2/5] Building with PyInstaller...
 :: Use --onedir (not --onefile) so the updater can replace the .exe in-place.
 :: The .exe sits next to its _internal folder — swapping just the .exe works.
-python -m PyInstaller --onedir --windowed --name "MacroForge" --noconfirm ^
+python -m PyInstaller --onedir --windowed --name "MacroForge" --noconfirm --clean ^
     "MacroForge.py" ^
     --hidden-import cv2 ^
     --hidden-import PIL ^
