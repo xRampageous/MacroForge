@@ -150,11 +150,15 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
 
     # Write updater batch
     bat = _write_batch_updater(current, new_file)
+    if not bat.exists():
+        logger.error(f"Updater batch not found: {bat}")
+        return False
+    logger.info(f"Updater batch written: {bat}")
 
     # Launch detached — app should exit immediately so the batch can swap files
     try:
         subprocess.Popen(
-            [str(bat)],
+            ["cmd", "/c", str(bat)],
             creationflags=subprocess.CREATE_NEW_CONSOLE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
