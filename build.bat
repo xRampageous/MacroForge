@@ -16,11 +16,18 @@ if not exist "%SRC_FILE%" (
 
 pushd "%SCRIPT_DIR%"
 
-:: Read version from version.py using Python (reliable)
+:: Read version and update update.json using helper
 echo.
-for /f "delims=" %%a in ('python -c "import re; f=open('version.py','r'); m=re.search(r'VERSION\s*=\s*\"([^\"]+)\"',f.read()); f.close(); print(m.group(1) if m else '')"') do set "VER=%%a"
+python build_helper.py > build_ver.txt
+if %errorlevel% neq 0 (
+    echo  !! build_helper.py failed -- check Python is available.
+    pause
+    exit /b 1
+)
+for /f "tokens=2" %%a in ('findstr /B "Version:" build_ver.txt') do set "VER=%%a"
+del /f /q build_ver.txt >nul 2>&1
 if "%VER%"=="" (
-    echo  !! Could not read version from version.py !!
+    echo  !! Could not read version !!
     pause
     exit /b 1
 )
@@ -29,15 +36,6 @@ echo   MacroForge -- Build ^& Package
 echo ============================================
 echo   Version: %VER%
 echo   Source:  %CD%
-echo.
-
-:: Auto-update update.json
-echo [0/5] Updating update.json...
-python -c "import json,sys; v=sys.argv[1]; data={'version':v,'url':f'https://github.com/xRampageous/MacroForge/releases/download/v{v}/MacroForge.exe','notes':'Release v'+v}; json.dump(data,open('update.json','w'),indent=2); print('  update.json ->',v)" %VER%
-if %errorlevel% neq 0 (
-    echo   !! Failed to write update.json -- check Python is available.
-)
-
 echo.
 echo [1/5] Closing any running instance...
 taskkill /f /im "MacroForge.exe" >nul 2>&1
