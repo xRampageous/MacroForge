@@ -1847,6 +1847,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
             self.engine.actions = []
         self.active_index = -1
         self._invalidate_seq_dur()
+        self.timeline.initialize_pool()
         self.refresh()
         self.update_statistics(immediate=True)
         self._update_profile_tabs()

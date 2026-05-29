@@ -123,16 +123,24 @@ class ExecutionEngine:
                 self.status(f"[Simulate] Image search ({len(templates)} template(s), conf={action.similarity:.2f})")
                 return
 
-            # ── Polling loop (respects wait_timeout) ──────────────────────
+            # ── Polling loop (respects wait_timeout + pause) ────────────
             timeout       = max(0.0, action.wait_timeout)
-            poll_interval = 0.25
+            poll_interval = 0.10
             deadline      = time.time() + timeout
             loc           = None
             matched_tmpl  = 0
+            _last_status  = 0.0
 
             # Use all_screens=True for multi-monitor; grayscale speeds up matching
             _use_grayscale = action.similarity < 0.98
             while self.running:
+                # Respect pause
+                if self.paused:
+                    pause_start = time.time()
+                    while self.paused and self.running:
+                        time.sleep(0.05)
+                    deadline += time.time() - pause_start
+
                 for ti, tmpl in enumerate(templates):
                     try:
                         loc = _pag.locateOnScreen(
@@ -148,15 +156,20 @@ class ExecutionEngine:
                     except _pag.ImageNotFoundException:
                         loc = None
                     except Exception as search_err:
-                        self.status(f"Image search error: {search_err}")
-                        return
+                        # Skip this template instead of aborting entire macro
+                        self.status(f"Image search warning (template {ti+1}): {search_err}")
+                        loc = None
+                        continue
 
                 if loc is not None:
                     break
                 if time.time() >= deadline:
                     break
                 remaining = deadline - time.time()
-                self.status(f"Waiting for image… {remaining:.1f}s left")
+                now = time.time()
+                if now - _last_status >= 1.0:
+                    self.status(f"Waiting for image… {remaining:.1f}s left")
+                    _last_status = now
                 time.sleep(min(poll_interval, remaining))
 
             # ── React ─────────────────────────────────────────────────────

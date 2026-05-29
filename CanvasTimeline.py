@@ -1024,6 +1024,8 @@ class CanvasTimeline(tk.Frame):
 
         if self.zoom != old:
             self._dirty_all = True
+            # Zoom changed row height; re-initialize pool so we have enough rows
+            self.after_idle(self.initialize_pool)
 
     def on_mouse_move(self, event):
 

@@ -1,6 +1,6 @@
 """MacroForge version info — single source of truth."""
 
-VERSION = "1.0.8"
+VERSION = "1.0.9"
 VERSION_TUPLE = tuple(int(p) for p in VERSION.split(".") if p.isdigit())
 
 # Update source (raw JSON hosted anywhere — GitHub raw, S3, your own server)
