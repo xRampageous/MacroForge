@@ -1726,27 +1726,65 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         threading.Thread(target=_bg, daemon=True).start()
 
     def _prompt_update(self, manifest):
-        """Show update dialog and optionally trigger auto-update."""
+        """Show update dialog and optionally trigger auto-update with progress bar."""
         remote_ver = manifest.get("version", "unknown")
         notes = manifest.get("notes", "")
         msg = f"A new version of MacroForge is available.\n\nCurrent: {VERSION}\nLatest: {remote_ver}"
         if notes:
             msg += f"\n\nRelease notes:\n{notes}"
-        if messagebox.askyesno("Update Available", msg + "\n\nDownload and install now?"):
-            self.status("Downloading update…")
-            self.root.update_idletasks()
+        if not messagebox.askyesno("Update Available", msg + "\n\nDownload and install now?"):
+            return
 
-            def _download():
-                try:
-                    if perform_update(manifest):
-                        self.root.after(0, self._real_exit)
-                    else:
-                        self.root.after(0, lambda: self.status("Update failed — check debug log"))
-                except Exception as e:
-                    logger.error(f"Update download error: {e}")
-                    self.root.after(0, lambda: self.status("Update failed"))
+        C = self.config.colors
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Updating MacroForge")
+        dlg.configure(bg=C["bg_secondary"])
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+        px = self.root.winfo_x() + self.root.winfo_width() // 2
+        py = self.root.winfo_y() + self.root.winfo_height() // 2
+        dlg.geometry(f"380x120+{px - 190}+{py - 60}")
 
-            threading.Thread(target=_download, daemon=True).start()
+        tk.Label(dlg, text=f"Downloading MacroForge {remote_ver}…", bg=C["bg_secondary"],
+                 fg=C["text"], font=("Segoe UI", 10)).pack(pady=(12, 4))
+
+        bar = ttk.Progressbar(dlg, mode="determinate", maximum=100, length=340)
+        bar.pack(pady=4)
+        style = ttk.Style()
+        style.configure("Horizontal.TProgressbar", background=C["accent"])
+
+        info_lbl = tk.Label(dlg, text="Starting…", bg=C["bg_secondary"],
+                              fg=C["text_dim"], font=("Segoe UI", 8))
+        info_lbl.pack(pady=(2, 8))
+
+        def _on_progress(downloaded, total):
+            pct = downloaded / total * 100
+            mb_down = downloaded / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+            self.root.after(0, lambda: (
+                bar.config(value=pct),
+                info_lbl.config(text=f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)")
+            ))
+
+        def _download():
+            try:
+                if perform_update(manifest, progress_cb=_on_progress):
+                    self.root.after(0, lambda: (dlg.destroy(), self._real_exit()))
+                else:
+                    self.root.after(0, lambda: (
+                        dlg.destroy(),
+                        self.status("Update failed — check debug log")
+                    ))
+            except Exception as e:
+                logger.error(f"Update download error: {e}")
+                self.root.after(0, lambda: (
+                    dlg.destroy(),
+                    self.status("Update failed")
+                ))
+
+        threading.Thread(target=_download, daemon=True).start()
 
     # ── Profile management helpers ─────────────────────────────────
     def _switch_profile(self, name: str):

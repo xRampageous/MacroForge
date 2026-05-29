@@ -85,8 +85,12 @@ class DebugLogger:
 
     def _write(self, text: str):
         try:
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(text + "\n")
+            if os.path.exists(self.log_path) and os.path.getsize(self.log_path) > 5 * 1024 * 1024:
+                with open(self.log_path, "w", encoding="utf-8") as f:
+                    f.write(text + "\n")
+            else:
+                with open(self.log_path, "a", encoding="utf-8") as f:
+                    f.write(text + "\n")
         except Exception:
             pass
 

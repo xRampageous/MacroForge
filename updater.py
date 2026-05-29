@@ -105,9 +105,10 @@ del "%~f0"
     return bat
 
 
-def perform_update(manifest: dict) -> bool:
+def perform_update(manifest: dict, progress_cb=None) -> bool:
     """
     Download the new exe and spawn a detached batch updater.
+    Optional progress_cb(bytes_downloaded, total_bytes) is called periodically.
     Returns True if the hand-off was started (app should exit).
     """
     download_url = manifest.get("url", "").strip()
@@ -119,7 +120,7 @@ def perform_update(manifest: dict) -> bool:
     work = _work_dir()
     new_file = work / "MacroForge.update.exe"
 
-    # Download
+    # Download in chunks with progress
     try:
         logger.info(f"Downloading update from {download_url} ...")
         req = urllib.request.Request(
@@ -127,7 +128,18 @@ def perform_update(manifest: dict) -> bool:
             headers={"User-Agent": f"MacroForge/{VERSION}"},
         )
         with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT) as resp:
-            new_file.write_bytes(resp.read())
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk_size = 64 * 1024
+            with open(new_file, "wb") as f:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_cb and total:
+                        progress_cb(downloaded, total)
         logger.info(f"Saved to {new_file}")
     except Exception as e:
         logger.error(f"Download failed: {e}")
