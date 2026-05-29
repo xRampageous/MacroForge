@@ -782,6 +782,11 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
+        # Icon
+        try:
+            dlg.wm_iconbitmap("MacroForge.ico")
+        except Exception:
+            pass
         # Centre on parent (simplified without update_idletasks)
         try:
             px = self.root.winfo_x() + self.root.winfo_width() // 2
@@ -791,7 +796,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         if height:
             dlg.geometry(f"{width}x{height}+{px - width//2}+{py - height//2}")
         else:
-            dlg.geometry(f"{width}x300+{px - width//2}+{py - 150}")
+            dlg.geometry(f"{width}+{px - width//2}+{py - 150}")
         # Title bar stripe
         tk.Frame(dlg, height=2, bg=C["accent"]).pack(fill="x")
         return dlg, C
@@ -1761,6 +1766,10 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         dlg.transient(self.root)
         dlg.grab_set()
         dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+        try:
+            dlg.wm_iconbitmap("MacroForge.ico")
+        except Exception:
+            pass
         px = self.root.winfo_x() + self.root.winfo_width() // 2
         py = self.root.winfo_y() + self.root.winfo_height() // 2
         dlg.geometry(f"380x120+{px - 190}+{py - 60}")

@@ -42,6 +42,10 @@ class ImageEditorMixin:
             dlg.configure(bg=C["bg"])
             dlg.transient(self.root)
             dlg.minsize(620, 400)
+            try:
+                dlg.wm_iconbitmap("MacroForge.ico")
+            except Exception:
+                pass
     
             _img_data  = [action.image_data]
             _photo_ref = [None]
