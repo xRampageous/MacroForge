@@ -1,0 +1,34 @@
+# Build artifacts
+dist/
+build/
+*.spec
+*.exe
+*.update.exe
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Installer output
+installer/
+
+# Debug / logs
+debug.log
+*.log
+
+# Session data
+macroforge_session.json
+settings.json
+profiles/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
