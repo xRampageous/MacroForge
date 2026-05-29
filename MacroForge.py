@@ -252,7 +252,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         self.root.configure(bg=C["bg"])
         self.root.geometry("780x760")
         self.root.minsize(640, 560)
-        self.root.title("MacroForge  —  Macro Automation")
+        self.root.title(f"MacroForge  v{VERSION}  —  Macro Automation")
 
         # ══════════════════════════════════════════════════════════════
         # TITLE BAR
@@ -2182,7 +2182,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
             except Exception as e:
                 messagebox.showerror("Test Compile Failed", str(e))
     def _update_title(self):
-        self.root.title(f"MacroForge  —  {self.session_manager.active}")
+        self.root.title(f"MacroForge  v{VERSION}  —  {self.session_manager.active}")
 
     def _update_profile_tabs(self):
         """Rebuild the profile tab strip to reflect current profiles."""

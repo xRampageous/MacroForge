@@ -16,12 +16,13 @@ if not exist "%SRC_FILE%" (
 
 pushd "%SCRIPT_DIR%"
 
-:: Read version from version.py
+:: Read version from version.py using Python (reliable)
 echo.
-for /f "tokens=2 delims==" %%a in ('findstr /R "^VERSION = " version.py') do (
-    set "RAW_VER=%%a"
-    set "VER=!RAW_VER:""=!"
-    set "VER=!VER: =!"
+for /f "delims=" %%a in ('python -c "import re; f=open('version.py','r'); m=re.search(r'VERSION\s*=\s*\"([^\"]+)\"',f.read()); f.close(); print(m.group(1) if m else '')"') do set "VER=%%a"
+if "%VER%"=="" (
+    echo  !! Could not read version from version.py !!
+    pause
+    exit /b 1
 )
 echo ============================================
 echo   MacroForge -- Build ^& Package
@@ -32,7 +33,7 @@ echo.
 
 :: Auto-update update.json
 echo [0/5] Updating update.json...
-python -c "import json,sys; data={'version':sys.argv[1],'url':f'https://github.com/xRampageous/MacroForge/releases/download/v{sys.argv[1]}/MacroForge.exe','notes':'Release v'+sys.argv[1]}; json.dump(data,open('update.json','w'),indent=2); print('  update.json ->',sys.argv[1])" %VER%
+python -c "import json,sys; v=sys.argv[1]; data={'version':v,'url':f'https://github.com/xRampageous/MacroForge/releases/download/v{v}/MacroForge.exe','notes':'Release v'+v}; json.dump(data,open('update.json','w'),indent=2); print('  update.json ->',v)" %VER%
 if %errorlevel% neq 0 (
     echo   !! Failed to write update.json -- check Python is available.
 )
