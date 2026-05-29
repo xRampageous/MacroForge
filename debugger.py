@@ -6,8 +6,6 @@ Works when frozen as .exe (no console available).
 import os
 import sys
 import time
-import tkinter as tk
-from tkinter import ttk
 from datetime import datetime
 
 
@@ -103,28 +101,39 @@ class DebugLogger:
 logger = DebugLogger()
 
 
+def get_log_path() -> str:
+    """Return path to current debug log file."""
+    return logger.log_path
+
+
 # =====================================================================
-#  In-app debug viewer window
+#  In-app debug viewer window  (lazy-imports tkinter — kept for compat)
 # =====================================================================
 
-class DebugViewer(tk.Toplevel):
+class DebugViewer:
     """A floating window that tails the debug log."""
 
     def __init__(self, master, colors: dict):
-        super().__init__(master)
-        self.title("MacroForge Debug Log")
-        self.geometry("800x400")
-        self.configure(bg=colors["bg_secondary"])
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-
+        import tkinter as tk
+        from tkinter import ttk
+        self._tk = tk
+        self._ttk = ttk
+        self._master = master
         self.colors = colors
+        self._win = tk.Toplevel(master)
+        self._win.title("MacroForge Debug Log")
+        self._win.geometry("800x400")
+        self._win.configure(bg=colors["bg_secondary"])
+        self._win.protocol("WM_DELETE_WINDOW", self._on_close)
         self._build_ui()
         self._seed_history()
         logger.add_listener(self._append_line)
 
     def _build_ui(self):
         C = self.colors
-        toolbar = tk.Frame(self, bg=C["bg_secondary"], pady=4)
+        tk = self._tk
+        ttk = self._ttk
+        toolbar = tk.Frame(self._win, bg=C["bg_secondary"], pady=4)
         toolbar.pack(fill="x", padx=6, pady=(4, 0))
 
         self._auto_scroll = tk.BooleanVar(value=True)
@@ -144,7 +153,7 @@ class DebugViewer(tk.Toplevel):
                   relief="flat", font=("Segoe UI", 8),
                   cursor="hand2").pack(side="right", padx=(0, 6))
 
-        text_frame = tk.Frame(self, bg=C["bg_secondary"])
+        text_frame = tk.Frame(self._win, bg=C["bg_secondary"])
         text_frame.pack(fill="both", expand=True, padx=6, pady=6)
 
         self.text = tk.Text(
@@ -164,20 +173,18 @@ class DebugViewer(tk.Toplevel):
         sb.pack(side="right", fill="y")
         self.text.config(yscrollcommand=sb.set)
 
-        # Colour tags
-        self.text.tag_config("INFO", foreground="#4ade80")   # green
-        self.text.tag_config("WARN", foreground="#fbbf24")   # yellow
-        self.text.tag_config("ERROR", foreground="#f87171")  # red
+        self.text.tag_config("INFO", foreground="#4ade80")
+        self.text.tag_config("WARN", foreground="#fbbf24")
+        self.text.tag_config("ERROR", foreground="#f87171")
 
     def _seed_history(self):
         for ts, level, msg in logger.get_entries():
             self._insert(ts, level, msg)
 
     def _append_line(self, line: str):
-        # line format: [HH:MM:SS.mmm] LEVEL | msg
         parts = line.split(" | ", 1)
         if len(parts) == 2:
-            header = parts[0]           # [ts] LEVEL
+            header = parts[0]
             msg = parts[1]
             level = header.split("] ")[1].strip() if "] " in header else "INFO"
             ts = header[1:].split("]")[0] if header.startswith("[") else ""
@@ -207,4 +214,4 @@ class DebugViewer(tk.Toplevel):
 
     def _on_close(self):
         logger.remove_listener(self._append_line)
-        self.destroy()
+        self._win.destroy()
