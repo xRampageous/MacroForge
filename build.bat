@@ -44,7 +44,7 @@ python -m PyInstaller --onedir --windowed --name "MacroForge" --noconfirm ^
     --hidden-import pyautogui ^
     --hidden-import pynput.keyboard._win32 ^
     --hidden-import pynput.mouse._win32 ^
-    --icon="MacroForge.png"
+    --icon="MacroForge.ico"
 
 if %errorlevel% neq 0 (
     echo.
@@ -58,6 +58,7 @@ echo.
 echo [3/4] Cleaning old artifacts...
 if exist "dist\MacroForge.update.exe" del /f /q "dist\MacroForge.update.exe" >nul 2>&1
 copy /y "MacroForge.png" "dist\MacroForge\MacroForge.png" >nul 2>&1
+copy /y "MacroForge.ico" "dist\MacroForge\MacroForge.ico" >nul 2>&1
 
 echo [4/4] Build complete.
 echo   dist\MacroForge\MacroForge.exe
@@ -67,7 +68,7 @@ echo.
 where iscc >nul 2>&1
 if %errorlevel% == 0 (
     echo   Inno Setup found — building installer...
-    iscc setup.iss
+    iscc "/DMyAppVersion=%VER%" setup.iss
     if %errorlevel% equ 0 (
         echo   installer\MacroForge-Setup.exe ready.
     ) else (

@@ -2,7 +2,9 @@
 ; Requires Inno Setup 6.x (free): https://jrsoftware.org/isdl.php
 
 #define MyAppName "MacroForge"
-#define MyAppVersion GetFileVersion('dist\MacroForge\MacroForge.exe')
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "MacroForge"
 #define MyAppURL ""
 #define MyAppExeName "MacroForge.exe"
@@ -21,7 +23,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=installer
 OutputBaseFilename=MacroForge-Setup
-SetupIconFile=MacroForge.png
+SetupIconFile=MacroForge.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -36,10 +38,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\MacroForge\MacroForge.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\MacroForge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Source: "MacroForge.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "MacroForge.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\MacroForge.png"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\MacroForge.png"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\MacroForge.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\MacroForge.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
