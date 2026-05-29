@@ -37,11 +37,7 @@ echo ============================================
 echo   Version: %VER%
 echo   Source:  %CD%
 echo.
-echo [1/5] Closing any running instance...
-taskkill /f /im "MacroForge.exe" >nul 2>&1
-timeout /t 1 /nobreak >nul
-
-echo [2/5] Building with PyInstaller...
+echo [1/4] Building with PyInstaller...
 :: Use --onedir (not --onefile) so the updater can replace the .exe in-place.
 :: The .exe sits next to its _internal folder — swapping just the .exe works.
 python -m PyInstaller --onedir --windowed --name "MacroForge" --noconfirm --clean ^
@@ -62,19 +58,19 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [3/5] Cleaning old artifacts...
+echo [2/4] Cleaning old artifacts...
 if exist "dist\MacroForge.update.exe" del /f /q "dist\MacroForge.update.exe" >nul 2>&1
 copy /y "MacroForge.png" "dist\MacroForge\MacroForge.png" >nul 2>&1
 copy /y "MacroForge.ico" "dist\MacroForge\MacroForge.ico" >nul 2>&1
 
-echo [4/5] Verifying build...
+echo [3/4] Verifying build...
 python -c "import sys,os; sys.path.insert(0,os.path.join(os.getcwd(),'dist','MacroForge','_internal')); from version import VERSION; print('  Built exe version:', VERSION)"
 if %errorlevel% neq 0 (
     echo   !! Version verification failed.
 )
 
 echo.
-echo [5/5] Build complete.
+echo [4/4] Build complete.
 echo   dist\MacroForge\MacroForge.exe
 echo   update.json  (auto-generated for v%VER%)
 echo.

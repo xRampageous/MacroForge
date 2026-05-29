@@ -319,3 +319,71 @@ class ProfileManager:
 
     def clear_session(self):
         self.delete_profile(self._active)
+
+
+class SettingsManager:
+    """
+    Persistent application-wide settings stored in
+    %APPDATA%/MacroForge/settings.json alongside the active profile key.
+    """
+
+    DEFAULTS = {
+        "hotkeys": {
+            "start": "f5",
+            "stop": "f6",
+            "record": "f7",
+            "toggle": "f9",
+            "esc": "esc",
+        },
+        "start_minimized": False,
+        "auto_save": True,
+        "default_loops": 1,
+        "default_speed": 1.0,
+    }
+
+    def __init__(self, base_dir: str = None):
+        if base_dir is None:
+            if getattr(sys, "frozen", False):
+                base_dir = os.path.join(
+                    os.environ.get("APPDATA", os.path.dirname(sys.executable)),
+                    "MacroForge",
+                )
+            else:
+                base_dir = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "MacroForge"
+                )
+        self._file = os.path.join(base_dir, "settings.json")
+        os.makedirs(base_dir, exist_ok=True)
+        self._data = self._load()
+
+    def _load(self) -> dict:
+        try:
+            with open(self._file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                # Deep-merge with defaults so new keys get defaults automatically
+                merged = deepcopy(self.DEFAULTS)
+                merged.update(raw)
+                if "hotkeys" in raw and isinstance(raw["hotkeys"], dict):
+                    merged["hotkeys"] = {**self.DEFAULTS["hotkeys"], **raw["hotkeys"]}
+                return merged
+        except Exception:
+            pass
+        return deepcopy(self.DEFAULTS)
+
+    def _save(self):
+        try:
+            with open(self._file, "w", encoding="utf-8") as f:
+                json.dump(self._data, f, indent=2)
+        except Exception:
+            pass
+
+    def get(self, key: str, default=None):
+        return self._data.get(key, default)
+
+    def set(self, key: str, value):
+        self._data[key] = value
+        self._save()
+
+    def all(self) -> dict:
+        return deepcopy(self._data)

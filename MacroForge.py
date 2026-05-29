@@ -31,16 +31,18 @@ from dialogs_pause_editor import PauseEditorMixin
 from dialogs_click_editor import ClickEditorMixin
 from dialogs_image_editor import ImageEditorMixin
 from dialogs_screenshot import ScreenshotMixin
+from dialogs_settings import SettingsEditorMixin
 from systray import TrayIcon
 from updater import check_update, perform_update
 from version import VERSION
+from models import SettingsManager
 
 
 # =========================================================
 # MAIN APPLICATION
 # =========================================================
 class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
-          ImageEditorMixin, ScreenshotMixin):
+          ImageEditorMixin, ScreenshotMixin, SettingsEditorMixin):
     KEY_VALUES = ["w","a","s","d","1","2","3","4","5","6","7","8","9","0",
                   "q","e","r","t","y","u","i","o","p","f","g","h","j","k","l",
                   "z","x","c","v","b","n","m",
@@ -62,7 +64,14 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
 
         self.config = Config()
         self.session_manager = ProfileManager()
- 
+        self.settings_manager = SettingsManager(self.session_manager.base_dir)
+
+        # Load persistent settings
+        _s = self.settings_manager.all()
+        self.auto_save_enabled = _s.get("auto_save", True)
+        _loops = _s.get("default_loops", 1)
+        _speed = _s.get("default_speed", 1.0)
+
         self.engine = ExecutionEngine(
             self._throttled_status,
             self.play_cb,
@@ -71,9 +80,8 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         )
         self.history = HistoryManager()
         self.clipboard: Optional[Action] = None
- 
+
         self.active_index = -1
-        self.auto_save_enabled = True
         self.actions_played = 0
         self.session_start_time = None
         self.session_elapsed_time = 0.0
@@ -129,8 +137,9 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
             except Exception:
                 pass
  
-        # New settings
-        self.speed_var = tk.DoubleVar(value=1.0)
+        # New settings — defaults loaded from SettingsManager
+        self.speed_var = tk.DoubleVar(value=_speed)
+        self.loops_var = tk.StringVar(value=str(_loops))
         self.infinite_loop_var = tk.BooleanVar(value=False)
         self.simulation_var = tk.BooleanVar(value=False)
         self.focus_lock_var = tk.BooleanVar(value=False)
@@ -146,7 +155,12 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
  
         self.build_ui()
         self.setup_keyboard_shortcuts()
-        
+
+        # Start minimized if requested
+        if _s.get("start_minimized", False):
+            self.root.withdraw()
+            logger.info("Started minimized to tray")
+
         # Configure progress bar style with green color matching dark theme
         progress_style = ttk.Style()
         progress_style.theme_use('clam')
@@ -391,7 +405,6 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         lp_row = tk.Frame(pin, bg=C["bg_tertiary"]); lp_row.pack(fill="x", pady=(0,2))
         tk.Label(lp_row, text="Loops", bg=C["bg_tertiary"], fg=C["text_dim"],
                  font=("Segoe UI", 8)).pack(side="left")
-        self.loops_var = tk.StringVar(value="1")
         tk.Entry(lp_row, textvariable=self.loops_var, width=5,
             bg=C["bg"], fg=C["text"], insertbackground=C["accent"],
             relief="flat", font=("Segoe UI", 9)).pack(side="left", padx=(4, 0))
@@ -1684,6 +1697,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         _add(m, "trash",   "Clear all actions",
              self.clear_all, foreground=C["error"])
         m.add_separator()
+        _add(m, "gear",    "Settings",               self.open_settings_dialog)
         _add(m, "check",   "Debug log",              self.open_debug_viewer)
         _add(m, "check",   "Check for Updates",      self._check_update_manual)
 
@@ -2678,25 +2692,41 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
             self.root.after(0, _apply)
  
     # ==================== HOTKEYS ====================
+    def _key_name(self, key):
+        """Return lowercase string name for a pynput key (e.g. 'f5', 'esc')."""
+        try:
+            return key.name.lower()
+        except AttributeError:
+            try:
+                return key.char.lower()
+            except AttributeError:
+                return str(key).lower()
+
     def _on_key_press_global(self, key):
         """Global hotkeys — dispatched on main thread via after().
-        During recording, only Esc and F7 (toggle record) are active."""
+        Uses configurable key mappings from SettingsManager."""
         try:
-            if key == keyboard.Key.esc:
+            kn = self._key_name(key)
+            hk = self.settings_manager.get("hotkeys", {})
+
+            # ESC is always hardwired for safety
+            if kn == "esc":
                 self.root.after(0, self._on_escape)
                 return
+
             if self._recorder["running"]:
-                # Only F7 works during recording; everything else is ignored
-                if key == keyboard.Key.f7:
+                # Only record toggle works during recording
+                if kn == hk.get("record", "f7"):
                     self.root.after(0, self._hotkey_record)
                 return
-            if key == keyboard.Key.f9:
+
+            if kn == hk.get("toggle", "f9"):
                 self.root.after(0, self._hotkey_toggle)
-            elif key == keyboard.Key.f5:
+            elif kn == hk.get("start", "f5"):
                 self.root.after(0, self._hotkey_start)
-            elif key == keyboard.Key.f6:
+            elif kn == hk.get("stop", "f6"):
                 self.root.after(0, self._hotkey_stop)
-            elif key == keyboard.Key.f7:
+            elif kn == hk.get("record", "f7"):
                 self.root.after(0, self._hotkey_record)
         except Exception as e:
             logger.error(f"_on_key_press_global error: {e}")

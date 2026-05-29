@@ -23,14 +23,14 @@ class KeyEditorMixin:
                      font=("Segoe UI", 9), width=14, anchor="w").pack(side="left")
             combo = ttk.Combobox(kr, textvariable=key_var, values=self.KEY_VALUES, width=10)
             combo.pack(side="left", padx=(0,6))
-            key_entry = tk.Entry(kr, width=10, bg=C["bg"], fg=C["text"],
+            key_entry = tk.Entry(kr, width=10, bg=C["bg"], fg=C["accent"],
                                  insertbackground=C["accent"], relief="flat",
-                                 font=("Segoe UI", 9), readonlybackground=C["bg"])
-            key_entry.insert(0, "press a key…")
+                                 font=("Segoe UI", 10, "bold"), readonlybackground=C["bg"])
+            key_entry.insert(0, key_var.get())
             key_entry.config(state="readonly")
             key_entry.pack(side="left", padx=(0,6))
             key_entry.bind("<KeyPress>", _capture_key)
-            tk.Label(kr, text="← click & press", bg=C["bg_tertiary"], fg=C["text_dim"],
+            tk.Label(kr, text="click & press a key", bg=C["bg_tertiary"], fg=C["text_dim"],
                      font=("Segoe UI", 8, "italic")).pack(side="left")
     
             sec2 = self._dlg_section(dlg, "TIMING & BEHAVIOUR", C["accent"])
@@ -109,14 +109,14 @@ class KeyEditorMixin:
                      font=("Segoe UI", 9), width=14, anchor="w").pack(side="left")
             combo = ttk.Combobox(kr, textvariable=key_var, values=self.KEY_VALUES, width=10)
             combo.pack(side="left", padx=(0,6))
-            key_entry = tk.Entry(kr, width=10, bg=C["bg"], fg=C["text"],
+            key_entry = tk.Entry(kr, width=10, bg=C["bg"], fg=C["accent"],
                                  insertbackground=C["accent"], relief="flat",
-                                 font=("Segoe UI", 9), readonlybackground=C["bg"])
+                                 font=("Segoe UI", 10, "bold"), readonlybackground=C["bg"])
             key_entry.insert(0, existing.key)
             key_entry.config(state="readonly")
             key_entry.pack(side="left", padx=(0,6))
             key_entry.bind("<KeyPress>", _capture_key)
-            tk.Label(kr, text="← click & press", bg=C["bg_tertiary"], fg=C["text_dim"],
+            tk.Label(kr, text="click & press a key", bg=C["bg_tertiary"], fg=C["text_dim"],
                      font=("Segoe UI", 8, "italic")).pack(side="left")
     
             sec2 = self._dlg_section(dlg, "TIMING & BEHAVIOUR", C["accent"])
