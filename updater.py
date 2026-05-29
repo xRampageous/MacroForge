@@ -49,8 +49,11 @@ def check_update(silent: bool = True) -> dict | None:
         return None
 
     try:
+        import time as _time
+        cache_bust = f"{_time.time():.0f}"
+        req_url = f"{UPDATE_URL}?t={cache_bust}" if "?" not in UPDATE_URL else f"{UPDATE_URL}&t={cache_bust}"
         req = urllib.request.Request(
-            UPDATE_URL,
+            req_url,
             headers={"User-Agent": f"MacroForge/{VERSION}"},
         )
         with urllib.request.urlopen(req, timeout=MANIFEST_TIMEOUT) as resp:
