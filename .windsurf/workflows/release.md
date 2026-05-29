@@ -15,7 +15,7 @@ Bump version, build, and ship a new release with auto-update support.
    VERSION = "X.Y.Z"
    ```
 
-2. **Run build** (generates `update.json` automatically):
+2. **Run build** (generates `update.json` + ZIP automatically):
    ```powershell
    cd C:\Users\Andie\MacroForge
    .\build.bat
@@ -23,7 +23,8 @@ Bump version, build, and ship a new release with auto-update support.
    // turbo
    This produces:
    - `dist\MacroForge\MacroForge.exe`
-   - `update.json` (auto-bumped version + URL)
+   - `dist\MacroForge-vX.Y.Z.zip` — **full update package** (exe + _internal)
+   - `update.json` (auto-bumped version + ZIP URL)
    - `installer\MacroForge-Setup.exe` (optional, only if Inno Setup is in PATH)
 
 3. **Commit the version bump**:
@@ -39,18 +40,16 @@ Bump version, build, and ship a new release with auto-update support.
    - Choose tag: `vX.Y.Z` (create new)
    - Title: `MacroForge vX.Y.Z`
    - Description: bullet list of changes
-   - Upload `dist\MacroForge\MacroForge.exe` as the release asset
+   - Upload **both** assets:
+     - `dist\MacroForge\MacroForge.exe`
+     - `dist\MacroForge-vX.Y.Z.zip`
    - Click **Publish release**
 
-5. **Done** — installed clients auto-detect the update within ~30 seconds of opening.
+5. **Done** — installed clients auto-detect the update within ~30 seconds of opening. The updater downloads the ZIP, extracts it, and replaces both the `.exe` and `_internal` folder automatically.
 
 ## When users MUST reinstall
 
 Users only need to run the installer again if:
-- You added a **new Python file** (e.g., `dialogs_settings.py`) — the auto-updater only replaces the `.exe`, not the `_internal` folder where Python modules live.
-- You upgraded a **dependency** (e.g., new `cv2` version).
-- You changed the **installer behavior** (registry, shortcuts, etc.).
+- You changed the **installer behavior** (registry, shortcuts, install path, etc.).
 
-For releases that only change existing `.py` files without adding new ones, the auto-updater handles it (old code in `_internal` gets overwritten when the new `.exe` runs... actually no, `_internal` is NOT replaced).
-
-**Rule of thumb**: if `git status` shows a new `.py` file, users must reinstall. Otherwise, auto-update is enough.
+**Auto-update now handles everything else** — new Python files, dependency upgrades, code changes — because the ZIP contains the full `dist/MacroForge` folder.
