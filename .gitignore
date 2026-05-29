@@ -5,6 +5,11 @@ build/
 *.exe
 *.update.exe
 MacroForge.ico
+icon_new.png
+
+# Build helpers
+build_helper.py
+build_ver.txt
 
 # Python cache
 __pycache__/
