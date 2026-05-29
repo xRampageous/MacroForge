@@ -104,12 +104,34 @@ echo  ============================================
 echo   1. Commit ^& push version.py + update.json
 echo      git add . ^&^& git commit -m "Release v%VER%" ^&^& git push
 echo.
-echo   2. Create GitHub Release v%VER%
-echo      Tag: v%VER%
-echo      Upload: dist\MacroForge\MacroForge.exe
-echo.
-echo   3. Install / Update test machine
+echo   2. Install / Update test machine
 echo      installer\MacroForge-Setup.exe
+echo.
+
+:: ── Auto-create GitHub release if gh CLI is available ──
+where gh >nul 2>&1
+if %errorlevel% == 0 (
+    echo.
+    echo [AUTO] GitHub CLI found — creating release v%VER%...
+    gh release create v%VER% --repo xRampageous/MacroForge --title "MacroForge v%VER%" --notes "Release v%VER%" 2>nul
+    echo [AUTO] Uploading assets...
+    gh release upload v%VER% --repo xRampageous/MacroForge --clobber "dist\MacroForge\MacroForge.exe" "dist\MacroForge-v%VER%.zip"
+    if %errorlevel% equ 0 (
+        echo [AUTO] Release v%VER% published with assets.
+    ) else (
+        echo [AUTO] Upload failed — run manually:
+        echo   gh release upload v%VER% --repo xRampageous/MacroForge --clobber "dist\MacroForge\MacroForge.exe" "dist\MacroForge-v%VER%.zip"
+    )
+) else (
+    echo.
+    echo   gh CLI not found. Install from: https://cli.github.com/
+    echo   Then create release manually at:
+    echo     https://github.com/xRampageous/MacroForge/releases/new
+    echo   Upload both:
+    echo     dist\MacroForge\MacroForge.exe
+    echo     dist\MacroForge-v%VER%.zip
+)
+
 echo.
 echo   Done.
 popd

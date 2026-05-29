@@ -34,16 +34,22 @@ Bump version, build, and ship a new release with auto-update support.
    git push
    ```
 
-4. **Create GitHub Release**:
-   - Go to `https://github.com/xRampageous/MacroForge/releases`
-   - Click **Draft a new release**
-   - Choose tag: `vX.Y.Z` (create new)
-   - Title: `MacroForge vX.Y.Z`
-   - Description: bullet list of changes
-   - Upload **both** assets:
-     - `dist\MacroForge\MacroForge.exe`
-     - `dist\MacroForge-vX.Y.Z.zip`
-   - Click **Publish release**
+4. **Create GitHub Release** (automated if `gh` CLI is in PATH):
+
+   `build.bat` will automatically create the release and upload assets if `gh` is available:
+   ```
+   [AUTO] GitHub CLI found — creating release vX.Y.Z...
+   [AUTO] Uploading assets...
+   [AUTO] Release vX.Y.Z published with assets.
+   ```
+
+   If `gh` is **not** found, do it manually:
+   ```powershell
+   gh release create vX.Y.Z --repo xRampageous/MacroForge --title "MacroForge vX.Y.Z" --notes "Release vX.Y.Z"
+   gh release upload vX.Y.Z --repo xRampageous/MacroForge --clobber dist\MacroForge\MacroForge.exe dist\MacroForge-vX.Y.Z.zip
+   ```
+
+   > **Why two commands?** `gh release create --attach` sometimes silently drops files. Using `create` then `upload` is bulletproof.
 
 5. **Done** — installed clients auto-detect the update within ~30 seconds of opening. The updater downloads the ZIP, extracts it, and replaces both the `.exe` and `_internal` folder automatically.
 
