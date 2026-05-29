@@ -81,30 +81,37 @@ def check_update(silent: bool = True) -> dict | None:
 def _write_batch_updater(current_exe: Path, new_exe: Path) -> Path:
     """Write a Windows batch script that replaces the exe and relaunches."""
     bat = current_exe.parent / "MacroForge_update.bat"
+    c = str(current_exe)
+    n = str(new_exe)
     bat_content = f"""@echo off
 title MacroForge Updater
 color 0A
-echo Waiting for MacroForge to close...
+echo Waiting for MacroForge to close... >"%~dp0_update.log"
 :waitloop
-tasklist | findstr /I "MacroForge.exe" >nul 2>&1
+tasklist /FI "IMAGENAME eq MacroForge.exe" 2>nul | find /I "MacroForge.exe" >nul
 if %errorlevel% == 0 (
-    timeout /t 1 /nobreak >nul
+    ping -n 2 127.0.0.1 >nul
     goto waitloop
 )
-echo Installing update...
-timeout /t 1 /nobreak >nul
-move /Y "{new_exe}" "{current_exe}" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Update failed — permissions error.
+echo Process closed. Installing update... >>"%~dp0_update.log"
+if not exist "{n}" (
+    echo ERROR: Downloaded file not found: {n} >>"%~dp0_update.log"
     pause
     del "%~f0"
     exit /b 1
 )
-echo Launching MacroForge...
-start "" "{current_exe}"
+move /Y "{n}" "{c}" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to replace exe. Check permissions. >>"%~dp0_update.log"
+    pause
+    del "%~f0"
+    exit /b 1
+)
+echo Update installed. Launching... >>"%~dp0_update.log"
+start "" "{c}"
 del "%~f0"
 """
-    bat.write_text(bat_content, encoding="ascii")
+    bat.write_text(bat_content, encoding="utf-8")
     return bat
 
 
@@ -122,6 +129,19 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     current = _exe_path()
     work = _work_dir()
     new_file = work / "MacroForge.update.exe"
+
+    logger.info(f"Current exe: {current}")
+    logger.info(f"Work dir: {work}")
+    logger.info(f"Update file target: {new_file}")
+
+    # Verify we can write to work dir
+    try:
+        test_file = work / ".write_test"
+        test_file.write_text("test")
+        test_file.unlink()
+    except Exception as e:
+        logger.error(f"Cannot write to work directory: {e}")
+        return False
 
     # Download in chunks with progress
     try:

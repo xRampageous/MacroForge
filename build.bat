@@ -110,4 +110,6 @@ echo      installer\MacroForge-Setup.exe
 echo.
 echo   Done.
 popd
-timeout /t 3 /nobreak >nul
+:: Use ping instead of timeout to avoid "Input redirection is not supported" error
+:: when running from IDE / non-interactive console
+ping -n 4 127.0.0.1 >nul 2>&1
