@@ -779,24 +779,32 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         dlg = tk.Toplevel(self.root)
         dlg.title(title)
         dlg.configure(bg=C["bg"])
-        dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
-        # Icon
         try:
             dlg.wm_iconbitmap("MacroForge.ico")
         except Exception:
             pass
-        # Centre on parent (simplified without update_idletasks)
+        # Centre on parent
         try:
             px = self.root.winfo_x() + self.root.winfo_width() // 2
             py = self.root.winfo_y() + self.root.winfo_height() // 2
         except Exception:
-            px, py = 400, 300  # Fallback position
+            px, py = 400, 300
         if height:
+            dlg.resizable(False, False)
             dlg.geometry(f"{width}x{height}+{px - width//2}+{py - height//2}")
         else:
-            dlg.geometry(f"{width}+{px - width//2}+{py - 150}")
+            # Start small, allow vertical growth, auto-fit after content is packed
+            dlg.resizable(False, True)
+            dlg.minsize(width, 120)
+            dlg.geometry(f"{width}x200+{px - width//2}+{py - 100}")
+            def _fit():
+                dlg.update_idletasks()
+                h = max(dlg.winfo_reqheight(), 120)
+                dlg.geometry(f"{width}x{h}+{px - width//2}+{py - h//2}")
+                dlg.resizable(False, False)
+            dlg.after_idle(_fit)
         # Title bar stripe
         tk.Frame(dlg, height=2, bg=C["accent"]).pack(fill="x")
         return dlg, C

@@ -50,12 +50,15 @@ def check_update(silent: bool = True) -> dict | None:
         return None
 
     try:
-        import time as _time
-        cache_bust = f"{_time.time():.0f}"
+        import time as _time, random as _random
+        cache_bust = f"{_time.time():.6f}_{_random.randint(100000, 999999)}"
         req_url = f"{UPDATE_URL}?t={cache_bust}" if "?" not in UPDATE_URL else f"{UPDATE_URL}&t={cache_bust}"
         req = urllib.request.Request(
             req_url,
-            headers={"User-Agent": f"MacroForge/{VERSION}"},
+            headers={
+                "User-Agent": f"MacroForge/{VERSION}",
+                "Cache-Control": "no-cache",
+            },
         )
         with urllib.request.urlopen(req, timeout=MANIFEST_TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
