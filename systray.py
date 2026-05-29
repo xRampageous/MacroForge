@@ -277,8 +277,18 @@ class TrayIcon:
         return nid
 
     def _create_icon(self):
-        """Create a small green square icon from scratch."""
+        """Load MacroForge.ico for the system tray."""
         size = 16
+        try:
+            ico_path = os.path.abspath("MacroForge.ico")
+            if os.path.exists(ico_path):
+                hicon = _user32.LoadImageW(
+                    None, ico_path, 1, 0, 0, 0x00000010
+                )
+                return hicon or None
+        except Exception:
+            pass
+        # Fallback: green square
         try:
             img = Image.new("RGBA", (size, size), (32, 184, 126, 255))
             ico = io.BytesIO()

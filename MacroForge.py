@@ -379,8 +379,6 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
                   C["pause"], fg="black", font=_bfont, hover_fg="#ffffff", icon="delay", icon_size=12, padx=6, pady=2).pack(fill="x", padx=8, pady=2)
         self._btn(sidebar, "Image", self.add_image,
                   C["playing"], fg="black", font=_bfont, icon="image", icon_size=12, padx=6, pady=2).pack(fill="x", padx=8, pady=2)
-        self._btn(sidebar, "Capture", self.capture_screen_region,
-                  C["neon_blue"], fg="black", font=_bfont, icon="image", icon_size=12, padx=6, pady=2).pack(fill="x", padx=8, pady=2)
 
         tk.Frame(sidebar, height=1, bg=C["border"]).pack(fill="x", padx=8, pady=6)
 
