@@ -8,17 +8,19 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 import urllib.request
+import zipfile
 from pathlib import Path
 
 from version import VERSION, VERSION_TUPLE, UPDATE_URL
 from debugger import logger
 
 MANIFEST_TIMEOUT = 8  # seconds
-DOWNLOAD_TIMEOUT = 60  # seconds
+DOWNLOAD_TIMEOUT = 120  # seconds (ZIPs are larger)
 
 
 def _is_frozen() -> bool:
@@ -82,11 +84,15 @@ def check_update(silent: bool = True) -> dict | None:
     return None
 
 
-def _write_batch_updater(current_exe: Path, new_exe: Path) -> Path:
-    """Write a Windows batch script that replaces the exe and relaunches."""
-    bat = current_exe.parent / "MacroForge_update.bat"
+def _write_batch_updater(work_dir: Path, current_exe: Path, extract_dir: Path, zip_file: Path) -> Path:
+    """Write a Windows batch script that replaces _internal + exe and relaunches."""
+    bat = work_dir / "MacroForge_update.bat"
     c = str(current_exe)
-    n = str(new_exe)
+    w = str(work_dir)
+    e = str(extract_dir)
+    z = str(zip_file)
+    internal_old = str(work_dir / "_internal.old")
+    internal_cur = str(work_dir / "_internal")
     bat_content = f"""@echo off
 title MacroForge Updater
 color 0A
@@ -98,19 +104,36 @@ if %errorlevel% == 0 (
     goto waitloop
 )
 echo Process closed. Installing update... >>"%~dp0_update.log"
-if not exist "{n}" (
-    echo ERROR: Downloaded file not found: {n} >>"%~dp0_update.log"
-    pause
-    del "%~f0"
-    exit /b 1
+
+:: Backup old _internal
+if exist "{internal_old}" (
+    rmdir /S /Q "{internal_old}" >nul 2>&1
 )
-move /Y "{n}" "{c}" >nul 2>&1
+if exist "{internal_cur}" (
+    move /Y "{internal_cur}" "{internal_old}" >nul 2>&1
+)
+
+:: Copy new files from extracted ZIP
+xcopy /E /I /Y /Q "{e}\*" "{w}" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Failed to replace exe. Check permissions. >>"%~dp0_update.log"
+    echo ERROR: Failed to copy new files. >>"%~dp0_update.log"
+    :: Rollback
+    if exist "{internal_old}" (
+        rmdir /S /Q "{internal_cur}" >nul 2>&1
+        move /Y "{internal_old}" "{internal_cur}" >nul 2>&1
+    )
     pause
     del "%~f0"
     exit /b 1
 )
+
+:: Clean up
+rmdir /S /Q "{e}" >nul 2>&1
+del /F /Q "{z}" >nul 2>&1
+if exist "{internal_old}" (
+    rmdir /S /Q "{internal_old}" >nul 2>&1
+)
+
 echo Update installed. Launching... >>"%~dp0_update.log"
 start "" "{c}"
 del "%~f0"
@@ -121,22 +144,26 @@ del "%~f0"
 
 def perform_update(manifest: dict, progress_cb=None) -> bool:
     """
-    Download the new exe and spawn a detached batch updater.
+    Download the update ZIP, extract it, and spawn a detached batch updater
+    that replaces both the .exe and the _internal folder.
     Optional progress_cb(bytes_downloaded, total_bytes) is called periodically.
     Returns True if the hand-off was started (app should exit).
     """
-    download_url = manifest.get("url", "").strip()
+    zip_url = manifest.get("zip_url", "").strip()
+    exe_url = manifest.get("url", "").strip()
+    download_url = zip_url or exe_url
     if not download_url:
-        logger.error("Update manifest missing 'url'")
+        logger.error("Update manifest missing 'zip_url' or 'url'")
         return False
 
     current = _exe_path()
     work = _work_dir()
-    new_file = work / "MacroForge.update.exe"
+    zip_file = work / "MacroForge.update.zip"
+    extract_dir = work / "MacroForge_update_tmp"
 
     logger.info(f"Current exe: {current}")
     logger.info(f"Work dir: {work}")
-    logger.info(f"Update file target: {new_file}")
+    logger.info(f"Update ZIP target: {zip_file}")
 
     # Verify we can write to work dir
     try:
@@ -146,6 +173,18 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     except Exception as e:
         logger.error(f"Cannot write to work directory: {e}")
         return False
+
+    # Clean up any leftover temp from previous failed attempts
+    if extract_dir.exists():
+        try:
+            shutil.rmtree(extract_dir)
+        except Exception:
+            pass
+    if zip_file.exists():
+        try:
+            zip_file.unlink()
+        except Exception:
+            pass
 
     # Download in chunks with progress
     try:
@@ -158,7 +197,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
             chunk_size = 64 * 1024
-            with open(new_file, "wb") as f:
+            with open(zip_file, "wb") as f:
                 while True:
                     chunk = resp.read(chunk_size)
                     if not chunk:
@@ -167,13 +206,29 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
                     downloaded += len(chunk)
                     if progress_cb and total:
                         progress_cb(downloaded, total)
-        logger.info(f"Saved to {new_file}")
+        logger.info(f"Saved to {zip_file}")
     except Exception as e:
         logger.error(f"Download failed: {e}")
         return False
 
+    # Extract ZIP
+    try:
+        logger.info(f"Extracting ZIP to {extract_dir} ...")
+        with zipfile.ZipFile(zip_file, "r") as zf:
+            zf.extractall(extract_dir)
+        logger.info("ZIP extracted successfully")
+    except Exception as e:
+        logger.error(f"ZIP extraction failed: {e}")
+        return False
+
+    # Verify extracted exe exists
+    extracted_exe = extract_dir / "MacroForge.exe"
+    if not extracted_exe.exists():
+        logger.error(f"Extracted MacroForge.exe not found in {extract_dir}")
+        return False
+
     # Write updater batch
-    bat = _write_batch_updater(current, new_file)
+    bat = _write_batch_updater(work, current, extract_dir, zip_file)
     if not bat.exists():
         logger.error(f"Updater batch not found: {bat}")
         return False

@@ -16,18 +16,18 @@ if not exist "%SRC_FILE%" (
 
 pushd "%SCRIPT_DIR%"
 
-:: Read version and update update.json using helper
+:: Read version from version.py
 echo.
-python build_helper.py > build_ver.txt
-if %errorlevel% neq 0 (
-    echo  !! build_helper.py failed -- check Python is available.
-    pause
-    exit /b 1
-)
-for /f "tokens=2" %%a in ('findstr /B "Version:" build_ver.txt') do set "VER=%%a"
-del /f /q build_ver.txt >nul 2>&1
+> _get_ver.py echo import re,sys
+>> _get_ver.py echo with open('version.py','r',encoding='utf-8') as f:
+>> _get_ver.py echo     m=re.search(r'VERSION\s*=\s*"([^"]+)"',f.read())
+>> _get_ver.py echo     sys.stdout.write(m.group(1) if m else '')
+python _get_ver.py > _build_ver.txt
+del /f /q _get_ver.py >nul 2>&1
+for /f "delims=" %%a in (_build_ver.txt) do set "VER=%%a"
+del /f /q _build_ver.txt >nul 2>&1
 if "%VER%"=="" (
-    echo  !! Could not read version !!
+    echo  !! Could not read version from version.py !!
     pause
     exit /b 1
 )
@@ -63,15 +63,22 @@ if exist "dist\MacroForge.update.exe" del /f /q "dist\MacroForge.update.exe" >nu
 copy /y "MacroForge.png" "dist\MacroForge\MacroForge.png" >nul 2>&1
 copy /y "MacroForge.ico" "dist\MacroForge\MacroForge.ico" >nul 2>&1
 
-echo [3/4] Verifying build...
+echo [3/4] Generating update.json and ZIP...
+python build_helper.py
+if %errorlevel% neq 0 (
+    echo   !! build_helper.py failed.
+)
+
+echo [4/4] Verifying build...
 python -c "import sys,os; sys.path.insert(0,os.path.join(os.getcwd(),'dist','MacroForge','_internal')); from version import VERSION; print('  Built exe version:', VERSION)"
 if %errorlevel% neq 0 (
     echo   !! Version verification failed.
 )
 
 echo.
-echo [4/4] Build complete.
+echo Build complete.
 echo   dist\MacroForge\MacroForge.exe
+echo   dist\MacroForge-v%VER%.zip
 echo   update.json  (auto-generated for v%VER%)
 echo.
 
