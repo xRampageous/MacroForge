@@ -7,7 +7,7 @@ from copy import deepcopy
 from datetime import datetime
 from collections import deque
 
-@dataclass
+@dataclass(slots=True)
 class Config:
     """Application configuration"""
     colors: Dict[str, str] = None
@@ -16,7 +16,7 @@ class Config:
     retry_delay: float = 0.1
     history_max_size: int = 50
     min_duration: float = 0.1
- 
+
     def __post_init__(self):
         if self.colors is None:
             self.colors = {
@@ -50,7 +50,7 @@ class Config:
 # =========================================================
 # DATA MODEL
 # =========================================================
-@dataclass
+@dataclass(slots=True)
 class Action:
     key: str
     duration: float
@@ -213,14 +213,14 @@ class ProfileManager:
 
     def _load_last_active(self) -> str:
         try:
-            with open(self.settings_file) as f:
+            with open(self.settings_file, "r", encoding="utf-8") as f:
                 return json.load(f).get("active_profile", self.DEFAULT_PROFILE)
         except Exception:
             return self.DEFAULT_PROFILE
 
     def _persist_active(self):
         try:
-            with open(self.settings_file, "w") as f:
+            with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump({"active_profile": self._active}, f)
         except Exception:
             pass
@@ -249,7 +249,7 @@ class ProfileManager:
                 "settings":  settings,
                 "timestamp": datetime.now().isoformat(),
             }
-            with open(self._profile_path(name), "w") as f:
+            with open(self._profile_path(name), "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except Exception:
             pass
@@ -259,7 +259,7 @@ class ProfileManager:
         try:
             path = self._profile_path(name)
             if os.path.exists(path):
-                with open(path) as f:
+                with open(path, "r", encoding="utf-8") as f:
                     return json.load(f)
         except Exception:
             pass
@@ -303,7 +303,7 @@ class ProfileManager:
         if os.path.exists(path):
             return False
         try:
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump({"profile": name, "actions": [], "settings": {},
                            "timestamp": datetime.now().isoformat()}, f, indent=2)
             return True

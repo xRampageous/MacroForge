@@ -38,6 +38,7 @@ class DebugLogger:
         self.log_path = os.path.join(log_dir, "debug.log")
         self._entries = []          # [(ts, level, msg), ...]
         self._listeners = []        # callables(msg)
+        self._approx_size = 0       # approximate bytes written since last rotation
         self._write("=" * 60)
         self._write(f"MacroForge Debug Log – {datetime.now().isoformat()}")
         self._write("=" * 60)
@@ -85,12 +86,15 @@ class DebugLogger:
 
     def _write(self, text: str):
         try:
-            if os.path.exists(self.log_path) and os.path.getsize(self.log_path) > 5 * 1024 * 1024:
+            line = text + "\n"
+            self._approx_size += len(line.encode("utf-8"))
+            if self._approx_size > 5 * 1024 * 1024:
+                self._approx_size = len(line.encode("utf-8"))
                 with open(self.log_path, "w", encoding="utf-8") as f:
-                    f.write(text + "\n")
+                    f.write(line)
             else:
                 with open(self.log_path, "a", encoding="utf-8") as f:
-                    f.write(text + "\n")
+                    f.write(line)
         except Exception:
             pass
 

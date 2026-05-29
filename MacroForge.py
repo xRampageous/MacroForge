@@ -728,6 +728,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
                 if "geometry" in settings:
                     self.root.geometry(settings["geometry"])
                 self._invalidate_seq_dur()
+                self.timeline.initialize_pool()
                 self.refresh()
                 # Reset statistics display on startup
                 self.actions_played = 0

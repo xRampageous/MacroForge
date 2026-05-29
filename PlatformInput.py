@@ -111,6 +111,8 @@ class PlatformInput:
         self._send_input.restype = wintypes.UINT
         self._screen_w = self._user32.GetSystemMetrics(0)
         self._screen_h = self._user32.GetSystemMetrics(1)
+        self._vk_cache = {}
+        self._scan_cache = {}
 
     # ── internal helpers ───────────────────────────────────
     def _send(self, inputs):
@@ -127,22 +129,35 @@ class PlatformInput:
     def _vk(self, key: str) -> int:
         """Resolve a key name or character to a virtual-key code."""
         k = key.lower().strip()
+        cached = self._vk_cache.get(k)
+        if cached is not None:
+            return cached
         if k in VK_MAP:
+            self._vk_cache[k] = VK_MAP[k]
             return VK_MAP[k]
         if len(k) == 1:
             # character → vk via VkKeyScanA
             result = self._user32.VkKeyScanA(ord(k))
             if result != -1:
-                return result & 0xFF
+                vk = result & 0xFF
+                self._vk_cache[k] = vk
+                return vk
+        self._vk_cache[k] = None
         return None
 
     def _scan(self, vk: int):
         """Return (scan_code, extended_bool) for a virtual key."""
+        cached = self._scan_cache.get(vk)
+        if cached is not None:
+            return cached
         sc = self._user32.MapVirtualKeyA(vk, 0)
         if sc == 0:
+            self._scan_cache[vk] = (0, False)
             return 0, False
         if sc > 0xFF:
-            return sc & 0xFF, True
+            result = (sc & 0xFF, True)
+            self._scan_cache[vk] = result
+            return result
         # Extended keys that MapVirtualKeyA doesn't flag properly
         ext_vks = {
             0x25, 0x26, 0x27, 0x28,   # arrows
@@ -151,7 +166,9 @@ class PlatformInput:
             0x5B, 0x5C,                 # win keys
             0x6D, 0x6E,                 # numpad - / .
         }
-        return sc, vk in ext_vks
+        result = (sc, vk in ext_vks)
+        self._scan_cache[vk] = result
+        return result
 
     def _mouse_input(self, dx, dy, flags, data=0):
         return INPUT(

@@ -104,6 +104,9 @@ class CanvasTimeline(tk.Frame):
         self._render_lock = False
         self._last_action_count = 0
 
+        # Cache decoded image previews to avoid re-decoding base64
+        self._image_preview_cache = {}
+
         self.setup_ui()
 
         self.after(50, self.initialize_pool)
@@ -430,6 +433,7 @@ class CanvasTimeline(tk.Frame):
             canvas_h = self.canvas.winfo_height()
 
             canvas_w = self.canvas.winfo_width()
+            cols = self._get_cols(canvas_w)
 
             first = max(0, int(self.scroll_offset / row_h))
 
@@ -510,7 +514,10 @@ class CanvasTimeline(tk.Frame):
                 self.animate_row(
                     row,
                     action_index,
-                    action
+                    action,
+                    canvas_w=canvas_w,
+                    cols=cols,
+                    row_h=row_h
                 )
 
                 self.show_row(row)
@@ -676,8 +683,11 @@ class CanvasTimeline(tk.Frame):
         if not data:
             return
         try:
-            img_bytes = base64.b64decode(data)
-            pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+            pil_img = self._image_preview_cache.get(data)
+            if pil_img is None:
+                img_bytes = base64.b64decode(data)
+                pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+                self._image_preview_cache[data] = pil_img
             MAX_W, MIN_W, MIN_H = 120, 28, 20
             aspect = pil_img.width / max(1, pil_img.height)
 
@@ -801,7 +811,7 @@ class CanvasTimeline(tk.Frame):
     # ANIMATION
     # =====================================================
 
-    def animate_row(self, row, index, action):
+    def animate_row(self, row, index, action, canvas_w=None, cols=None, row_h=None):
 
         C = self.config.colors
 
@@ -855,8 +865,11 @@ class CanvasTimeline(tk.Frame):
         )
 
         # Progress bar — real elapsed-time countdown
-        canvas_w = self.canvas.winfo_width()
-        _, _, bs, bw, _, _ = self._get_cols(canvas_w)
+        if canvas_w is None:
+            canvas_w = self.canvas.winfo_width()
+        if cols is None:
+            cols = self._get_cols(canvas_w)
+        _, _, bs, bw, _, _ = cols
         progress = bw
         if playing and self._action_dur > 0:
             paused_extra = (time.time() - self._paused_at) if self._paused else 0.0
@@ -867,7 +880,8 @@ class CanvasTimeline(tk.Frame):
             remaining = max(0.0, self._action_dur - elapsed)
             progress = max(2, int(bw * (remaining / self._action_dur)))
 
-        row_h = self.scaled_row_height()
+        if row_h is None:
+            row_h = self.scaled_row_height()
         bar_y = row["y"] + (row_h - 5) / 2
         self.canvas.coords(
             row["bar_fill"],
@@ -905,34 +919,32 @@ class CanvasTimeline(tk.Frame):
     # THEMES
     # =====================================================
 
-    def get_theme(self, action):
-
-        action_type = getattr(action, "action_type", "key")
-
-        themes = {
-            "key": {
-                "primary": "#20b87e",
-                "secondary": "#38d996",
-                "glow": "#0f2d22"
-            },
-            "pause": {
-                "primary": "#6b7280",
-                "secondary": "#9ca3af",
-                "glow": "#1f2937"
-            },
-            "image": {
-                "primary": "#f59e0b",
-                "secondary": "#fbbf24",
-                "glow": "#451a03"
-            },
-            "click": {
-                "primary": "#60a5fa",
-                "secondary": "#93c5fd",
-                "glow": "#1e3a8a"
-            }
+    _THEMES = {
+        "key": {
+            "primary": "#20b87e",
+            "secondary": "#38d996",
+            "glow": "#0f2d22"
+        },
+        "pause": {
+            "primary": "#6b7280",
+            "secondary": "#9ca3af",
+            "glow": "#1f2937"
+        },
+        "image": {
+            "primary": "#f59e0b",
+            "secondary": "#fbbf24",
+            "glow": "#451a03"
+        },
+        "click": {
+            "primary": "#60a5fa",
+            "secondary": "#93c5fd",
+            "glow": "#1e3a8a"
         }
+    }
 
-        return themes.get(action_type, themes["key"])
+    def get_theme(self, action):
+        action_type = getattr(action, "action_type", "key")
+        return self._THEMES.get(action_type, self._THEMES["key"])
 
     # =====================================================
     # SHOW/HIDE

@@ -18,6 +18,17 @@ from models import Action
 
 
 class ExecutionEngine:
+    # Pre-built randomization tables (avoid recreating dicts every action)
+    _KEY_VARIATIONS = {
+        "w": ["w", "a", "s", "d"],
+        "a": ["a", "w", "s", "d"],
+        "s": ["s", "w", "a", "d"],
+        "d": ["d", "w", "a", "s"],
+        "1": ["1", "2", "3"],
+        "2": ["2", "1", "3"],
+        "3": ["3", "1", "2"],
+    }
+
     def __init__(self, status_cb, play_cb, complete_cb, progress_cb):
         self.actions = []
         self.running = False
@@ -44,6 +55,7 @@ class ExecutionEngine:
         self._focus_hwnd = None         # Window handle captured at start
         self.input = PlatformInput()    # Fast Windows SendInput backend
         self.ai_matcher = None          # Lazy-load AIImageMatcher when first image search uses it
+        self._img_template_cache = {}   # action_b64_key -> [PIL.Image, ...]
 
     def capture_focus_window(self):
         """Capture whichever window currently has focus (call on Start)."""
@@ -90,15 +102,19 @@ class ExecutionEngine:
             import pyautogui as _pag
 
             # ── Build template list (primary + extra OR images) ───────────
-            templates = []
-            for b64 in [action.image_data] + [x for x in action.extra_images.split("|") if x]:
-                try:
-                    templates.append(Image.open(io.BytesIO(base64.b64decode(b64))))
-                except Exception:
-                    pass
-            if not templates:
-                self.status("Image action: no valid template — skipping")
-                return
+            cache_key = action.image_data + "|" + action.extra_images
+            templates = self._img_template_cache.get(cache_key)
+            if templates is None:
+                templates = []
+                for b64 in [action.image_data] + [x for x in action.extra_images.split("|") if x]:
+                    try:
+                        templates.append(Image.open(io.BytesIO(base64.b64decode(b64))))
+                    except Exception:
+                        pass
+                if not templates:
+                    self.status("Image action: no valid template — skipping")
+                    return
+                self._img_template_cache[cache_key] = templates
 
             # ── Parse region ──────────────────────────────────────────────
             region = None
@@ -269,17 +285,8 @@ class ExecutionEngine:
                 delay_variance = random.uniform(-action.random_delay, action.random_delay)
                 action.duration = max(0.1, action.duration + delay_variance)
             if action.random_key:
-                key_variations = {
-                    "w": ["w", "a", "s", "d"],
-                    "a": ["a", "w", "s", "d"],
-                    "s": ["s", "w", "a", "d"],
-                    "d": ["d", "w", "a", "s"],
-                    "1": ["1", "2", "3"],
-                    "2": ["2", "1", "3"],
-                    "3": ["3", "1", "2"],
-                }
-                if action.key in key_variations:
-                    action.key = random.choice(key_variations[action.key])
+                if action.key in self._KEY_VARIATIONS:
+                    action.key = random.choice(self._KEY_VARIATIONS[action.key])
         except Exception:
             pass  # Fallback to original action if randomization fails
 
@@ -293,6 +300,7 @@ class ExecutionEngine:
         loop_actions_executed = 0
         self.loops_completed_count = 0
         _completed_naturally = False
+        self._img_template_cache.clear()
  
         self.status("Running...")
  
