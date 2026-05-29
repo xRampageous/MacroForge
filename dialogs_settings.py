@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from models import SettingsManager
+from debugger import logger
 
 
 class SettingsEditorMixin:
@@ -108,5 +109,4 @@ class SettingsEditorMixin:
         from pynput import keyboard
         self.listener = keyboard.Listener(on_press=self._on_key_press_global, suppress=False)
         self.listener.start()
-        logger = self.__dict__.get("logger") or __import__("debugger", fromlist=["logger"]).logger
         logger.info("Global hotkey listener restarted with new mappings")

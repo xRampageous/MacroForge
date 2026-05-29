@@ -37,6 +37,7 @@ class ImageEditorMixin:
     
             # ── Dialog shell ─────────────────────────────────────
             dlg = tk.Toplevel(self.root)
+            dlg.withdraw()
             dlg.title("Image Search Action")
             dlg.resizable(True, False)
             dlg.configure(bg=C["bg"])
@@ -46,6 +47,7 @@ class ImageEditorMixin:
                 dlg.wm_iconbitmap("MacroForge.ico")
             except Exception:
                 pass
+            dlg.deiconify()
     
             _img_data  = [action.image_data]
             _photo_ref = [None]

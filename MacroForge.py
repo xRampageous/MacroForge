@@ -772,9 +772,11 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
     # DIALOG HELPERS
     # ──────────────────────────────────────────────────────────────
     def _make_dialog(self, title, width=420, height=None):
-        """Create a styled modal dialog and return (dlg, C)."""
+        """Create a styled modal dialog and return (dlg, C).
+        Dialog is kept hidden until fully laid-out to avoid white flash."""
         C = self.config.colors
         dlg = tk.Toplevel(self.root)
+        dlg.withdraw()                    # <-- hide before WM maps it (prevents white flash)
         dlg.title(title)
         dlg.configure(bg=C["bg"])
         dlg.transient(self.root)
@@ -792,8 +794,9 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         if height:
             dlg.resizable(False, False)
             dlg.geometry(f"{width}x{height}+{px - width//2}+{py - height//2}")
+            dlg.deiconify()               # show now — size is known, no resize flicker
         else:
-            # Start small, allow vertical growth, auto-fit after content is packed
+            # Auto-height: defer show until after caller packs widgets
             dlg.resizable(False, True)
             dlg.minsize(width, 120)
             dlg.geometry(f"{width}x200+{px - width//2}+{py - 100}")
@@ -802,6 +805,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
                 h = max(dlg.winfo_reqheight(), 120)
                 dlg.geometry(f"{width}x{h}+{px - width//2}+{py - h//2}")
                 dlg.resizable(False, False)
+                dlg.deiconify()           # show at final size — no white flash, no resize flicker
             dlg.after_idle(_fit)
         # Title bar stripe
         tk.Frame(dlg, height=2, bg=C["accent"]).pack(fill="x")
@@ -1766,6 +1770,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
 
         C = self.config.colors
         dlg = tk.Toplevel(self.root)
+        dlg.withdraw()
         dlg.title("Updating MacroForge")
         dlg.configure(bg=C["bg_secondary"])
         dlg.resizable(False, False)
@@ -1779,6 +1784,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
         px = self.root.winfo_x() + self.root.winfo_width() // 2
         py = self.root.winfo_y() + self.root.winfo_height() // 2
         dlg.geometry(f"380x120+{px - 190}+{py - 60}")
+        dlg.deiconify()
 
         tk.Label(dlg, text=f"Downloading MacroForge {remote_ver}…", bg=C["bg_secondary"],
                  fg=C["text"], font=("Segoe UI", 10)).pack(pady=(12, 4))
@@ -2524,6 +2530,10 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
             self.stop()
 
     def start(self):
+        # Guard: already running (not paused) — ignore duplicate
+        if self.engine.running and not self.engine.paused:
+            return
+
         # Cancel any pending resume countdown to avoid race
         if self._resume_countdown_active:
             self._resume_countdown_active = False
@@ -2531,6 +2541,7 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
                 self.root.after_cancel(self._resume_countdown_after)
                 self._resume_countdown_after = None
 
+        # Resume from pause
         if self.engine.running and self.engine.paused:
             self.engine.toggle_pause()
             self._set_transport(self.start_btn, "disabled", text="Start", inactive_bg=self.config.colors["bg_tertiary"])
