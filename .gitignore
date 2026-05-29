@@ -4,6 +4,7 @@ build/
 *.spec
 *.exe
 *.update.exe
+MacroForge.ico
 
 # Python cache
 __pycache__/
