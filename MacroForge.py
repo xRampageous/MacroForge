@@ -54,6 +54,10 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
     def __init__(self, root):
         self.root = root
         self.root.title("MacroForge")
+        try:
+            self.root.wm_iconbitmap("MacroForge.ico")
+        except Exception:
+            pass
         logger.info("MacroForge App initializing")
 
         self.config = Config()
