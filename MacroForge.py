@@ -1734,8 +1734,19 @@ class App(KeyEditorMixin, PauseEditorMixin, ClickEditorMixin,
             msg += f"\n\nRelease notes:\n{notes}"
         if messagebox.askyesno("Update Available", msg + "\n\nDownload and install now?"):
             self.status("Downloading update…")
-            if perform_update(manifest):
-                self._real_exit()
+            self.root.update_idletasks()
+
+            def _download():
+                try:
+                    if perform_update(manifest):
+                        self.root.after(0, self._real_exit)
+                    else:
+                        self.root.after(0, lambda: self.status("Update failed — check debug log"))
+                except Exception as e:
+                    logger.error(f"Update download error: {e}")
+                    self.root.after(0, lambda: self.status("Update failed"))
+
+            threading.Thread(target=_download, daemon=True).start()
 
     # ── Profile management helpers ─────────────────────────────────
     def _switch_profile(self, name: str):
