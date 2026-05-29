@@ -7,7 +7,6 @@ process can be safely overwritten on Windows.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import subprocess
 import sys
@@ -17,8 +16,7 @@ import urllib.request
 from pathlib import Path
 
 from version import VERSION, VERSION_TUPLE, UPDATE_URL
-
-logger = logging.getLogger("macroforge")
+from debugger import logger
 
 MANIFEST_TIMEOUT = 8  # seconds
 DOWNLOAD_TIMEOUT = 60  # seconds
