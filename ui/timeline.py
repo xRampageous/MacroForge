@@ -1,0 +1,774 @@
+"""MacroForge Timeline — QGraphicsView-based CanvasTimeline replacement.
+
+Replicates ALL v1.1.0 CanvasTimeline features:
+- 60 FPS rendering loop
+- Object pooling
+- Inertial smooth scrolling
+- Zoom (Ctrl+wheel)
+- Virtualized rendering
+- Dirty tracking
+- Per-row theming & glow
+- Progress bar with live countdown
+- Image previews (base64 → QPixmap)
+- Drag-and-drop reordering
+- Multi-select (Shift+click)
+- Hover highlighting
+- Context menu
+- FPS counter
+- ensure_visible
+- set_paused
+"""
+import time
+import math
+import base64
+import io
+from collections import deque
+
+from PyQt6.QtWidgets import (
+    QGraphicsView, QGraphicsScene, QGraphicsRectItem,
+    QGraphicsTextItem, QGraphicsLineItem, QGraphicsPixmapItem,
+    QFrame, QMenu
+)
+from PyQt6.QtCore import Qt, QRectF, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QColor, QPen, QBrush, QFont, QPainter, QPixmap,
+    QLinearGradient, QFontMetrics
+)
+
+from ui.theme import COLORS, TYPE_COLORS, TYPE_GLOW
+from debugger import logger
+
+
+class TimelineRow:
+    """Pooled row graphics items."""
+
+    def __init__(self, scene):
+        self.scene = scene
+        C = COLORS
+
+        self.bg = scene.addRect(0, 0, 100, 30, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["bg_secondary"])))
+        self.glow = scene.addRect(0, 0, 100, 30, QPen(QColor(C["accent"]), 2), QBrush(Qt.BrushStyle.NoBrush))
+        self.glow.setVisible(False)
+
+        self.left = scene.addRect(0, 0, 4, 30, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["accent"])))
+
+        self.bar_bg = scene.addRect(0, 0, 100, 4, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["bg_tertiary"])))
+        self.bar_fill = scene.addRect(0, 0, 50, 4, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["accent"])))
+
+        self.t_index = scene.addText("", QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self.t_index.setDefaultTextColor(QColor(C["text_dim"]))
+
+        self.t_key = scene.addText("", QFont("Segoe UI", 10, QFont.Weight.Bold))
+        self.t_key.setDefaultTextColor(QColor(C["text"]))
+
+        self.t_dur = scene.addText("", QFont("Consolas", 8))
+        self.t_dur.setDefaultTextColor(QColor(C["text_dim"]))
+
+        self.t_lane = scene.addText("", QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self.t_lane.setDefaultTextColor(QColor("#60a5fa"))
+
+        self.t_flags = scene.addText("", QFont("Segoe UI", 8))
+        self.t_flags.setDefaultTextColor(QColor(C["neon_gold"]))
+
+        self.icon_group = scene.createItemGroup([])
+        self.img_item = None
+        self.img_pixmap = None
+
+        self.bound_index = -1
+        self.y = 0
+        self.cache_key = None
+        self.zoom = 0
+        self._was_playing = False
+
+    def set_pos(self, x, y, w, row_h):
+        self.y = y
+        pad = 4
+        self.bg.setRect(x + pad, y, w - pad * 2, row_h - 2)
+        self.glow.setRect(x + pad, y, w - pad * 2, row_h - 2)
+        self.left.setRect(x + pad, y, 4, row_h - 2)
+
+        ci, ck, bs, bw, cl, cf = self._calc_cols(w)
+        bar_y = y + (row_h - 4) / 2
+        cy = y + row_h / 2
+
+        self.bar_bg.setRect(bs, bar_y, bw, 4)
+        self.bar_fill.setRect(bs, bar_y, bw, 4)
+
+        fm = QFontMetrics(self.t_index.font())
+        ih = fm.height()
+
+        self.t_index.setPos(ci, cy - ih / 2)
+        self.t_key.setPos(ck + 20, cy - ih / 2)
+        self.t_dur.setPos(bs + bw / 2 - 20, bar_y - ih - 2)
+        self.t_lane.setPos(cl, cy - ih / 2)
+        self.t_flags.setPos(cf, cy - ih / 2)
+
+        self._icon_x = ck + 6
+        self._icon_y = cy
+
+    def _calc_cols(self, w):
+        idx = max(8, int(w * 0.03))
+        key = max(40, int(w * 0.12))
+        bar_w = max(80, int(w * 0.22))
+        bar_s = int((w - bar_w) / 2)
+        lane = max(280, int(w * 0.72))
+        flags = max(360, int(w * 0.88))
+        return idx, key, bar_s, bar_w, lane, flags
+
+    def hide(self):
+        for item in (self.bg, self.glow, self.left, self.bar_bg, self.bar_fill,
+                     self.t_index, self.t_key, self.t_dur, self.t_lane, self.t_flags):
+            item.setVisible(False)
+        self.icon_group.setVisible(False)
+        if self.img_item:
+            self.img_item.setVisible(False)
+
+    def show(self):
+        for item in (self.bg, self.left, self.bar_bg, self.bar_fill,
+                     self.t_index, self.t_key, self.t_dur, self.t_lane, self.t_flags):
+            item.setVisible(True)
+        self.icon_group.setVisible(True)
+        if self.img_item:
+            self.img_item.setVisible(True)
+
+    def draw_icon(self, action_type, color):
+        """Draw simple shape icon for action type."""
+        # Remove old icon items
+        for item in self.icon_group.childItems():
+            self.icon_group.removeFromGroup(item)
+            self.scene.removeItem(item)
+
+        size = 12
+        x, y = self._icon_x - size / 2, self._icon_y - size / 2
+        pen = QPen(Qt.PenStyle.NoPen)
+        brush = QBrush(QColor(color))
+
+        if action_type == "key":
+            r = self.scene.addRect(x, y, size, size, pen, brush)
+        elif action_type == "click":
+            r = self.scene.addEllipse(x, y, size, size, pen, brush)
+        elif action_type == "image":
+            pts = [x + size / 2, y, x + size, y + size, x, y + size]
+            poly = self.scene.addPolygon(pts, pen, brush)
+        elif action_type == "pause":
+            r = self.scene.addRect(x + 3, y, 3, size, pen, brush)
+            r2 = self.scene.addRect(x + 7, y, 3, size, pen, brush)
+            self.icon_group.addToGroup(r2)
+        else:
+            r = self.scene.addEllipse(x, y, size, size, pen, brush)
+
+        self.icon_group.addToGroup(r)
+        self.icon_group.setVisible(True)
+
+    def set_image_preview(self, action, scene):
+        """Decode base64 and show image preview."""
+        data = getattr(action, "image_data", "")
+        if not data:
+            if self.img_item:
+                self.img_item.setVisible(False)
+            return
+        try:
+            img_bytes = base64.b64decode(data)
+            pixmap = QPixmap()
+            pixmap.loadFromData(img_bytes)
+            if pixmap.isNull():
+                return
+            # Scale to fit row
+            max_h = 24
+            scaled = pixmap.scaledToHeight(max_h, Qt.TransformationMode.SmoothTransformation)
+            if not self.img_item:
+                self.img_item = scene.addPixmap(scaled)
+            else:
+                self.img_item.setPixmap(scaled)
+            self.img_item.setPos(self._icon_x, self._icon_y - scaled.height() / 2)
+            self.img_item.setVisible(True)
+            # Hide icon when image shown
+            self.icon_group.setVisible(False)
+        except Exception:
+            pass
+
+    def update_content(self, action, index, zoom):
+        t = getattr(action, "action_type", "key")
+        color = TYPE_COLORS.get(t, COLORS["text_dim"])
+        glow = TYPE_GLOW.get(t, TYPE_GLOW["key"])
+
+        self.t_index.setPlainText(f"{index + 1:02d}")
+
+        label = getattr(action, "label", "")
+        display = label or action.key
+        if t == "image" and getattr(action, "image_data", ""):
+            display = label or "Image"
+        self.t_key.setPlainText(display)
+
+        self.t_dur.setPlainText(f"{action.duration:.2f}s")
+        self.t_lane.setPlainText(f"L{action.lane}" if action.lane != 0 else "")
+
+        flags = []
+        if getattr(action, "hold_mode", False):
+            flags.append("HOLD")
+        if getattr(action, "random_key", False):
+            flags.append("RAND")
+        rep = getattr(action, "repeat_count", 1)
+        if rep > 1:
+            flags.append(f"x{rep}")
+        self.t_flags.setPlainText("  " + "  ".join(flags))
+
+        self.left.setBrush(QBrush(QColor(color)))
+
+        # Update icon
+        self.draw_icon(t, color)
+
+        if t == "image":
+            self.set_image_preview(action, self.scene)
+        else:
+            if self.img_item:
+                self.img_item.setVisible(False)
+            self.icon_group.setVisible(True)
+
+        self.bound_index = index
+        self.zoom = zoom
+        self.cache_key = (action.key, action.duration, action.lane, label, t, rep)
+
+    def animate(self, index, is_playing, is_active, is_hover, is_multi, action_dur,
+                action_start, paused, paused_at, pause_offset, cols, row_h):
+        C = COLORS
+        t = "key"  # default, will be set by caller
+
+        bg = QColor(C["bg_secondary"])
+        glow_color = QColor(C["accent"])
+        glow_visible = False
+
+        if is_hover:
+            bg = QColor("#1c1f2b")
+        if is_active:
+            bg = QColor("#25293a")
+            glow_visible = True
+        if is_multi:
+            bg = QColor("#2a2f45")
+            glow_visible = True
+        if is_playing:
+            bg = QColor("#0f2d22")
+            glow_visible = True
+
+        self.bg.setBrush(QBrush(bg))
+        self.glow.setVisible(glow_visible)
+
+        # Progress bar
+        _, _, bs, bw, _, _ = cols
+        progress = bw
+        if is_playing and action_dur > 0:
+            paused_extra = (time.time() - paused_at) if paused else 0.0
+            elapsed = min(time.time() - action_start - pause_offset - paused_extra, action_dur)
+            remaining = max(0.0, action_dur - elapsed)
+            progress = max(2, int(bw * (remaining / action_dur)))
+            self.t_dur.setPlainText(f"{remaining:.1f}s")
+            self.t_dur.setDefaultTextColor(QColor(C["text"]))
+        elif not is_playing and self._was_playing:
+            # Reset duration text
+            pass  # caller handles
+
+        self._was_playing = is_playing
+
+        bar_y = self.y + (row_h - 4) / 2
+        self.bar_fill.setRect(bs, bar_y, progress, 4)
+
+
+class TimelineView(QGraphicsView):
+    """Modern QGraphicsView-based timeline."""
+
+    action_clicked = pyqtSignal(int)
+    action_double_clicked = pyqtSignal(int)
+    action_context_menu = pyqtSignal(int, object)
+    action_dragged = pyqtSignal(int, int)  # from, to
+
+    BUFFER_ROWS = 12
+    TARGET_FPS = 60
+    FRAME_TIME = 1 / TARGET_FPS
+    ROW_H = 34
+    HEADER_H = 26
+    SCROLL_DECAY = 0.90
+    MAX_VELOCITY = 3000
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._actions = []
+        self.active_index = -1
+        self.playing_index = -1
+        self.hover_index = -1
+        self.selected_indices = set()
+
+        self.scroll_offset = 0.0
+        self.scroll_velocity = 0.0
+        self.zoom = 1.0
+
+        self._action_start = 0.0
+        self._action_dur = 0.0
+        self._paused = False
+        self._paused_at = 0.0
+        self._pause_offset = 0.0
+
+        self.dragging = False
+        self.drag_index = -1
+        self.drag_target = -1
+        self.drag_start_y = 0
+
+        self._running = True
+        self._last_frame = time.perf_counter()
+        self._fps_counter = 0
+        self._fps_timer = time.perf_counter()
+        self._current_fps = 0
+
+        self._render_lock = False
+        self._last_action_count = 0
+        self._dirty_all = True
+
+        self._image_preview_cache = {}
+
+        self.setMinimumHeight(160)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
+        self.setStyleSheet(f"background-color: {COLORS['bg']}; border: 1px solid {COLORS['border']}; border-radius: 8px;")
+
+        self.scene = QGraphicsScene(self)
+        self.scene.setSceneRect(0, 0, 600, 400)
+        self.setScene(self.scene)
+
+        # Header
+        self._header_bg = None
+        self._header_line = None
+        self._header_labels = []
+        self._create_header()
+
+        # Pool
+        self.visible_pool = []
+        self.pool_size = 0
+        self._init_pool()
+
+        # Ghost for drag
+        self._ghost_rect = None
+        self._ghost_text = None
+        self._drop_line = None
+        self._ensure_ghost()
+
+        # Timer
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._frame_loop)
+        self._timer.start(16)
+
+    def _create_header(self):
+        if self._header_bg:
+            self.scene.removeItem(self._header_bg)
+        if self._header_line:
+            self.scene.removeItem(self._header_line)
+        for lbl in self._header_labels:
+            self.scene.removeItem(lbl)
+        self._header_labels = []
+
+        w = self.viewport().width()
+        C = COLORS
+
+        self._header_bg = self.scene.addRect(0, 0, w, self.HEADER_H,
+            QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["bg_secondary"])))
+        self._header_line = self.scene.addLine(0, self.HEADER_H, w, self.HEADER_H,
+            QPen(QColor(C["border"])))
+
+        cols = self._get_cols(w)
+        headers = [
+            (cols[0], "#", -1),
+            (cols[1], "ACTION", -1),
+            (cols[2] + cols[3] / 2, "DURATION", 0),
+            (cols[4], "LANE", -1),
+            (cols[5], "FLAGS", -1),
+        ]
+        for x, text, anchor in headers:
+            t = self.scene.addText(text, QFont("Segoe UI", 8, QFont.Weight.Bold))
+            t.setDefaultTextColor(QColor(C["text_dim"]))
+            if anchor == 0:
+                t.setPos(x - t.boundingRect().width() / 2, 2)
+            else:
+                t.setPos(x, 2)
+            self._header_labels.append(t)
+
+    def _get_cols(self, w):
+        idx = max(8, int(w * 0.03))
+        key = max(40, int(w * 0.12))
+        bar_w = max(80, int(w * 0.22))
+        bar_s = int((w - bar_w) / 2)
+        lane = max(280, int(w * 0.72))
+        flags = max(360, int(w * 0.88))
+        return idx, key, bar_s, bar_w, lane, flags
+
+    def _init_pool(self):
+        for row in self.visible_pool:
+            # Remove all items
+            for item in [row.bg, row.glow, row.left, row.bar_bg, row.bar_fill,
+                        row.t_index, row.t_key, row.t_dur, row.t_lane, row.t_flags]:
+                self.scene.removeItem(item)
+            if row.img_item:
+                self.scene.removeItem(row.img_item)
+        self.visible_pool.clear()
+
+        h = max(self.viewport().height(), 300)
+        row_h = self._row_h()
+        self.pool_size = int(h / row_h) + self.BUFFER_ROWS
+
+        for _ in range(self.pool_size):
+            self.visible_pool.append(TimelineRow(self.scene))
+
+        self._create_header()
+        self._dirty_all = True
+
+    def _row_h(self):
+        return max(20, int(self.ROW_H * self.zoom))
+
+    def _view_h(self):
+        return max(1, self.viewport().height() - self.HEADER_H)
+
+    def _clamp_scroll(self):
+        row_h = self._row_h()
+        max_scroll = max(0, len(self._actions) * row_h - self._view_h())
+        self.scroll_offset = max(0, min(max_scroll, self.scroll_offset))
+
+    def set_actions(self, actions):
+        self._actions = actions
+        self._dirty_all = True
+        self._clamp_scroll()
+
+    def set_active(self, index):
+        self.active_index = index
+        self._dirty_all = True
+
+    def set_playing(self, index, duration=0.0):
+        self.playing_index = index
+        self._action_start = time.time()
+        self._pause_offset = 0.0
+        self._paused = False
+        self._action_dur = duration
+        self.ensure_visible(index)
+        self._dirty_all = True
+
+    def set_paused(self, paused):
+        if paused and not self._paused:
+            self._paused = True
+            self._paused_at = time.time()
+        elif not paused and self._paused:
+            self._pause_offset += time.time() - self._paused_at
+            self._paused = False
+        self._dirty_all = True
+
+    def clear_playing(self):
+        self.playing_index = -1
+        self._action_dur = 0.0
+        self._dirty_all = True
+
+    def ensure_visible(self, index):
+        if index < 0 or index >= len(self._actions):
+            return
+        row_h = self._row_h()
+        y = index * row_h
+        view_h = self._view_h()
+        if y < self.scroll_offset:
+            self.scroll_offset = y
+        elif y + row_h > self.scroll_offset + view_h:
+            self.scroll_offset = y - view_h + row_h
+        self._clamp_scroll()
+        self._dirty_all = True
+
+    def refresh(self):
+        self._last_action_count = len(self._actions)
+        for row in self.visible_pool:
+            row.bound_index = -1
+            row.cache_key = None
+            row.zoom = 0
+        self._dirty_all = True
+
+    def _frame_loop(self):
+        if not self._running:
+            return
+
+        now = time.perf_counter()
+        dt = now - self._last_frame
+        self._last_frame = now
+
+        # FPS
+        self._fps_counter += 1
+        if now - self._fps_timer >= 1:
+            self._current_fps = self._fps_counter
+            self._fps_counter = 0
+            self._fps_timer = now
+
+        # Inertial scroll
+        if abs(self.scroll_velocity) > 0.1:
+            self.scroll_velocity *= self.SCROLL_DECAY
+            self.scroll_offset += self.scroll_velocity * dt
+            self._clamp_scroll()
+            self._dirty_all = True
+
+        # Detect changes
+        if len(self._actions) != self._last_action_count:
+            self._last_action_count = len(self._actions)
+            self._dirty_all = True
+            self._clamp_scroll()
+
+        if self._dirty_all or self.playing_index >= 0:
+            self._render()
+
+    def _render(self):
+        if self._render_lock:
+            return
+        self._render_lock = True
+        try:
+            actions = self._actions
+            total = len(actions)
+            row_h = self._row_h()
+            canvas_h = self.viewport().height()
+            canvas_w = self.viewport().width()
+            cols = self._get_cols(canvas_w)
+
+            first = max(0, int(self.scroll_offset / row_h))
+            last = min(total - 1, first + self.pool_size - 1)
+
+            offset_y = self.scroll_offset % row_h
+
+            for pool_i, row in enumerate(self.visible_pool):
+                action_index = first + pool_i
+                if action_index >= total:
+                    row.hide()
+                    continue
+
+                action = actions[action_index]
+                y = self.HEADER_H + (pool_i * row_h) - offset_y
+
+                # Position
+                if row.y != y or self._dirty_all:
+                    row.set_pos(0, y, canvas_w, row_h)
+
+                # Content
+                cache_key = (action.key, action.duration, getattr(action, "lane", 0),
+                            getattr(action, "label", ""), getattr(action, "action_type", "key"),
+                            getattr(action, "repeat_count", 1))
+
+                if (row.bound_index != action_index or row.zoom != self.zoom or
+                    row.cache_key != cache_key):
+                    row.update_content(action, action_index, self.zoom)
+                    row.cache_key = cache_key
+                    row.zoom = self.zoom
+
+                # Animation / state
+                is_playing = action_index == self.playing_index
+                is_active = action_index == self.active_index
+                is_hover = action_index == self.hover_index
+                is_multi = action_index in self.selected_indices
+
+                # Update duration text when not playing
+                if not is_playing and row._was_playing:
+                    row.t_dur.setPlainText(f"{action.duration:.2f}s")
+                    row.t_dur.setDefaultTextColor(QColor(COLORS["text_dim"]))
+
+                row.animate(action_index, is_playing, is_active, is_hover, is_multi,
+                            self._action_dur, self._action_start, self._paused,
+                            self._paused_at, self._pause_offset, cols, row_h)
+
+                row.show()
+
+            self._dirty_all = False
+
+            # Raise header
+            if self._header_bg:
+                self._header_bg.setZValue(100)
+            if self._header_line:
+                self._header_line.setZValue(100)
+            for lbl in self._header_labels:
+                lbl.setZValue(100)
+
+        finally:
+            self._render_lock = False
+
+    def _ensure_ghost(self):
+        if self._ghost_rect is not None:
+            return
+        C = COLORS
+        self._ghost_rect = self.scene.addRect(0, 0, 0, 0,
+            QPen(QColor(C["accent"]), 1),
+            QBrush(QColor(f"{C['accent']}20")))
+        self._ghost_rect.setVisible(False)
+        self._ghost_rect.setZValue(200)
+
+        self._ghost_text = self.scene.addText("", QFont("Segoe UI", 9, QFont.Weight.Bold))
+        self._ghost_text.setDefaultTextColor(QColor(C["text"]))
+        self._ghost_text.setVisible(False)
+        self._ghost_text.setZValue(201)
+
+        self._drop_line = self.scene.addLine(0, 0, 0, 0, QPen(QColor(C["accent"]), 2))
+        self._drop_line.setVisible(False)
+        self._drop_line.setZValue(202)
+
+    # ═══════════════════════════════════════════════════════
+    #  EVENTS
+    # ═══════════════════════════════════════════════════════
+
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            # Zoom
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoom *= 1.1
+            else:
+                self.zoom /= 1.1
+            self.zoom = max(0.4, min(3.0, self.zoom))
+            self._dirty_all = True
+            self._init_pool()
+        else:
+            # Scroll
+            row_h = self._row_h()
+            delta = event.angleDelta().y()
+            d = -delta / 120 * row_h * 8
+            self.scroll_velocity += d
+            self.scroll_velocity = max(-self.MAX_VELOCITY, min(self.MAX_VELOCITY, self.scroll_velocity))
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        pos = self.mapToScene(event.pos())
+        y = pos.y()
+        if y < self.HEADER_H:
+            return
+        row_h = self._row_h()
+        idx = int((y - self.HEADER_H + self.scroll_offset) / row_h)
+        if idx != self.hover_index:
+            self.hover_index = idx
+            self._dirty_all = True
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        pos = self.mapToScene(event.pos())
+        y = pos.y()
+        if y < self.HEADER_H:
+            super().mousePressEvent(event)
+            return
+
+        row_h = self._row_h()
+        idx = int((y - self.HEADER_H + self.scroll_offset) / row_h)
+
+        if 0 <= idx < len(self._actions):
+            if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+                self._select_range(idx)
+            else:
+                self.drag_index = idx
+                self.drag_start_y = pos.y()
+                self.dragging = False
+                self.action_clicked.emit(idx)
+        else:
+            self.action_clicked.emit(-1)
+            self.selected_indices.clear()
+            self._dirty_all = True
+
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        pos = self.mapToScene(event.pos())
+        y = pos.y()
+        if y < self.HEADER_H:
+            return
+        row_h = self._row_h()
+        idx = int((y - self.HEADER_H + self.scroll_offset) / row_h)
+        if 0 <= idx < len(self._actions):
+            self.action_double_clicked.emit(idx)
+        super().mouseDoubleClickEvent(event)
+
+    def mouseMoveEvent(self, event):
+        pos = self.mapToScene(event.pos())
+        # Hover
+        y = pos.y()
+        if y >= self.HEADER_H:
+            row_h = self._row_h()
+            idx = int((y - self.HEADER_H + self.scroll_offset) / row_h)
+            if idx != self.hover_index:
+                self.hover_index = idx
+                self._dirty_all = True
+
+        # Drag
+        if self.drag_index >= 0:
+            if abs(pos.y() - self.drag_start_y) > 8:
+                if not self.dragging:
+                    self.dragging = True
+                    self._ensure_ghost()
+                    action = self._actions[self.drag_index]
+                    atype = getattr(action, "action_type", "key")
+                    self._ghost_text.setPlainText(f"{atype}: {getattr(action, 'label', '') or action.key}")
+                    self._ghost_rect.setVisible(True)
+                    self._ghost_text.setVisible(True)
+                    self._drop_line.setVisible(True)
+
+            if self.dragging:
+                row_h = self._row_h()
+                target = int((y - self.HEADER_H + self.scroll_offset) / row_h)
+                target = max(0, min(target, len(self._actions)))
+                self.drag_target = target
+
+                w = self.viewport().width()
+                ghost_y = pos.y() - row_h / 2
+                self._ghost_rect.setRect(6, ghost_y, w - 12, row_h - 4)
+                self._ghost_text.setPos(30, pos.y() - 8)
+
+                target_y = self.HEADER_H + (target * row_h) - self.scroll_offset
+                self._drop_line.setLine(0, target_y, w, target_y)
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self.dragging:
+            if self.drag_target != self.drag_index:
+                self.action_dragged.emit(self.drag_index, self.drag_target)
+
+        if self._ghost_rect:
+            self._ghost_rect.setVisible(False)
+        if self._ghost_text:
+            self._ghost_text.setVisible(False)
+        if self._drop_line:
+            self._drop_line.setVisible(False)
+
+        self.dragging = False
+        self.drag_index = -1
+        self.drag_target = -1
+        super().mouseReleaseEvent(event)
+
+    def _select_range(self, index):
+        if self.active_index < 0 or self.active_index >= len(self._actions):
+            self.selected_indices.clear()
+            self.action_clicked.emit(index)
+            return
+        start = min(self.active_index, index)
+        end = max(self.active_index, index)
+        self.selected_indices = set(range(start, end + 1))
+        self._dirty_all = True
+
+    def contextMenuEvent(self, event):
+        pos = self.mapToScene(event.pos())
+        y = pos.y()
+        if y < self.HEADER_H:
+            return
+        row_h = self._row_h()
+        idx = int((y - self.HEADER_H + self.scroll_offset) / row_h)
+        if 0 <= idx < len(self._actions):
+            self.action_context_menu.emit(idx, event.globalPos())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.scene.setSceneRect(0, 0, self.viewport().width(), max(400, self.viewport().height()))
+        self._create_header()
+        self._dirty_all = True
+        # Grow pool if needed
+        h = self.viewport().height()
+        row_h = self._row_h()
+        needed = int(h / row_h) + self.BUFFER_ROWS
+        while len(self.visible_pool) < needed:
+            self.visible_pool.append(TimelineRow(self.scene))
+            self.pool_size += 1
+
+    def destroy(self):
+        self._running = False
+        self._timer.stop()

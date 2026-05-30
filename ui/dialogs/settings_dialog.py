@@ -1,116 +1,82 @@
-"""Settings dialog for MacroForge PyQt6."""
+"""Settings dialog — modern PyQt6 rebuild."""
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QCheckBox, QDoubleSpinBox,
-    QSpinBox, QPushButton, QHBoxLayout, QLabel, QTabWidget, QWidget,
-    QLineEdit, QMessageBox
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QCheckBox, QSpinBox
 )
-from PyQt6.QtCore import Qt
-
 from ui.theme import COLORS
-from version import VERSION
 
 
 class SettingsDialog(QDialog):
-    """Application settings with tabs."""
-
-    def __init__(self, parent, settings_manager):
+    def __init__(self, parent=None, settings_manager=None):
         super().__init__(parent)
-        self._mgr = settings_manager
+        self.settings_manager = settings_manager
         self.setWindowTitle("Settings")
-        self.resize(480, 380)
+        self.setMinimumWidth(400)
+        C = COLORS
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {COLORS['bg']}; }}
+            QDialog {{ background-color: {C['bg']}; }}
+            QLabel {{ color: {C['text_dim']}; font-size: 12px; }}
+            QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; font-size: 12px; }}
+            QLineEdit:focus {{ border-color: {C['accent']}; }}
+            QSpinBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; }}
+            QCheckBox {{ color: {C['text_dim']}; font-size: 12px; }}
+            QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {C['border']}; border-radius: 5px; }}
+            QCheckBox::indicator:checked {{ background-color: {C['accent']}; border-color: {C['accent']}; }}
         """)
-        self._build_ui()
 
-    def _build_ui(self):
-        layout = QVBoxLayout(self)
+        lo = QVBoxLayout(self)
+        lo.setSpacing(10)
+        lo.setContentsMargins(16, 16, 16, 16)
 
-        tabs = QTabWidget()
+        hdr = QLabel("SETTINGS")
+        hdr.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
+        lo.addWidget(hdr)
 
-        # General tab
-        general = QWidget()
-        gen_layout = QFormLayout(general)
-        gen_layout.setSpacing(10)
+        # Retry count
+        retry_row = QHBoxLayout()
+        retry_row.addWidget(QLabel("Retry count"))
+        self.retry = QSpinBox()
+        self.retry.setRange(0, 20)
+        self.retry.setValue(self.settings_manager.settings.get("retry_count", 3))
+        retry_row.addWidget(self.retry)
+        retry_row.addStretch()
+        lo.addLayout(retry_row)
 
-        self._chk_auto_save = QCheckBox()
-        self._chk_auto_save.setChecked(self._mgr.get("auto_save", True))
-        gen_layout.addRow("Auto-save session:", self._chk_auto_save)
+        # Retry delay
+        delay_row = QHBoxLayout()
+        delay_row.addWidget(QLabel("Retry delay (s)"))
+        self.delay = QLineEdit(str(self.settings_manager.settings.get("retry_delay", 0.1)))
+        self.delay.setFixedWidth(60)
+        delay_row.addWidget(self.delay)
+        delay_row.addStretch()
+        lo.addLayout(delay_row)
 
-        self._chk_start_min = QCheckBox()
-        self._chk_start_min.setChecked(self._mgr.get("start_minimized", False))
-        gen_layout.addRow("Start minimized:", self._chk_start_min)
+        # Checkboxes
+        self.auto_save = QCheckBox("Auto-save session")
+        self.auto_save.setChecked(self.settings_manager.settings.get("auto_save", True))
+        lo.addWidget(self.auto_save)
 
-        self._spin_def_speed = QDoubleSpinBox()
-        self._spin_def_speed.setRange(0.1, 10.0)
-        self._spin_def_speed.setSingleStep(0.1)
-        self._spin_def_speed.setValue(self._mgr.get("default_speed", 1.0))
-        gen_layout.addRow("Default speed:", self._spin_def_speed)
+        self.minimize_tray = QCheckBox("Minimize to tray")
+        self.minimize_tray.setChecked(self.settings_manager.settings.get("minimize_tray", True))
+        lo.addWidget(self.minimize_tray)
 
-        self._spin_def_loops = QSpinBox()
-        self._spin_def_loops.setRange(1, 9999)
-        self._spin_def_loops.setValue(self._mgr.get("default_loops", 1))
-        gen_layout.addRow("Default loops:", self._spin_def_loops)
-
-        self._chk_debug = QCheckBox()
-        self._chk_debug.setChecked(self._mgr.get("debug_mode", False))
-        gen_layout.addRow("Debug logging:", self._chk_debug)
-
-        tabs.addTab(general, "General")
-
-        # Hotkeys tab
-        hotkeys = QWidget()
-        hk_layout = QFormLayout(hotkeys)
-        hk_layout.setSpacing(10)
-
-        self._hk_play = QLineEdit(self._mgr.get("hk_play", "<f5>"))
-        hk_layout.addRow("Play / Pause:", self._hk_play)
-
-        self._hk_stop = QLineEdit(self._mgr.get("hk_stop", "<f6>"))
-        hk_layout.addRow("Stop:", self._hk_stop)
-
-        self._hk_record = QLineEdit(self._mgr.get("hk_record", "<f7>"))
-        hk_layout.addRow("Record:", self._hk_record)
-
-        self._hk_stop_rec = QLineEdit(self._mgr.get("hk_stop_rec", "<f9>"))
-        hk_layout.addRow("Stop Recording:", self._hk_stop_rec)
-
-        tabs.addTab(hotkeys, "Hotkeys")
-
-        # About tab
-        about = QWidget()
-        ab_layout = QVBoxLayout(about)
-        ab_layout.setSpacing(10)
-
-        ab_layout.addWidget(QLabel(f"<h2 style='color:{COLORS['accent']}'>MacroForge</h2>"))
-        ab_layout.addWidget(QLabel(f"Version: {VERSION}"))
-        ab_layout.addWidget(QLabel("A powerful macro automation tool."))
-        ab_layout.addWidget(QLabel(f"<a style='color:{COLORS['neon_blue']}' href='https://github.com/xRampageous/MacroForge'>GitHub</a>"))
-        ab_layout.addStretch()
-        tabs.addTab(about, "About")
-
-        layout.addWidget(tabs)
-
-        btn_box = QHBoxLayout()
-        btn_ok = QPushButton("Save")
-        btn_ok.setObjectName("accent")
-        btn_ok.clicked.connect(self._save)
-        btn_cancel = QPushButton("Cancel")
-        btn_cancel.clicked.connect(self.reject)
-        btn_box.addStretch()
-        btn_box.addWidget(btn_ok)
-        btn_box.addWidget(btn_cancel)
-        layout.addLayout(btn_box)
+        lo.addStretch()
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.setStyleSheet(f"background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 8px 16px;")
+        cancel.clicked.connect(self.reject)
+        ok = QPushButton("Save")
+        ok.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {C['accent']},stop:1 {C['accent_secondary']}); color: {C['text_inverse']}; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 700;")
+        ok.clicked.connect(self._save)
+        btn_row.addWidget(cancel)
+        btn_row.addWidget(ok)
+        lo.addLayout(btn_row)
 
     def _save(self):
-        self._mgr.set("auto_save", self._chk_auto_save.isChecked())
-        self._mgr.set("start_minimized", self._chk_start_min.isChecked())
-        self._mgr.set("default_speed", self._spin_def_speed.value())
-        self._mgr.set("default_loops", self._spin_def_loops.value())
-        self._mgr.set("debug_mode", self._chk_debug.isChecked())
-        self._mgr.set("hk_play", self._hk_play.text())
-        self._mgr.set("hk_stop", self._hk_stop.text())
-        self._mgr.set("hk_record", self._hk_record.text())
-        self._mgr.set("hk_stop_rec", self._hk_stop_rec.text())
-        self._mgr.save()
+        self.settings_manager.settings["retry_count"] = self.retry.value()
+        self.settings_manager.settings["retry_delay"] = float(self.delay.text())
+        self.settings_manager.settings["auto_save"] = self.auto_save.isChecked()
+        self.settings_manager.settings["minimize_tray"] = self.minimize_tray.isChecked()
+        self.settings_manager.save()
         self.accept()

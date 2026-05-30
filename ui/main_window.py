@@ -1,1075 +1,1089 @@
-"""Main window for MacroForge PyQt6 UI.
+"""MacroForge Main Window — fresh modern PyQt6 rebuild.
 
-Rebuilt from v1.1.0 tkinter version with all features preserved
-and new PyQt6 animations, modern styling, and UX improvements.
+Layout matches v1.1.0 Tkinter exactly:
+- 780x760 default, min 640x560
+- Profile tab bar across top
+- Left sidebar: Add Action, Playback, Recorder
+- Timeline + Inspector inline + Playback dock + Status bar
 """
+import os
+import sys
 import time
-import threading
+import math
+import json
+import csv
 import queue
+import ctypes
+import threading
 from copy import deepcopy
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QSplitter, QSystemTrayIcon, QMenu, QMessageBox,
-    QFileDialog, QSlider, QProgressBar, QSizePolicy
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
+    QProgressBar, QFrame, QGraphicsEllipseItem, QMenu,
+    QSpinBox, QDoubleSpinBox, QGraphicsScene, QGraphicsView,
+    QFileDialog, QMessageBox, QInputDialog, QGraphicsTextItem
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeySequence, QIcon, QShortcut
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut
 
-from ui.theme import COLORS, build_stylesheet, TYPE_COLORS
-from ui.animations import Animator
-from version import VERSION
-from debugger import logger
-
-# Dialog imports (created later)
-from ui.dialogs.key_editor import KeyEditorDialog
-from ui.dialogs.click_editor import ClickEditorDialog
-from ui.dialogs.pause_editor import PauseEditorDialog
-from ui.dialogs.image_editor import ImageEditorDialog
-from ui.dialogs.settings_dialog import SettingsDialog
-from ui.dialogs.log_viewer import LogViewerDialog
-
-# Backend
-from models import Config, Action, HistoryManager, ProfileManager, SettingsManager
 from engine import ExecutionEngine
+from models import Action, ProfileManager, SettingsManager
+from updater import check_update, perform_update
+from version import VERSION
+from hotkeys import start_hotkeys, stop_hotkeys
+from debugger import logger, DebugViewer, get_log_path
+from ui.theme import build_stylesheet, COLORS
+from ui.timeline import TimelineView
+
+
+class StatusDot(QWidget):
+    """Animated glowing status indicator."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(12, 12)
+        self._color = QColor(COLORS["text_dark"])
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._pulse)
+        self._pulse_phase = 0.0
+        self._glow = False
+
+    def set_color(self, color_hex, glow=False):
+        self._color = QColor(color_hex)
+        self._glow = glow
+        if glow and not self._timer.isActive():
+            self._timer.start(50)
+        elif not glow and self._timer.isActive():
+            self._timer.stop()
+            self._pulse_phase = 0.0
+        self.update()
+
+    def _pulse(self):
+        self._pulse_phase = (self._pulse_phase + 0.15) % (2 * math.pi)
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx, cy = int(self.width() / 2), int(self.height() / 2)
+        r = 4
+        if self._glow:
+            glow_r = int(5 + math.sin(self._pulse_phase) * 2)
+            p.setBrush(QBrush(QColor(f"{self._color.name()}30")))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(cx - glow_r, cy - glow_r, glow_r * 2, glow_r * 2)
+        p.setBrush(QBrush(self._color))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
 
 
 class MainWindow(QMainWindow):
-    """Modern PyQt6 main window for MacroForge."""
+    """Modern MacroForge main window."""
 
-    def __init__(self):
+    def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
+        self.setWindowTitle("MacroForge")
+        self.setMinimumSize(640, 560)
+        self.resize(780, 760)
+        self.setStyleSheet(build_stylesheet())
 
-        # DPI awareness
-        try:
-            import ctypes
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            try:
-                ctypes.windll.user32.SetProcessDPIAware()
-            except Exception:
-                pass
-
-        # Backend init
-        self.config = Config()
-        self.session_manager = ProfileManager()
-        self.settings_manager = SettingsManager(self.session_manager.base_dir)
-
-        _s = self.settings_manager.all()
-        self.auto_save_enabled = _s.get("auto_save", True)
-        self._default_loops = _s.get("default_loops", 1)
-        self._default_speed = _s.get("default_speed", 1.0)
-
+        # Backend refs
+        self.session_manager = profile_manager or ProfileManager()
+        self.settings_manager = settings_manager or SettingsManager(self.session_manager.base_dir)
         self.engine = ExecutionEngine(
-            self._on_status,
-            self._on_play,
-            self._on_complete,
-            self._on_progress,
+            self._status_cb,
+            self._play_cb,
+            self._complete_cb,
+            self._progress_cb
         )
-        self.history = HistoryManager()
-        self.clipboard_action = None
 
-        self._active_index = -1
-        self._countdown_active = False
-        self._save_timer = None
-        self._ui_timer = None
-        self._pending_status = None
-        self._engine_thread = None
-        self._pending_update = None
-        self._rec_anim = None
+        # State
+        self.active_index = -1
+        self.clipboard = None
+        self.auto_save_enabled = True
+        self._save_session_after = None
+        self.history = HistoryManager()
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = None
 
         # Recorder state
         self._recorder = {
-            "running": False, "paused": False, "queue": None,
-            "presses": {}, "modifiers": set(), "last_time": 0.0,
-            "thread": None,
+            "running": False, "paused": False, "last_time": 0.0,
+            "presses": {}, "modifiers": set(), "queue": None,
+            "kbd_thread": None, "scroll_thread": None,
+            "btn": None, "pause_btn": None, "status_dot": None,
+            "status_lbl": None, "time_lbl": None, "actions_lbl": None,
+            "overlay": None, "timer_id": None, "poll_id": None,
+            "rec_start_time": 0.0,
         }
 
-        self.setWindowTitle(f"MacroForge v{VERSION}")
-        self.setMinimumSize(900, 700)
-        self.resize(1100, 800)
-        self.setStyleSheet(build_stylesheet())
+        # Tray
+        self._tray_icon = None
 
-        self._setup_central_widget()
-        self._setup_sidebar()
-        self._setup_toolbar()
-        self._setup_action_bar()
-        self._setup_content_area()
-        self._setup_tray()
+        # Menu ref
+        self._action_menu = None
+        self._profile_menu = None
+
+        self._build_ui()
+        self._setup_shortcuts()
+        self._setup_timeline_connections()
         self._setup_hotkeys()
-
-        self.engine.before_action_hook = self._before_action
-        self.engine.pause_cb = self._on_pause_changed
-        self.engine._flash_cb = self._flash_match
-
-        # Load session
-        self._load_last_session()
-        self._update_window_title()
-
-        # Background update check
-        QTimer.singleShot(3000, self._check_update_silent)
+        self._setup_tray()
+        self._check_update_silent()
+        self.load_last_session()
 
     # ═══════════════════════════════════════════════════════
-    #  UI SETUP
+    #  UI CONSTRUCTION
     # ═══════════════════════════════════════════════════════
 
-    def _setup_central_widget(self):
+    def _build_ui(self):
+        C = COLORS
         central = QWidget()
         self.setCentralWidget(central)
-        self._main_layout = QHBoxLayout(central)
-        self._main_layout.setContentsMargins(0, 0, 0, 0)
-        self._main_layout.setSpacing(0)
+        main_lo = QHBoxLayout(central)
+        main_lo.setContentsMargins(0, 0, 0, 0)
+        main_lo.setSpacing(0)
 
-        # Toast overlay (child of central, positioned manually)
-        self._toast = QLabel(central)
-        self._toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._toast.setStyleSheet(f"""
-            background-color: {COLORS['bg_tertiary']};
-            color: {COLORS['text']};
-            border: 1px solid {COLORS['border_light']};
-            border-radius: 10px;
-            padding: 10px 20px;
-            font-size: 13px;
-        """)
-        self._toast.hide()
-        self._toast_timer = None
-
-    def _setup_sidebar(self):
+        # ━━ Left sidebar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         sidebar = QFrame()
-        sidebar.setObjectName("sidebar")
-        sidebar.setStyleSheet(f"""
-            QFrame#sidebar {{
-                background-color: {COLORS['bg_secondary']};
-                border-right: 1px solid {COLORS['border']};
-                min-width: 200px;
-                max-width: 200px;
-            }}
-        """)
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        sidebar.setObjectName("glass_card")
+        sidebar.setFixedWidth(180)
+        sidebar.setStyleSheet(f"background-color: {C['bg_secondary']}; border-right: 1px solid {C['border']};")
+        sb_lo = QVBoxLayout(sidebar)
+        sb_lo.setContentsMargins(8, 8, 8, 8)
+        sb_lo.setSpacing(10)
 
-        # Brand
+        # Branding
         brand = QLabel("MACROFORGE")
-        brand.setStyleSheet(f"color: {COLORS['accent']}; font-size: 16px; font-weight: bold; letter-spacing: 2px;")
-        layout.addWidget(brand)
+        brand.setObjectName("title")
+        brand.setStyleSheet(f"color: {C['accent']}; font-size: 14px; font-weight: 800; letter-spacing: 2px;")
+        sb_lo.addWidget(brand)
 
-        # Subtitle
-        sub = QLabel("Macro Automation")
-        sub.setStyleSheet(f"color: {COLORS['text_dark']}; font-size: 10px; margin-bottom: 8px;")
-        layout.addWidget(sub)
+        # Add Actions
+        add_lbl = QLabel("ADD ACTION")
+        add_lbl.setObjectName("section")
+        sb_lo.addWidget(add_lbl)
 
-        layout.addSpacing(12)
+        self._add_btn("Key", self._open_key_dialog, C["key"], sb_lo)
+        self._add_btn("Click", self._open_click_dialog, C["click"], sb_lo)
+        self._add_btn("Delay", self._open_pause_dialog, C["pause"], sb_lo)
+        self._add_btn("Image", self._open_image_dialog, C["image"], sb_lo)
 
-        # Nav buttons
-        self._nav_buttons = {}
-        for name, label, tip in [
-            ("macro", "🎬  Macro", "Macro editor"),
-            ("settings", "⚙  Settings", "Open settings"),
-            ("logs", "📝  Logs", "View debug logs"),
-        ]:
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setChecked(name == "macro")
-            btn.setToolTip(tip)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    text-align: left;
-                    padding: 10px 14px;
-                    border-radius: 8px;
-                    background: transparent;
-                    border: none;
-                    color: {COLORS['text_dim']};
-                    font-size: 13px;
-                }}
-                QPushButton:hover {{
-                    background-color: {COLORS['bg_hover']};
-                    color: {COLORS['text']};
-                }}
-                QPushButton:checked {{
-                    background-color: {COLORS['accent_glow']};
-                    color: {COLORS['accent']};
-                    font-weight: 600;
-                }}
-            """)
-            btn.clicked.connect(lambda checked, n=name: self._switch_page(n))
-            layout.addWidget(btn)
-            self._nav_buttons[name] = btn
+        # Separator
+        sep = QFrame()
+        sep.setStyleSheet(f"background-color: {C['border']}; min-height: 1px; max-height: 1px;")
+        sb_lo.addWidget(sep)
 
-        layout.addStretch(1)
+        # Playback card
+        play_lbl = QLabel("PLAYBACK")
+        play_lbl.setObjectName("section")
+        sb_lo.addWidget(play_lbl)
 
-        # Version
-        ver = QLabel(f"v{VERSION}")
-        ver.setStyleSheet(f"color: {COLORS['text_dark']}; font-size: 10px;")
-        layout.addWidget(ver)
+        play_card = QFrame()
+        play_card.setObjectName("glass_card")
+        play_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 10px; padding: 8px;")
+        pc_lo = QVBoxLayout(play_card)
+        pc_lo.setContentsMargins(8, 8, 8, 8)
+        pc_lo.setSpacing(6)
 
-        self._main_layout.addWidget(sidebar)
+        # Speed
+        self.speed_combo = QComboBox()
+        self.speed_combo.addItems(["0.25x", "0.5x", "1.0x", "1.5x", "2.0x", "3.0x"])
+        self.speed_combo.setCurrentIndex(2)
+        self.speed_combo.currentTextChanged.connect(self._on_speed_change)
+        pc_lo.addWidget(self._label_row("Speed", self.speed_combo))
 
-    def _setup_toolbar(self):
-        toolbar = QFrame()
-        toolbar.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['bg_secondary']};
-                border-bottom: 1px solid {COLORS['border']};
-            }}
-        """)
-        layout = QHBoxLayout(toolbar)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
+        # Loops
+        self.loops_spin = QSpinBox()
+        self.loops_spin.setRange(1, 9999)
+        self.loops_spin.setValue(1)
+        pc_lo.addWidget(self._label_row("Loops", self.loops_spin))
 
-        # Profile selector
-        layout.addWidget(QLabel("Profile:"))
-        self._profile_combo = QComboBox()
-        self._profile_combo.setMinimumWidth(140)
-        self._profile_combo.currentTextChanged.connect(self._on_profile_changed)
-        layout.addWidget(self._profile_combo)
+        # Checkboxes
+        self.inf_check = QCheckBox("Infinite")
+        self.sim_check = QCheckBox("Simulate")
+        self.human_check = QCheckBox("Human curve")
+        self.focus_check = QCheckBox("Focus lock")
+        self.human_check.setChecked(True)
+        for cb in (self.inf_check, self.sim_check, self.human_check, self.focus_check):
+            pc_lo.addWidget(cb)
 
-        self._btn_rename = QPushButton("✏️")
-        self._btn_rename.setObjectName("tool")
-        self._btn_rename.setToolTip("Rename profile")
-        self._btn_rename.clicked.connect(self._rename_profile)
-        layout.addWidget(self._btn_rename)
+        sb_lo.addWidget(play_card)
 
-        self._btn_new = QPushButton("➕")
-        self._btn_new.setObjectName("tool")
-        self._btn_new.setToolTip("New profile")
-        self._btn_new.clicked.connect(self._new_profile)
-        layout.addWidget(self._btn_new)
+        # Recorder card
+        rec_lbl = QLabel("RECORDER")
+        rec_lbl.setObjectName("section")
+        sb_lo.addWidget(rec_lbl)
 
-        self._btn_del_prof = QPushButton("🗑️")
-        self._btn_del_prof.setObjectName("tool")
-        self._btn_del_prof.setToolTip("Delete profile")
-        self._btn_del_prof.clicked.connect(self._delete_profile)
-        layout.addWidget(self._btn_del_prof)
+        rec_card = QFrame()
+        rec_card.setObjectName("glass_card")
+        rec_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 10px; padding: 8px;")
+        rc_lo = QVBoxLayout(rec_card)
+        rc_lo.setContentsMargins(8, 8, 8, 8)
+        rc_lo.setSpacing(6)
 
-        layout.addSpacing(16)
-        layout.addWidget(self._vline())
-        layout.addSpacing(16)
+        # Status
+        status_row = QHBoxLayout()
+        self.rec_dot = StatusDot()
+        self.rec_dot.set_color(C["text_dark"])
+        status_row.addWidget(self.rec_dot)
+        self.rec_status = QLabel("IDLE")
+        self.rec_status.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 600;")
+        status_row.addWidget(self.rec_status)
+        status_row.addStretch()
+        rc_lo.addLayout(status_row)
 
-        # Transport buttons
-        self._btn_play = QPushButton("▶  Play")
-        self._btn_play.setObjectName("accent")
-        self._btn_play.setToolTip("F5 — Start playback")
-        self._btn_play.clicked.connect(self._on_play_clicked)
-        layout.addWidget(self._btn_play)
+        # Time + actions
+        info_row = QHBoxLayout()
+        self.rec_time = QLabel("0:00")
+        self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
+        self.rec_actions = QLabel("0")
+        self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
+        info_row.addWidget(self.rec_time)
+        info_row.addStretch()
+        info_row.addWidget(self.rec_actions)
+        rc_lo.addLayout(info_row)
 
-        self._btn_stop = QPushButton("⏹  Stop")
-        self._btn_stop.setObjectName("tool")
-        self._btn_stop.setToolTip("F6 — Stop playback")
-        self._btn_stop.setEnabled(False)
-        self._btn_stop.clicked.connect(self._on_stop_clicked)
-        layout.addWidget(self._btn_stop)
+        # Buttons
+        btn_row = QHBoxLayout()
+        self.rec_btn = QPushButton(" Record")
+        self.rec_btn.setObjectName("danger")
+        self.rec_btn.setStyleSheet(f"background-color: {C['error']}; color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600;")
+        self.rec_btn.clicked.connect(self._toggle_record)
+        self.rec_pause_btn = QPushButton(" Pause")
+        self.rec_pause_btn.setEnabled(False)
+        self.rec_pause_btn.setObjectName("accent")
+        self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
+        btn_row.addWidget(self.rec_btn)
+        btn_row.addWidget(self.rec_pause_btn)
+        rc_lo.addLayout(btn_row)
 
-        self._btn_record = QPushButton("●  Record")
-        self._btn_record.setObjectName("danger")
-        self._btn_record.setCheckable(True)
-        self._btn_record.setToolTip("F7 — Start recording, F9 — Stop")
-        self._btn_record.clicked.connect(self._on_record_clicked)
-        layout.addWidget(self._btn_record)
+        # Store refs
+        self._recorder["btn"] = self.rec_btn
+        self._recorder["pause_btn"] = self.rec_pause_btn
+        self._recorder["status_dot"] = self.rec_dot
+        self._recorder["status_lbl"] = self.rec_status
+        self._recorder["time_lbl"] = self.rec_time
+        self._recorder["actions_lbl"] = self.rec_actions
 
-        layout.addSpacing(16)
-        layout.addWidget(self._vline())
-        layout.addSpacing(16)
+        sb_lo.addWidget(rec_card)
 
-        # Loop & speed
-        layout.addWidget(QLabel("Loops:"))
-        self._spin_loop = QSpinBox()
-        self._spin_loop.setRange(1, 9999)
-        self._spin_loop.setValue(self._default_loops)
-        self._spin_loop.setMinimumWidth(60)
-        layout.addWidget(self._spin_loop)
+        # Hotkey hints
+        hints = QLabel("F7 Record/Stop\nEsc Stop")
+        hints.setObjectName("status")
+        hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 9px; padding-top: 4px;")
+        sb_lo.addWidget(hints)
+        sb_lo.addStretch()
 
-        self._chk_infinite = QCheckBox("∞")
-        self._chk_infinite.setToolTip("Infinite loop")
-        self._chk_infinite.stateChanged.connect(self._on_infinite_changed)
-        layout.addWidget(self._chk_infinite)
+        main_lo.addWidget(sidebar)
 
-        layout.addWidget(QLabel("Speed:"))
-        self._spin_speed = QDoubleSpinBox()
-        self._spin_speed.setRange(0.1, 10.0)
-        self._spin_speed.setValue(self._default_speed)
-        self._spin_speed.setSingleStep(0.1)
-        self._spin_speed.setDecimals(2)
-        self._spin_speed.setMinimumWidth(70)
-        self._spin_speed.valueChanged.connect(self._on_speed_changed)
-        layout.addWidget(self._spin_speed)
+        # ━━ Content area ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        content = QFrame()
+        content_lo = QVBoxLayout(content)
+        content_lo.setContentsMargins(0, 0, 0, 0)
+        content_lo.setSpacing(0)
 
-        layout.addSpacing(16)
-        layout.addWidget(self._vline())
-        layout.addSpacing(16)
+        # Title bar
+        title = QFrame()
+        title.setStyleSheet(f"background-color: {C['bg']}; border-bottom: 1px solid {C['border']};")
+        tl = QHBoxLayout(title)
+        tl.setContentsMargins(10, 6, 10, 6)
 
-        # Toggles
-        self._chk_sim = QCheckBox("Sim")
-        self._chk_sim.setToolTip("Simulation mode")
-        layout.addWidget(self._chk_sim)
+        self.title_label = QLabel("MacroForge")
+        self.title_label.setStyleSheet(f"color: {C['accent']}; font-size: 16px; font-weight: 700; letter-spacing: 1px;")
+        tl.addWidget(self.title_label)
+        tl.addStretch()
 
-        self._chk_focus = QCheckBox("Focus")
-        self._chk_focus.setToolTip("Focus lock")
-        layout.addWidget(self._chk_focus)
+        self.status_dot = StatusDot()
+        self.status_dot.set_color(C["text_dark"])
+        tl.addWidget(self.status_dot)
 
-        self._chk_human = QCheckBox("Human")
-        self._chk_human.setToolTip("Human-like curves")
-        self._chk_human.setChecked(True)
-        self._chk_human.stateChanged.connect(self._on_human_changed)
-        layout.addWidget(self._chk_human)
+        self.status_text = QLabel("Ready")
+        self.status_text.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        tl.addWidget(self.status_text)
 
-        layout.addStretch(1)
+        gear = QPushButton("\u2699")
+        gear.setFixedSize(28, 28)
+        gear.setStyleSheet(f"background: transparent; color: {C['text_dim']}; border: 1px solid {C['border']}; border-radius: 6px; font-size: 14px;")
+        gear.clicked.connect(self._show_action_menu)
+        tl.addWidget(gear)
+        content_lo.addWidget(title)
 
-        # Right-side buttons
-        self._btn_settings = QPushButton("⚙")
-        self._btn_settings.setObjectName("tool")
-        self._btn_settings.setToolTip("Settings")
-        self._btn_settings.clicked.connect(self._open_settings)
-        layout.addWidget(self._btn_settings)
+        # Profile tabs
+        tabs = QFrame()
+        tabs.setStyleSheet(f"background-color: {C['bg']}; border-bottom: 1px solid {C['border']};")
+        self._tabs_lo = QHBoxLayout(tabs)
+        self._tabs_lo.setContentsMargins(6, 2, 6, 2)
+        self._tabs_lo.setSpacing(2)
+        self._tabs_lo.addStretch()
+        new_tab_btn = QPushButton("+")
+        new_tab_btn.setFixedSize(26, 24)
+        new_tab_btn.setStyleSheet(f"background: transparent; color: {C['accent']}; border: 1px solid {C['border']}; border-radius: 6px; font-weight: bold;")
+        new_tab_btn.clicked.connect(self._new_profile_dialog)
+        self._tabs_lo.insertWidget(0, new_tab_btn)
+        content_lo.addWidget(tabs)
 
-        self._btn_logs = QPushButton("📝")
-        self._btn_logs.setObjectName("tool")
-        self._btn_logs.setToolTip("Debug Logs")
-        self._btn_logs.clicked.connect(self._open_logs)
-        layout.addWidget(self._btn_logs)
+        # Timeline
+        tl_header = QFrame()
+        tl_header.setStyleSheet(f"background-color: {C['bg_secondary']}; border-top: 2px solid {C['accent']}; border-bottom: 1px solid {C['border']};")
+        tl_hl = QHBoxLayout(tl_header)
+        tl_hl.setContentsMargins(10, 4, 10, 4)
+        tl_lbl = QLabel("TIMELINE")
+        tl_lbl.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
+        tl_hl.addWidget(tl_lbl)
+        tl_hl.addStretch()
+        self.fps_lbl = QLabel("60 FPS")
+        self.fps_lbl.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        tl_hl.addWidget(self.fps_lbl)
+        content_lo.addWidget(tl_header)
 
-        self._btn_update = QPushButton("🔄")
-        self._btn_update.setObjectName("tool")
-        self._btn_update.setToolTip("Check for updates")
-        self._btn_update.clicked.connect(self._check_update_manual)
-        layout.addWidget(self._btn_update)
+        self.timeline = TimelineView()
+        self.timeline.set_actions(self.engine.actions)
+        content_lo.addWidget(self.timeline, stretch=1)
 
-        self._toolbar = toolbar
+        # Inspector header
+        insp_h = QFrame()
+        insp_h.setStyleSheet(f"background-color: {C['bg_secondary']}; border-top: 1px solid {C['border']}; border-bottom: 1px solid {C['border']};")
+        ih_l = QHBoxLayout(insp_h)
+        ih_l.setContentsMargins(10, 4, 10, 4)
+        ih_lbl = QLabel("INSPECTOR")
+        ih_lbl.setStyleSheet(f"color: {C['neon_purple']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
+        ih_l.addWidget(ih_lbl)
+        ih_l.addStretch()
+        self.insp_btns = QHBoxLayout()
+        for txt, slot in [("\u2713", self._apply_inspector), ("\u2715", self._cancel_inspector),
+                          ("\U0001F5D1", lambda: self.delete_action(self.active_index)),
+                          ("\u2398", self._duplicate_inspector), ("\u270E", self._open_active_dialog)]:
+            b = QPushButton(txt)
+            b.setFixedSize(24, 24)
+            b.setStyleSheet(f"background: transparent; color: {C['text_dim']}; border: 1px solid {C['border']}; border-radius: 6px; font-size: 10px;")
+            if slot:
+                b.clicked.connect(slot)
+            self.insp_btns.addWidget(b)
+        ih_l.addLayout(self.insp_btns)
+        content_lo.addWidget(insp_h)
 
-    def _setup_action_bar(self):
-        bar = QFrame()
-        bar.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['bg']};
-                border-bottom: 1px solid {COLORS['border']};
-            }}
-        """)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
+        # Inspector panel (stacked)
+        self._inspector_stack = QFrame()
+        self._inspector_stack.setStyleSheet(f"background-color: {C['bg_secondary']}; min-height: 38px; max-height: 38px;")
+        self._inspector_stack.setFixedHeight(38)
+        self._insp_lo = QHBoxLayout(self._inspector_stack)
+        self._insp_lo.setContentsMargins(6, 4, 6, 4)
+        self._insp_lo.setSpacing(6)
 
-        layout.addWidget(QLabel("Add:"))
-        for label, method in [
-            ("⌨️ Key", self.add_key_action),
-            ("🖱️ Click", self.add_click_action),
-            ("⏱️ Delay", self.add_pause_action),
-            ("🖼️ Image", self.add_image_action),
-        ]:
-            btn = QPushButton(label)
-            btn.setObjectName("tool")
-            btn.clicked.connect(method)
-            layout.addWidget(btn)
+        # Key inspector
+        self.insp_key = QWidget()
+        ik_lo = QHBoxLayout(self.insp_key)
+        ik_lo.setContentsMargins(0, 0, 0, 0)
+        ik_lo.setSpacing(6)
+        self.ik_key = QLineEdit(); self.ik_key.setFixedWidth(60); self.ik_key.setPlaceholderText("key")
+        self.ik_dur = QLineEdit(); self.ik_dur.setFixedWidth(50); self.ik_dur.setPlaceholderText("dur")
+        self.ik_hold = QCheckBox("Hold")
+        self.ik_repeat = QLineEdit(); self.ik_repeat.setFixedWidth(30); self.ik_repeat.setText("1")
+        self.ik_label = QLineEdit(); self.ik_label.setFixedWidth(60); self.ik_label.setPlaceholderText("label")
+        ik_lo.addWidget(QLabel("Key"))
+        ik_lo.addWidget(self.ik_key)
+        ik_lo.addWidget(QLabel("Dur"))
+        ik_lo.addWidget(self.ik_dur)
+        ik_lo.addWidget(self.ik_hold)
+        ik_lo.addWidget(QLabel("Rep"))
+        ik_lo.addWidget(self.ik_repeat)
+        ik_lo.addWidget(QLabel("Label"))
+        ik_lo.addWidget(self.ik_label)
+        ik_lo.addStretch()
 
-        layout.addSpacing(12)
-        layout.addWidget(self._vline())
-        layout.addSpacing(12)
+        # Pause inspector
+        self.insp_pause = QWidget()
+        ip_lo = QHBoxLayout(self.insp_pause)
+        ip_lo.setContentsMargins(0, 0, 0, 0)
+        self.ip_dur = QLineEdit(); self.ip_dur.setFixedWidth(50)
+        self.ip_label = QLineEdit(); self.ip_label.setFixedWidth(60); self.ip_label.setPlaceholderText("label")
+        ip_lo.addWidget(QLabel("Dur"))
+        ip_lo.addWidget(self.ip_dur)
+        ip_lo.addWidget(QLabel("Label"))
+        ip_lo.addWidget(self.ip_label)
+        ip_lo.addStretch()
 
-        for label, method in [
-            ("📋 Duplicate", self._duplicate_selected),
-            ("🗑️ Delete", self._delete_selected),
-            ("⬆️ Up", self._move_up_selected),
-            ("⬇️ Down", self._move_down_selected),
-        ]:
-            btn = QPushButton(label)
-            btn.setObjectName("tool")
-            btn.clicked.connect(method)
-            layout.addWidget(btn)
+        # Click inspector
+        self.insp_click = QWidget()
+        ic_lo = QHBoxLayout(self.insp_click)
+        ic_lo.setContentsMargins(0, 0, 0, 0)
+        self.ic_x = QLineEdit(); self.ic_x.setFixedWidth(40)
+        self.ic_y = QLineEdit(); self.ic_y.setFixedWidth(40)
+        self.ic_btn = QComboBox()
+        self.ic_btn.addItems(["left", "right", "middle"]); self.ic_btn.setFixedWidth(70)
+        self.ic_rand = QLineEdit(); self.ic_rand.setFixedWidth(30)
+        self.ic_repeat = QLineEdit(); self.ic_repeat.setFixedWidth(30); self.ic_repeat.setText("1")
+        self.ic_label = QLineEdit(); self.ic_label.setFixedWidth(60); self.ic_label.setPlaceholderText("label")
+        ic_lo.addWidget(QLabel("X"))
+        ic_lo.addWidget(self.ic_x)
+        ic_lo.addWidget(QLabel("Y"))
+        ic_lo.addWidget(self.ic_y)
+        ic_lo.addWidget(self.ic_btn)
+        ic_lo.addWidget(QLabel("\u00B1"))
+        ic_lo.addWidget(self.ic_rand)
+        ic_lo.addWidget(QLabel("Rep"))
+        ic_lo.addWidget(self.ic_repeat)
+        ic_lo.addWidget(QLabel("Label"))
+        ic_lo.addWidget(self.ic_label)
+        ic_lo.addStretch()
 
-        layout.addStretch(1)
+        # Image inspector
+        self.insp_image = QWidget()
+        ii_lo = QHBoxLayout(self.insp_image)
+        ii_lo.setContentsMargins(0, 0, 0, 0)
+        self.ii_sim = QLineEdit(); self.ii_sim.setFixedWidth(40); self.ii_sim.setText("0.8")
+        self.ii_wait = QLineEdit(); self.ii_wait.setFixedWidth(40); self.ii_wait.setText("10.0")
+        ii_lo.addWidget(QLabel("Sim"))
+        ii_lo.addWidget(self.ii_sim)
+        ii_lo.addWidget(QLabel("Wait"))
+        ii_lo.addWidget(self.ii_wait)
+        ii_lo.addStretch()
 
-        layout.addWidget(self._vline())
-        layout.addSpacing(12)
+        self._insp_lo.addWidget(self.insp_key)
+        self._insp_lo.addWidget(self.insp_pause)
+        self._insp_lo.addWidget(self.insp_click)
+        self._insp_lo.addWidget(self.insp_image)
+        for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
+            w.setVisible(False)
+        content_lo.addWidget(self._inspector_stack)
 
-        for label, method in [
-            ("📤 CSV", self.export_csv),
-            ("📥 CSV", self.import_csv),
-            ("💾 JSON", self.save_json),
-            ("📂 JSON", self.load_json),
-        ]:
-            btn = QPushButton(label)
-            btn.setObjectName("tool")
-            btn.clicked.connect(method)
-            layout.addWidget(btn)
+        # Playback dock
+        dock = QFrame()
+        dock.setStyleSheet(f"background-color: {C['bg_secondary']}; border-top: 2px solid {C['accent']};")
+        dk = QHBoxLayout(dock)
+        dk.setContentsMargins(10, 6, 10, 6)
 
-        self._action_bar = bar
+        self.start_btn = QPushButton("\u25B6  Start")
+        self.start_btn.setObjectName("accent")
+        self.start_btn.clicked.connect(self.start)
+        dk.addWidget(self.start_btn)
 
-    def _setup_content_area(self):
-        from ui.action_table import ActionTable
-        from ui.timeline_widget import TimelineWidget
-        from ui.properties_panel import PropertiesPanel
+        self.pause_btn = QPushButton("\u23F8  Pause")
+        self.pause_btn.setEnabled(False)
+        self.pause_btn.clicked.connect(self.engine.toggle_pause)
+        dk.addWidget(self.pause_btn)
 
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
+        self.stop_btn = QPushButton("\u25A0  Stop")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop)
+        dk.addWidget(self.stop_btn)
 
-        # Toolbar + action bar
-        content_layout.addWidget(self._toolbar)
-        content_layout.addWidget(self._action_bar)
-
-        # Horizontal splitter: left (table+timeline) | right (properties)
-        h_splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # Left: vertical splitter (table top, timeline bottom)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
-
-        self._action_table = ActionTable()
-        self._action_table.action_selected.connect(self._on_table_select)
-        self._action_table.action_double_clicked.connect(self._on_table_double_click)
-        self._action_table.action_context_menu.connect(self._on_table_context)
-        left_layout.addWidget(self._action_table, 3)
-
-        self._timeline = TimelineWidget()
-        self._timeline.action_clicked.connect(self._on_timeline_click)
-        left_layout.addWidget(self._timeline, 1)
-
-        h_splitter.addWidget(left)
-
-        # Right: properties panel
-        self._properties = PropertiesPanel()
-        self._properties.action_changed.connect(self._on_properties_changed)
-        h_splitter.addWidget(self._properties)
-        h_splitter.setSizes([700, 300])
-
-        content_layout.addWidget(h_splitter, 1)
+        dk.addSpacing(16)
+        hints2 = QLabel("F9 start/stop  \u00B7  Esc pause  \u00B7  Ctrl+Z undo  \u00B7  Del delete")
+        hints2.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        dk.addWidget(hints2)
+        dk.addStretch()
+        content_lo.addWidget(dock)
 
         # Status bar
-        content_layout.addWidget(self._build_status_strip())
-
-        self._main_layout.addWidget(content, 1)
-
-    def _build_status_strip(self):
         status = QFrame()
-        status.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['bg_secondary']};
-                border-top: 1px solid {COLORS['border']};
-            }}
+        status.setStyleSheet(f"background-color: {C['bg']}; border-top: 1px solid {C['border']};")
+        sl = QHBoxLayout(status)
+        sl.setContentsMargins(8, 4, 8, 4)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(4)
+        sl.addWidget(self.progress_bar, stretch=1)
+
+        self.progress_label = QLabel("0%")
+        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; min-width: 28px;")
+        sl.addWidget(self.progress_label)
+
+        sl.addSpacing(8)
+        self._stat_actions = QLabel("0 actions")
+        self._stat_loops = QLabel("0/1")
+        self._stat_seq = QLabel("0.00s")
+        self._stat_time = QLabel("0.0s")
+        for lbl in (self._stat_actions, self._stat_loops, self._stat_seq, self._stat_time):
+            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
+            sl.addWidget(lbl)
+        content_lo.addWidget(status)
+
+        main_lo.addWidget(content, stretch=1)
+
+    def _add_btn(self, text, callback, color, layout):
+        btn = QPushButton(text)
+        btn.setObjectName("sidebar")
+        btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; border: none; border-radius: 8px;
+                padding: 8px 12px; text-align: left; color: {COLORS['text_dim']}; font-size: 12px; }}
+            QPushButton:hover {{ background-color: {COLORS['bg_hover']}; color: {color}; }}
         """)
-        status_layout = QHBoxLayout(status)
-        status_layout.setContentsMargins(12, 6, 12, 6)
-        status_layout.setSpacing(16)
+        btn.clicked.connect(callback)
+        layout.addWidget(btn)
 
-        self._lbl_status = QLabel("Ready")
-        self._lbl_status.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px;")
-        status_layout.addWidget(self._lbl_status)
+    def _label_row(self, text, widget):
+        row = QFrame()
+        lo = QHBoxLayout(row)
+        lo.setContentsMargins(0, 0, 0, 0)
+        lo.addWidget(QLabel(text))
+        lo.addWidget(widget)
+        return row
 
-        # Progress bar
-        self._progress = QProgressBar()
-        self._progress.setRange(0, 100)
-        self._progress.setValue(0)
-        self._progress.setTextVisible(False)
-        self._progress.setMaximumWidth(180)
-        self._progress.setMinimumHeight(4)
-        self._progress.setEnabled(False)
-        self._progress.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {COLORS['border']};
-                border-radius: 2px;
-                border: none;
-            }}
-            QProgressBar::chunk {{
-                background-color: {COLORS['accent']};
-                border-radius: 2px;
-            }}
-        """)
-        status_layout.addWidget(self._progress)
-
-        self._lbl_stats = QLabel("0 actions | 0:00 | 0 loops")
-        self._lbl_stats.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px;")
-        status_layout.addWidget(self._lbl_stats)
-
-        status_layout.addStretch(1)
-
-        self._lbl_version = QLabel(f"v{VERSION}")
-        self._lbl_version.setStyleSheet(f"color: {COLORS['text_dark']}; font-size: 11px;")
-        status_layout.addWidget(self._lbl_version)
-
-        return status
-
-    def _vline(self):
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.VLine)
-        line.setStyleSheet(f"color: {COLORS['border']};")
-        line.setMaximumWidth(1)
-        return line
-
-    # ═══════════════════════════════════════════════════════
-    #  HOTKEYS & SHORTCUTS
-    # ═══════════════════════════════════════════════════════
-
-    def _setup_hotkeys(self):
-        shortcuts = [
-            (QKeySequence("Ctrl+Z"), self._undo),
-            (QKeySequence("Ctrl+Y"), self._redo),
-            (QKeySequence("Ctrl+C"), self._copy_selected),
-            (QKeySequence("Ctrl+V"), self._paste_selected),
-            (QKeySequence("Ctrl+D"), self._duplicate_selected),
-            (QKeySequence("Ctrl+S"), self._quick_save),
-            (QKeySequence("Delete"), self._delete_selected),
-            (QKeySequence("Ctrl+F"), self._focus_table),
-            (QKeySequence("Esc"), self._on_escape),
-        ]
-        for seq, slot in shortcuts:
-            sc = QShortcut(seq, self)
-            sc.activated.connect(slot)
-
-        # Global hotkeys via pynput
-        try:
-            from pynput import keyboard
-            self._hotkey_listener = keyboard.GlobalHotKeys({
-                "<f5>": lambda: self._on_play_clicked(),
-                "<f6>": lambda: self._on_stop_clicked(),
-                "<f7>": lambda: self._on_record_clicked() if not self._recorder["running"] else None,
-                "<f9>": lambda: self._on_record_clicked() if self._recorder["running"] else None,
-            })
-            self._hotkey_listener.start()
-        except Exception as e:
-            logger.error(f"Hotkey init failed: {e}")
-
-    def _setup_tray(self):
-        self._tray = QSystemTrayIcon(self)
-        self._tray.setToolTip("MacroForge")
-        if QIcon("MacroForge.ico"):
-            self._tray.setIcon(QIcon("MacroForge.ico"))
-        tray_menu = QMenu(self)
-        tray_menu.addAction("Show", self.showNormal)
-        tray_menu.addAction("Play", self._on_play_clicked)
-        tray_menu.addAction("Stop", self._on_stop_clicked)
-        tray_menu.addSeparator()
-        tray_menu.addAction("Quit", self.close)
-        self._tray.setContextMenu(tray_menu)
-        self._tray.activated.connect(self._tray_activated)
-        self._tray.show()
-
-    # ═══════════════════════════════════════════════════════
-    #  PAGE SWITCHING
-    # ═══════════════════════════════════════════════════════
-
-    def _switch_page(self, page: str):
-        for p, btn in self._nav_buttons.items():
-            btn.setChecked(p == page)
-        if page == "settings":
-            self._open_settings()
-        elif page == "logs":
-            self._open_logs()
-        self._nav_buttons["macro"].setChecked(True)
-
-    # ═══════════════════════════════════════════════════════
-    #  EVENT HANDLERS
-    # ═══════════════════════════════════════════════════════
-
-    def _on_profile_changed(self, name: str):
-        if not name or name == self.session_manager.active:
-            return
-        self._switch_profile(name)
-
-    def _on_play_clicked(self):
-        if self.engine.running:
-            if self.engine.paused:
-                self.engine.toggle_pause()
-                self._btn_play.setEnabled(False)
-                self._btn_stop.setEnabled(True)
-                self._on_status("Resumed")
-            return
-        if not self.engine.actions:
-            QMessageBox.warning(self, "No Actions", "Add some actions first.")
-            return
-        self._countdown_active = True
-        self._btn_play.setEnabled(False)
-        self._btn_stop.setEnabled(False)
-        self._run_countdown(3)
-
-    def _run_countdown(self, n: int):
-        if not self._countdown_active:
-            self._btn_play.setEnabled(True)
-            return
-        if n > 0:
-            self._on_status(f"Starting in {n}...  (Esc to cancel)")
-            QTimer.singleShot(1000, lambda: self._run_countdown(n - 1))
+    def _show_inspector(self, show=True, action_type="key"):
+        for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
+            w.setVisible(False)
+        if show:
+            self._inspector_stack.setFixedHeight(38)
+            self._inspector_stack.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; min-height: 38px; max-height: 38px;")
+            mapping = {
+                "key": self.insp_key,
+                "pause": self.insp_pause,
+                "click": self.insp_click,
+                "image": self.insp_image,
+            }
+            mapping.get(action_type, self.insp_key).setVisible(True)
         else:
-            self._countdown_active = False
-            self._start_playback()
-
-    def _start_playback(self):
-        loops = 999999 if self._chk_infinite.isChecked() else self._spin_loop.value()
-        self.engine.speed_multiplier = self._spin_speed.value()
-        self.engine.infinite_loop = self._chk_infinite.isChecked()
-        self.engine.simulation_mode = self._chk_sim.isChecked()
-        self.engine.focus_lock = self._chk_focus.isChecked()
-        self.engine.human_curve = self._chk_human.isChecked()
-        if self.engine.focus_lock:
-            self.engine.capture_focus_window()
-        self._btn_play.setEnabled(False)
-        self._btn_stop.setEnabled(True)
-        self._btn_record.setEnabled(False)
-        self._progress.setValue(0)
-        self._progress.setEnabled(True)
-        self._engine_thread = threading.Thread(target=self.engine.run, args=(loops,), daemon=True)
-        self._engine_thread.start()
-
-    def _on_stop_clicked(self):
-        self.engine.running = False
-        self.engine.paused = False
-        self._btn_play.setEnabled(True)
-        self._btn_stop.setEnabled(False)
-        self._btn_record.setEnabled(True)
-        self._timeline.clear_playing()
-        self._action_table.set_playing_index(-1)
-        self._progress.setValue(0)
-        self._progress.setEnabled(False)
-        self._on_status("Stopped")
-
-    def _on_record_clicked(self):
-        if self._btn_record.isChecked() and not self._recorder["running"]:
-            self._start_recording()
-        elif not self._btn_record.isChecked() and self._recorder["running"]:
-            self._stop_recording()
-
-    def _on_infinite_changed(self, state):
-        self._spin_loop.setEnabled(state == Qt.CheckState.Unchecked.value)
-
-    def _on_speed_changed(self, val):
-        self.engine.speed_multiplier = val
-
-    def _on_human_changed(self, state):
-        self.engine.human_curve = (state == Qt.CheckState.Checked.value)
-
-    def _on_status(self, msg: str):
-        self._pending_status = msg
-        if self._ui_timer is None:
-            self._ui_timer = QTimer.singleShot(50, self._flush_status)
-        self._show_toast(msg)
-
-    def _flush_status(self):
-        if self._pending_status:
-            self._lbl_status.setText(self._pending_status)
-            self._pending_status = None
-        self._ui_timer = None
-
-    def _show_toast(self, msg: str, duration: int = 2000):
-        self._toast.setText(msg)
-        self._toast.adjustSize()
-        parent = self._toast.parent()
-        if parent:
-            x = (parent.width() - self._toast.width()) // 2
-            y = parent.height() - self._toast.height() - 50
-            self._toast.move(x, y)
-        self._toast.show()
-        Animator.fade_in(self._toast, 200)
-        if self._toast_timer:
-            self._toast_timer.stop()
-        self._toast_timer = QTimer()
-        self._toast_timer.setSingleShot(True)
-        self._toast_timer.timeout.connect(self._hide_toast)
-        self._toast_timer.start(duration)
-
-    def _hide_toast(self):
-        Animator.fade_out(self._toast, 200, lambda: self._toast.hide())
-
-    def _on_play(self, index: int):
-        if 0 <= index < len(self.engine.actions):
-            action = self.engine.actions[index]
-            dur = getattr(action, "duration", 0.0)
-            self._timeline.set_playing(index, dur)
-            self._action_table.set_playing_index(index)
-            pct = int((index + 1) / max(1, len(self.engine.actions)) * 100)
-            self._progress.setValue(pct)
-
-    def _on_complete(self):
-        self._btn_play.setEnabled(True)
-        self._btn_stop.setEnabled(False)
-        self._btn_record.setEnabled(True)
-        self._timeline.clear_playing()
-        self._action_table.set_playing_index(-1)
-        self._progress.setValue(100)
-        self._progress.setEnabled(False)
-        self._update_statistics()
-        self._on_status("Playback complete")
-
-    def _on_progress(self, pct: float):
-        self._progress.setValue(int(pct))
-
-    def _on_pause_changed(self, paused: bool):
-        self._on_status("Paused" if paused else "Resumed")
-
-    def _before_action(self, action: Action):
-        pass
-
-    def _flash_match(self, loc):
-        pass  # Could flash region on screen
+            self._inspector_stack.setFixedHeight(0)
+            self._inspector_stack.setStyleSheet(f"background-color: {COLORS['bg']}; min-height: 0px; max-height: 0px;")
 
     # ═══════════════════════════════════════════════════════
-    #  TABLE / TIMELINE SELECTION
+    #  KEYBOARD SHORTCUTS
     # ═══════════════════════════════════════════════════════
 
-    def _on_timeline_click(self, index: int):
-        self._select_action(index)
+    def _setup_shortcuts(self):
+        QShortcut(QKeySequence("Ctrl+Z"), self, self.undo)
+        QShortcut(QKeySequence("Ctrl+Y"), self, self.redo)
+        QShortcut(QKeySequence("Ctrl+C"), self, self.copy_action)
+        QShortcut(QKeySequence("Ctrl+V"), self, self.paste_action)
+        QShortcut(QKeySequence("Ctrl+D"), self, self._duplicate_inspector)
+        QShortcut(QKeySequence("Delete"), self, self._delete_selected)
+        QShortcut(QKeySequence("Ctrl+Delete"), self, self._delete_selected)
+        QShortcut(QKeySequence("Escape"), self, self._deselect)
+        QShortcut(QKeySequence("Ctrl+S"), self, lambda: (self._do_save_session(), self.status("Session saved")))
+        QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.timeline.setFocus())
 
-    def _on_table_select(self, index: int):
-        self._select_action(index)
-
-    def _on_table_double_click(self, index: int):
-        self._edit_action(index)
-
-    def _on_table_context(self, index: int, pos):
-        menu = QMenu(self)
-        menu.addAction("Edit", lambda: self._edit_action(index))
-        menu.addAction("Duplicate", lambda: self._duplicate_action(index))
-        menu.addAction("Copy", lambda: self._copy_action(index))
-        menu.addAction("Paste After", lambda: self._paste_action(index))
-        menu.addSeparator()
-        menu.addAction("Move Up", lambda: self._move_action(index, index - 1))
-        menu.addAction("Move Down", lambda: self._move_action(index, index + 1))
-        menu.addSeparator()
-        menu.addAction("Delete", lambda: self._delete_action(index))
-        if pos:
-            menu.exec(pos)
-        else:
-            menu.exec(self.cursor().pos())
-
-    def _on_properties_changed(self):
-        self._action_table.set_actions(self.engine.actions)
-        self._timeline.set_actions(self.engine.actions)
-        self._update_statistics()
-        self._save_session()
-
-    # ═══════════════════════════════════════════════════════
-    #  ACTION CRUD
-    # ═══════════════════════════════════════════════════════
-
-    def _select_action(self, index: int):
-        self._active_index = index
-        self._action_table.set_active_index(index)
-        self._timeline.set_active_index(index)
-        if 0 <= index < len(self.engine.actions):
-            self._properties.set_action(self.engine.actions[index])
-        else:
-            self._properties.set_action(None)
-
-    def _edit_action(self, index: int):
-        if not (0 <= index < len(self.engine.actions)):
-            return
-        action = self.engine.actions[index]
-        t = getattr(action, "action_type", "key")
-        dlg = None
-        if t == "key":
-            dlg = KeyEditorDialog(self, action)
-        elif t == "click":
-            dlg = ClickEditorDialog(self, action)
-        elif t == "pause":
-            dlg = PauseEditorDialog(self, action)
-        elif t == "image":
-            dlg = ImageEditorDialog(self, action)
-        if dlg and dlg.exec():
-            self._action_table.set_actions(self.engine.actions)
-            self._timeline.set_actions(self.engine.actions)
-            self._update_statistics()
-            self._save_session()
-
-    def _duplicate_action(self, index: int):
-        if not (0 <= index < len(self.engine.actions)):
-            return
-        self.history.push(self.engine.actions)
-        new_action = deepcopy(self.engine.actions[index])
-        self.engine.actions.insert(index + 1, new_action)
-        self._refresh_all()
-        self._select_action(index + 1)
-        self._save_session()
-
-    def _copy_action(self, index: int):
-        if not (0 <= index < len(self.engine.actions)):
-            return
-        self.clipboard_action = deepcopy(self.engine.actions[index])
-        self._on_status("Copied action")
-
-    def _paste_action(self, index: int):
-        if self.clipboard_action is None:
-            self._on_status("Clipboard empty")
-            return
-        self.history.push(self.engine.actions)
-        new_action = deepcopy(self.clipboard_action)
-        insert_at = index + 1 if 0 <= index < len(self.engine.actions) else len(self.engine.actions)
-        self.engine.actions.insert(insert_at, new_action)
-        self._refresh_all()
-        self._select_action(insert_at)
-        self._save_session()
-
-    def _move_action(self, index: int, target: int):
-        if not (0 <= index < len(self.engine.actions)):
-            return
-        if not (0 <= target < len(self.engine.actions)):
-            return
-        self.history.push(self.engine.actions)
-        action = self.engine.actions.pop(index)
-        self.engine.actions.insert(target, action)
-        self._refresh_all()
-        self._select_action(target)
-        self._save_session()
-
-    def _delete_action(self, index: int):
-        if not (0 <= index < len(self.engine.actions)):
-            return
-        self.history.push(self.engine.actions)
-        del self.engine.actions[index]
-        self._refresh_all()
-        self._select_action(min(index, len(self.engine.actions) - 1))
-        self._save_session()
-
-    # ═══════════════════════════════════════════════════════
-    #  KEYBOARD SHORTCUT HELPERS
-    # ═══════════════════════════════════════════════════════
-
-    def _undo(self):
-        if not self.history.can_undo():
-            self._on_status("Nothing to undo")
-            return
-        result = self.history.undo(self.engine.actions)
-        if result is not None:
-            self.engine.actions = result
-            self._refresh_all()
-            self._select_action(-1)
-            self._save_session()
-            self._on_status("Undone")
-
-    def _redo(self):
-        if not self.history.can_redo():
-            self._on_status("Nothing to redo")
-            return
-        result = self.history.redo(self.engine.actions)
-        if result is not None:
-            self.engine.actions = result
-            self._refresh_all()
-            self._select_action(-1)
-            self._save_session()
-            self._on_status("Redone")
-
-    def _copy_selected(self):
-        idx = getattr(self, '_active_index', -1)
-        if idx >= 0:
-            self._copy_action(idx)
-
-    def _paste_selected(self):
-        idx = getattr(self, '_active_index', -1)
-        self._paste_action(idx)
-
-    def _duplicate_selected(self):
-        idx = getattr(self, '_active_index', -1)
-        if idx >= 0:
-            self._duplicate_action(idx)
+    def _deselect(self):
+        self.select(-1)
+        self.timeline.selected_indices.clear()
+        self.timeline._dirty_all = True
 
     def _delete_selected(self):
-        idx = getattr(self, '_active_index', -1)
-        if idx >= 0:
-            self._delete_action(idx)
+        self.delete_action(self.active_index)
 
-    def _move_up_selected(self):
-        idx = getattr(self, '_active_index', -1)
-        if idx > 0:
-            self._move_action(idx, idx - 1)
+    # ═══════════════════════════════════════════════════════
+    #  TIMELINE CONNECTIONS
+    # ═══════════════════════════════════════════════════════
 
-    def _move_down_selected(self):
-        idx = getattr(self, '_active_index', -1)
-        if 0 <= idx < len(self.engine.actions) - 1:
-            self._move_action(idx, idx + 1)
+    def _setup_timeline_connections(self):
+        self.timeline.action_clicked.connect(self.select)
+        self.timeline.action_double_clicked.connect(self._open_active_dialog)
+        self.timeline.action_dragged.connect(self.move_action_to)
+        self.timeline.action_context_menu.connect(self._timeline_context_menu)
 
-    def _quick_save(self):
-        self._do_save()
-        self._on_status("Session saved")
-
-    def _focus_table(self):
-        self._action_table.setFocus()
-        self._on_status("Table focused")
-
-    def _on_escape(self):
-        if self._countdown_active:
-            self._countdown_active = False
-            self._btn_play.setEnabled(True)
-            self._btn_stop.setEnabled(False)
-            self._on_status("Countdown cancelled")
+    def _timeline_context_menu(self, index, pos):
+        if index < 0 or index >= len(self.engine.actions):
             return
-        if self.engine.running and not self.engine.paused:
-            self.engine.toggle_pause()
-            self._on_status("Paused — press Esc to resume")
-            return
-        if self.engine.running and self.engine.paused:
-            self.engine.toggle_pause()
-            return
-        self._select_action(-1)
+        self.select(index)
+        m = QMenu(self)
+        C = COLORS
+        m.setStyleSheet(f"""
+            QMenu {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }}
+            QMenu::item {{ padding: 6px 18px; border-radius: 6px; }}
+            QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}
+        """)
+        m.addAction("Edit", lambda: self._open_active_dialog(index))
+        m.addAction("Duplicate", lambda: self.duplicate_action(index))
+        m.addSeparator()
+        m.addAction("Move Up", lambda: self.move_action(index, -1))
+        m.addAction("Move Down", lambda: self.move_action(index, 1))
+        m.addSeparator()
+        m.addAction("Delete", lambda: self.delete_action(index))
+        m.exec(pos)
 
     # ═══════════════════════════════════════════════════════
-    #  ADD ACTIONS
+    #  SESSION & PROFILE
     # ═══════════════════════════════════════════════════════
 
-    def add_key_action(self):
-        self._add_action(Action(key="w", duration=0.05, action_type="key"))
-
-    def add_pause_action(self):
-        self._add_action(Action(key="[DELAY]", duration=0.5, action_type="pause"))
-
-    def add_click_action(self):
-        self._add_action(Action(key="[CLICK]", duration=0.05, action_type="click"))
-
-    def add_image_action(self):
-        self._add_action(Action(key="[IMAGE]", duration=0.0, action_type="image"))
-
-    def _add_action(self, action: Action):
-        self.history.push(self.engine.actions)
-        insert_at = self._active_index + 1 if 0 <= self._active_index < len(self.engine.actions) else len(self.engine.actions)
-        self.engine.actions.insert(insert_at, action)
-        self._refresh_all()
-        self._select_action(insert_at)
-        self._save_session()
-
-    # ═══════════════════════════════════════════════════════
-    #  PROFILE MANAGEMENT
-    # ═══════════════════════════════════════════════════════
-
-    def _load_last_session(self):
+    def load_last_session(self):
         session = self.session_manager.load_profile()
         if session:
             try:
                 self.engine.actions = [Action.from_dict(x) for x in session.get("actions", [])]
                 settings = session.get("settings", {})
-                self._spin_loop.setValue(int(settings.get("loops", "1")))
-                self._spin_speed.setValue(float(settings.get("speed", 1.0)))
-                self._chk_infinite.setChecked(settings.get("infinite_loop", False))
+                self.loops_spin.setValue(int(settings.get("loops", 1)))
+                self.speed_combo.setCurrentText(f"{float(settings.get('speed', 1.0)):.1f}x")
+                self.inf_check.setChecked(settings.get("infinite_loop", False))
+                self.human_check.setChecked(settings.get("human_curve", True))
+                self.timeline.zoom = settings.get("zoom", 1.0)
                 if "geometry" in settings:
                     self.restoreGeometry(bytes.fromhex(settings["geometry"]))
-            except Exception as e:
-                logger.error(f"Load session failed: {e}")
-        self._refresh_profiles()
-        self._refresh_all()
-        self._update_statistics()
+                self._invalidate_seq_dur()
+                self.timeline.refresh()
+                self.refresh()
+                self.actions_played = 0
+                self.session_elapsed_time = 0.0
+                self.session_start_time = None
+                self.update_statistics(immediate=True)
+                self.status(f"Profile '{self.session_manager.active}' loaded")
+            except Exception:
+                if not self.engine.actions:
+                    self.status("Failed to load profile")
+                else:
+                    self.status("Profile partially loaded")
+        else:
+            self.engine.actions = []
+            self.update_statistics(immediate=True)
+            self.status("Ready")
+        self._rebuild_profile_tabs()
 
-    def _refresh_profiles(self):
-        current = self._profile_combo.currentText()
-        self._profile_combo.blockSignals(True)
-        self._profile_combo.clear()
-        for name in self.session_manager.list_profiles():
-            self._profile_combo.addItem(name)
-        idx = self._profile_combo.findText(self.session_manager.active)
-        if idx >= 0:
-            self._profile_combo.setCurrentIndex(idx)
-        self._profile_combo.blockSignals(False)
-        self._update_window_title()
-
-    def _switch_profile(self, name: str):
-        self._save_session()
-        self.session_manager.switch_profile(name)
-        self._load_last_session()
-        self._on_status(f"Profile '{name}' loaded")
-
-    def _new_profile(self):
-        from PyQt6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(self, "New Profile", "Profile name:")
-        if ok and name:
-            if self.session_manager.new_profile(name):
-                self.session_manager.switch_profile(name)
-                self.engine.actions = []
-                self._refresh_all()
-                self._refresh_profiles()
-                self._save_session()
-            else:
-                QMessageBox.warning(self, "Exists", f"Profile '{name}' already exists.")
-
-    def _rename_profile(self):
-        from PyQt6.QtWidgets import QInputDialog
-        old = self.session_manager.active
-        name, ok = QInputDialog.getText(self, "Rename Profile", "New name:", text=old)
-        if ok and name and name != old:
-            if self.session_manager.rename_profile(old, name):
-                self._refresh_profiles()
-            else:
-                QMessageBox.warning(self, "Error", "Could not rename profile.")
-
-    def _delete_profile(self):
-        name = self.session_manager.active
-        if name == ProfileManager.DEFAULT_PROFILE:
-            QMessageBox.information(self, "Cannot delete", "The default profile cannot be deleted.")
-            return
-        reply = QMessageBox.question(self, "Delete profile",
-            f"Delete profile '{name}'?\nThis cannot be undone.")
-        if reply == QMessageBox.StandardButton.Yes:
-            self.session_manager.delete_profile(name)
-            self._switch_profile(self.session_manager.active)
-
-    # ═══════════════════════════════════════════════════════
-    #  SAVE / STATS / REFRESH
-    # ═══════════════════════════════════════════════════════
-
-    def _save_session(self):
+    def save_session(self):
         if not self.auto_save_enabled:
             return
-        if self._save_timer:
-            self._save_timer.stop()
-        self._save_timer = QTimer.singleShot(500, self._do_save)
+        if self._save_session_after:
+            self._save_session_after.stop()
+        self._save_session_after = QTimer.singleShot(500, self._do_save_session)
 
-    def _do_save(self):
+    def _do_save_session(self):
         settings = {
-            "loops": str(self._spin_loop.value()),
-            "speed": self._spin_speed.value(),
-            "infinite_loop": self._chk_infinite.isChecked(),
+            "loops": self.loops_spin.value(),
+            "speed": float(self.speed_combo.currentText().replace("x", "")),
+            "infinite_loop": self.inf_check.isChecked(),
+            "human_curve": self.human_check.isChecked(),
             "geometry": self.saveGeometry().toHex().data().decode(),
+            "zoom": self.timeline.zoom,
         }
         self.session_manager.save_profile(self.engine.actions, settings)
+        self._save_session_after = None
 
-    def _update_statistics(self):
-        total = len(self.engine.actions)
-        total_dur = sum(getattr(a, "duration", 0.0) for a in self.engine.actions)
-        mins, secs = divmod(int(total_dur), 60)
-        ms = int((total_dur - int(total_dur)) * 1000)
-        loops = self.engine.loops_completed_count
-        self._lbl_stats.setText(
-            f"{total} actions | {mins}:{secs:02d}.{ms:03d} | {loops} loops"
-        )
+    def _rebuild_profile_tabs(self):
+        # Remove existing tabs
+        while self._tabs_lo.count() > 2:
+            item = self._tabs_lo.takeAt(1)
+            if item.widget():
+                item.widget().deleteLater()
+        active = self.session_manager.active
+        for name in self.session_manager.list_profiles():
+            btn = QPushButton(name)
+            btn.setObjectName("tab")
+            is_active = name == active
+            btn.setChecked(is_active)
+            if is_active:
+                btn.setStyleSheet(f"color: {COLORS['accent']}; border-bottom: 2px solid {COLORS['accent']}; padding: 6px 14px; font-weight: 600;")
+            else:
+                btn.setStyleSheet(f"color: {COLORS['text_dim']}; border-bottom: 2px solid transparent; padding: 6px 14px;")
+            btn.clicked.connect(lambda checked, n=name: self._switch_profile(n))
+            self._tabs_lo.insertWidget(self._tabs_lo.count() - 1, btn)
 
-    def _refresh_all(self):
-        self._action_table.set_actions(self.engine.actions)
-        self._timeline.set_actions(self.engine.actions)
-        self._update_statistics()
+    def _switch_profile(self, name):
+        self._do_save_session()
+        self.session_manager.switch_profile(name)
+        self.load_last_session()
+        self.status(f"Switched to '{name}'")
 
-    def _update_window_title(self):
-        self.setWindowTitle(f"MacroForge v{VERSION} — {self.session_manager.active}")
+    def _new_profile_dialog(self):
+        name, ok = QInputDialog.getText(self, "New Profile", "Profile name:")
+        if ok and name.strip():
+            name = name.strip()
+            self.session_manager.save_profile([], {}, name)
+            self._switch_profile(name)
+
+    def _rename_profile_dialog(self):
+        old = self.session_manager.active
+        name, ok = QInputDialog.getText(self, "Rename Profile", "New name:", text=old)
+        if ok and name.strip() and name != old:
+            self.session_manager.rename_profile(old, name.strip())
+            self._switch_profile(name.strip())
+
+    def _delete_profile_confirm(self):
+        name = self.session_manager.active
+        reply = QMessageBox.question(self, "Delete Profile",
+            f"Delete profile '{name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.session_manager.delete_profile(name)
+            profiles = self.session_manager.list_profiles()
+            if profiles:
+                self._switch_profile(profiles[0])
+            else:
+                self.session_manager.active = "Default"
+                self.engine.actions = []
+                self.refresh()
 
     # ═══════════════════════════════════════════════════════
-    #  RECORDING
+    #  SELECTION & EDITING
     # ═══════════════════════════════════════════════════════
+
+    def select(self, index):
+        if index is None or index < 0 or index >= len(self.engine.actions):
+            self.active_index = -1
+            self.timeline.set_active(-1)
+            self.timeline.selected_indices.clear()
+            self._show_inspector(False)
+            return
+        self.active_index = index
+        self.timeline.selected_indices.clear()
+        self.timeline.set_active(index)
+        action = self.engine.actions[index]
+        self._show_inspector(True, action.action_type)
+        if action.action_type == "key":
+            self.ik_key.setText(action.key)
+            self.ik_dur.setText(str(action.duration))
+            self.ik_hold.setChecked(action.hold_mode)
+            self.ik_repeat.setText(str(getattr(action, 'repeat_count', 1)))
+            self.ik_label.setText(getattr(action, 'label', ''))
+        elif action.action_type == "pause":
+            self.ip_dur.setText(str(action.duration))
+            self.ip_label.setText(getattr(action, 'label', ''))
+        elif action.action_type == "click":
+            self.ic_x.setText(str(getattr(action, 'click_x', 0)))
+            self.ic_y.setText(str(getattr(action, 'click_y', 0)))
+            self.ic_btn.setCurrentText(getattr(action, 'click_button', 'left'))
+            self.ic_rand.setText(str(getattr(action, 'click_rand_radius', 0)))
+            self.ic_repeat.setText(str(getattr(action, 'repeat_count', 1)))
+            self.ic_label.setText(getattr(action, 'label', ''))
+        elif action.action_type == "image":
+            self.ii_sim.setText(str(getattr(action, 'similarity', 0.8)))
+            self.ii_wait.setText(str(getattr(action, 'wait_timeout', 10.0)))
+
+    def _apply_inspector(self):
+        if self.active_index < 0 or self.active_index >= len(self.engine.actions):
+            QMessageBox.warning(self, "No Selection", "Please select an action first")
+            return
+        try:
+            action = self.engine.actions[self.active_index]
+            self.history.push(self.engine.actions)
+            if action.action_type == "key":
+                action.key = self.ik_key.text().strip()
+                action.duration = float(self.ik_dur.text())
+                action.hold_mode = self.ik_hold.isChecked()
+                action.repeat_count = max(1, int(self.ik_repeat.text() or 1))
+                action.label = self.ik_label.text().strip()
+            elif action.action_type == "pause":
+                action.duration = float(self.ip_dur.text())
+                action.label = self.ip_label.text().strip()
+            elif action.action_type == "click":
+                action.click_x = int(self.ic_x.text())
+                action.click_y = int(self.ic_y.text())
+                action.click_button = self.ic_btn.currentText()
+                action.click_rand_radius = int(self.ic_rand.text() or 0)
+                action.repeat_count = max(1, int(self.ic_repeat.text() or 1))
+                action.label = self.ic_label.text().strip()
+            elif action.action_type == "image":
+                action.similarity = float(self.ii_sim.text())
+                action.wait_timeout = float(self.ii_wait.text())
+            self.refresh()
+            self.update_statistics()
+            self.save_session()
+            self.status("Applied changes")
+        except ValueError as e:
+            QMessageBox.critical(self, "Invalid Input", f"Invalid value: {e}")
+
+    def _cancel_inspector(self):
+        if self.active_index >= 0:
+            self.select(self.active_index)
+            self.status("Changes cancelled")
+
+    def _open_active_dialog(self, index=None):
+        idx = index if index is not None else self.active_index
+        if idx < 0 or idx >= len(self.engine.actions):
+            return
+        action = self.engine.actions[idx]
+        if action.action_type == "image":
+            self._open_image_editor(idx)
+        elif action.action_type == "click":
+            self._open_click_editor(idx)
+        elif action.action_type == "pause":
+            self._open_pause_editor(idx)
+        else:
+            self._open_key_editor(idx)
+
+    def _duplicate_inspector(self):
+        self.duplicate_action(self.active_index)
+
+    # ═══════════════════════════════════════════════════════
+    #  ACTION MANAGEMENT
+    # ═══════════════════════════════════════════════════════
+
+    def delete_action(self, index):
+        selected = self.timeline.selected_indices
+        if selected:
+            indices = sorted(selected, reverse=True)
+            if not indices or indices[0] >= len(self.engine.actions):
+                self.timeline.selected_indices.clear()
+                return
+            self.history.push(self.engine.actions)
+            for idx in indices:
+                if 0 <= idx < len(self.engine.actions):
+                    self.engine.actions.pop(idx)
+            self.active_index = -1
+            self.timeline.selected_indices.clear()
+            self.refresh()
+            self.update_statistics()
+            self.save_session()
+            self.status(f"Deleted {len(indices)} actions")
+            return
+        if index < 0 or index >= len(self.engine.actions):
+            return
+        self.history.push(self.engine.actions)
+        self.engine.actions.pop(index)
+        self.active_index = -1
+        self.timeline.selected_indices.clear()
+        self.refresh()
+        self.update_statistics()
+        self.save_session()
+        self.status("Deleted action")
+
+    def duplicate_action(self, index):
+        if index < 0 or index >= len(self.engine.actions):
+            self.status("No action selected to duplicate")
+            return
+        self.history.push(self.engine.actions)
+        self.engine.actions.insert(index + 1, deepcopy(self.engine.actions[index]))
+        self.active_index = index + 1
+        self.refresh()
+        self.update_statistics()
+        self.save_session()
+        self.status("Duplicated action")
+
+    def move_action(self, index, direction):
+        if index < 0 or index >= len(self.engine.actions):
+            return
+        new_index = index + direction
+        if new_index < 0 or new_index >= len(self.engine.actions):
+            return
+        self.history.push(self.engine.actions)
+        action = self.engine.actions.pop(index)
+        self.engine.actions.insert(new_index, action)
+        self.active_index = new_index
+        self.refresh()
+        self.save_session()
+        self.status("Moved action")
+
+    def move_action_to(self, index, target_index):
+        if index < 0 or index >= len(self.engine.actions):
+            return
+        if target_index < 0 or target_index >= len(self.engine.actions):
+            return
+        self.history.push(self.engine.actions)
+        action = self.engine.actions.pop(index)
+        self.engine.actions.insert(target_index, action)
+        self.active_index = target_index
+        self.refresh()
+        self.update_statistics(immediate=True)
+        self.save_session()
+        self.status("Moved action")
+
+    def copy_action(self):
+        if self.active_index < 0 or self.active_index >= len(self.engine.actions):
+            self.status("No action selected to copy")
+            return
+        self.clipboard = deepcopy(self.engine.actions[self.active_index])
+        self.status("Copied action")
+
+    def paste_action(self):
+        if self.clipboard is None:
+            self.status("Clipboard empty")
+            return
+        self.history.push(self.engine.actions)
+        new_action = deepcopy(self.clipboard)
+        if 0 <= self.active_index < len(self.engine.actions):
+            insert_at = self.active_index + 1
+        else:
+            insert_at = len(self.engine.actions)
+        self.engine.actions.insert(insert_at, new_action)
+        self.active_index = insert_at
+        self.refresh()
+        self.update_statistics()
+        self.save_session()
+        self.status("Pasted action")
+
+    # ═══════════════════════════════════════════════════════
+    #  PLAYBACK
+    # ═══════════════════════════════════════════════════════
+
+    def _on_speed_change(self, text):
+        try:
+            self.engine.speed = float(text.replace("x", ""))
+        except ValueError:
+            pass
+
+    def start(self):
+        if not self.engine.actions:
+            self.status("No actions to play")
+            return
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = time.time()
+        self.start_btn.setEnabled(False)
+        self.pause_btn.setEnabled(True)
+        self.stop_btn.setEnabled(True)
+        self.status_dot.set_color(COLORS["playing"], glow=True)
+        self.status_text.setText("Playing")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self.engine.actions = self.engine.actions
+        self.engine.infinite = self.inf_check.isChecked()
+        self.engine.simulation = self.sim_check.isChecked()
+        self.engine.human_curve = self.human_check.isChecked()
+        self.engine.focus_lock = self.focus_check.isChecked()
+        self.engine.loops = self.loops_spin.value()
+        try:
+            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
+        except ValueError:
+            self.engine.speed = 1.0
+        self.engine.start()
+
+    def stop(self):
+        self.engine.stop()
+        self.timeline.clear_playing()
+        self.start_btn.setEnabled(True)
+        self.pause_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+        self.status_dot.set_color(COLORS["text_dark"])
+        self.status_text.setText("Ready")
+        if self.session_start_time:
+            self.session_elapsed_time += time.time() - self.session_start_time
+            self.session_start_time = None
+        self.update_statistics(immediate=True)
+
+    def _status_cb(self, msg):
+        self.status(msg)
+
+    def _play_cb(self, idx, dur):
+        self.playing_index = idx
+        self.actions_played += 1
+        self.timeline.set_playing(idx, dur)
+        self.update_statistics()
+
+    def _complete_cb(self):
+        self.start_btn.setEnabled(True)
+        self.pause_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+        self.timeline.clear_playing()
+        self.status_dot.set_color(COLORS["text_dark"])
+        self.status_text.setText("Finished")
+        if self.session_start_time:
+            self.session_elapsed_time += time.time() - self.session_start_time
+            self.session_start_time = None
+        self.update_statistics(immediate=True)
+
+    def _progress_cb(self, pct):
+        self.progress_bar.setValue(int(pct))
+        self.progress_label.setText(f"{int(pct)}%")
+
+    # ═══════════════════════════════════════════════════════
+    #  RECORDER
+    # ═══════════════════════════════════════════════════════
+
+    def _toggle_record(self):
+        rec = self._recorder
+        if not rec["running"]:
+            self._start_recording()
+        else:
+            self._stop_recording()
+
+    def _toggle_record_pause(self):
+        rec = self._recorder
+        if not rec["running"]:
+            return
+        if rec["paused"]:
+            rec["paused"] = False
+            rec["last_time"] = time.time()
+            self.rec_pause_btn.setText(" Pause")
+            self.rec_pause_btn.setStyleSheet(f"background: {COLORS['playing']}; color: #fff; border-radius: 8px;")
+            self.rec_dot.set_color("#ff4444", glow=True)
+            self.rec_status.setText("RECORDING")
+            self.rec_status.setStyleSheet(f"color: #ff4444; font-size: 11px; font-weight: 600;")
+            self._rec_timer_tick()
+            self.status("Recording resumed")
+            self._show_rec_badge(True)
+        else:
+            rec["paused"] = True
+            self.rec_pause_btn.setText(" Resume")
+            self.rec_dot.set_color("#f0a844", glow=True)
+            self.rec_status.setText("PAUSED")
+            self.rec_status.setStyleSheet(f"color: #f0a844; font-size: 11px; font-weight: 600;")
+            self.status("Recording paused — click Resume to continue, or Stop to finish")
+            self._show_rec_badge(False)
+
+    def _show_rec_badge(self, show):
+        rec = self._recorder
+        if show:
+            if rec["overlay"] is not None:
+                return
+            # We use a simple QWidget overlay positioned near main window
+            ov = QFrame()
+            ov.setStyleSheet("background-color: transparent; border: none;")
+            ov.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            ov.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+            ov.setFixedSize(60, 28)
+            lbl = QLabel("REC")
+            lbl.setStyleSheet("color: #ff4444; font-weight: bold; font-size: 12px;")
+            lo = QHBoxLayout(ov)
+            lo.addWidget(lbl)
+            ov.show()
+            # Position near top-right of main window
+            geo = self.geometry()
+            ov.move(geo.x() + geo.width() - 72, geo.y() + 10)
+            rec["overlay"] = ov
+        else:
+            if rec["overlay"] is not None:
+                rec["overlay"].close()
+                rec["overlay"] = None
+
+    def _rec_timer_tick(self):
+        rec = self._recorder
+        if not rec["running"] or rec["paused"]:
+            return
+        elapsed = int(time.time() - rec["rec_start_time"])
+        mins, secs = divmod(elapsed, 60)
+        self.rec_time.setText(f"{mins}:{secs:02d}")
+        QTimer.singleShot(1000, self._rec_timer_tick)
+
+    def _update_rec_action_count(self):
+        rec = self._recorder
+        if rec["running"] and rec["actions_lbl"] is not None:
+            rec["actions_lbl"].setText(str(len(self.engine.actions)))
 
     def _start_recording(self):
-        self._recorder["running"] = True
-        self._recorder["paused"] = False
-        self._recorder["queue"] = queue.Queue()
-        self._recorder["presses"] = {}
-        self._recorder["modifiers"] = set()
-        self._recorder["last_time"] = time.time()
-        self._btn_record.setChecked(True)
-        self._btn_record.setText("■  Stop")
-        self._btn_play.setEnabled(False)
-        self._on_status("Recording... Press F9 to stop")
-        self._recorder["thread"] = threading.Thread(target=self._record_poll_loop, daemon=True)
-        self._recorder["thread"].start()
-        self._poll_rec_queue()
-        self._rec_anim = Animator.pulse(self._btn_record, 800)
+        if self._recorder["running"]:
+            return
+        rec = self._recorder
+        rec["running"] = True
+        rec["paused"] = False
+        rec["last_time"] = time.time()
+        rec["presses"].clear()
+        rec["modifiers"].clear()
+        rec["queue"] = queue.Queue()
+        self.rec_btn.setText(" Stop")
+        self.rec_btn.setStyleSheet(f"background-color: {COLORS['error']}; color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600;")
+        self.rec_pause_btn.setText(" Pause")
+        self.rec_pause_btn.setEnabled(True)
+        self.rec_pause_btn.setStyleSheet(f"background: {COLORS['playing']}; color: #fff; border-radius: 8px;")
+        self.rec_dot.set_color("#ff4444", glow=True)
+        self.rec_status.setText("RECORDING")
+        self.rec_status.setStyleSheet("color: #ff4444; font-size: 11px; font-weight: 600;")
+        self.rec_actions.setText("0")
+        rec["rec_start_time"] = time.time()
+        self._rec_timer_tick()
+        self.status("Recording…")
+        self._show_rec_badge(True)
 
-    def _stop_recording(self):
-        self._recorder["running"] = False
-        self._recorder["paused"] = False
-        self._btn_record.setChecked(False)
-        self._btn_record.setText("●  Record")
-        self._btn_play.setEnabled(True)
-        self._on_status("Recording stopped")
-        if self._rec_anim:
-            self._rec_anim.stop()
-            self._btn_record.setGraphicsEffect(None)
+        # Cancel stale poll
+        if rec["poll_id"]:
+            rec["poll_id"].stop()
+            rec["poll_id"] = None
+        self._poll_queue()
 
-    def _record_poll_loop(self):
-        import ctypes
+        # Keyboard polling thread
+        rec["kbd_thread"] = threading.Thread(target=self._kbd_poll_loop, daemon=True)
+        rec["kbd_thread"].start()
+
+        # Scroll hook thread
+        rec["scroll_thread"] = threading.Thread(target=self._scroll_hook_loop, daemon=True)
+        rec["scroll_thread"].start()
+        logger.info("Recording started")
+
+    def _kbd_poll_loop(self):
         user32 = ctypes.windll.user32
+        rec = self._recorder
         MODS = {"shift", "ctrl", "alt"}
         vk_name = {}
         for vk in range(0x41, 0x5B):
@@ -1087,7 +1101,6 @@ class MainWindow(QMainWindow):
             vk_name[i] = f"f{i - 0x6F}"
         vks = list(vk_name.keys())
         prev = {}
-        rec = self._recorder
         while rec["running"]:
             for vk in vks:
                 name = vk_name[vk]
@@ -1110,6 +1123,7 @@ class MainWindow(QMainWindow):
                         prev[vk] = down
                         continue
                     if name == "backspace" and not rec["modifiers"]:
+                        # Use invokeMethod to run on main thread
                         QTimer.singleShot(0, self._rec_delete_last)
                         prev[vk] = down
                         continue
@@ -1145,7 +1159,157 @@ class MainWindow(QMainWindow):
                 prev[vk] = down
             time.sleep(1 / 60)
 
-    def _poll_rec_queue(self):
+    def _rec_delete_last(self):
+        try:
+            if self.engine.actions:
+                self.history.push(self.engine.actions)
+                self.engine.actions.pop()
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.update_statistics()
+                self.save_session()
+                self._update_rec_action_count()
+                self.status("Deleted last recorded action")
+        except Exception as e:
+            logger.debug(f"rec_delete_last: {e}")
+
+    def _scroll_hook_loop(self):
+        user32 = ctypes.windll.user32
+        rec = self._recorder
+        WH_MOUSE_LL = 14
+        WM_MOUSEWHEEL = 0x020A
+        WM_MOUSEHWHEEL = 0x020E
+        PM_REMOVE = 0x0001
+        class MSLLHOOKSTRUCT(ctypes.Structure):
+            _fields_ = [
+                ("pt", ctypes.wintypes.POINT),
+                ("mouseData", ctypes.c_uint32),
+                ("flags", ctypes.c_uint32),
+                ("time", ctypes.c_uint32),
+                ("dwExtraInfo", ctypes.c_uint64),
+            ]
+        @ctypes.WINFUNCTYPE(ctypes.c_int64, ctypes.c_int32, ctypes.c_uint64, ctypes.c_int64)
+        def hook_proc(nCode, wParam, lParam):
+            if nCode >= 0 and rec["running"] and not rec["paused"]:
+                if wParam == WM_MOUSEWHEEL or wParam == WM_MOUSEHWHEEL:
+                    try:
+                        if rec["queue"] is None:
+                            return user32.CallNextHookEx(None, nCode, wParam, lParam)
+                        data = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
+                        delta = ctypes.c_int16(data.mouseData >> 16).value
+                        direction = "scroll_up" if delta > 0 else "scroll_down"
+                        now = time.time()
+                        delay = now - rec["last_time"]
+                        if delay > 0.05:
+                            rec["queue"].put(Action("[DELAY]", round(delay, 2), action_type="pause"))
+                        rec["queue"].put(Action(f"[{direction.upper()}]", 0.05, action_type="key"))
+                        rec["last_time"] = now
+                        self.status(f"Recorded: {direction}")
+                    except Exception as e:
+                        logger.debug(f"scroll hook: {e}")
+            return user32.CallNextHookEx(None, nCode, wParam, lParam)
+        hook_id = user32.SetWindowsHookExW(WH_MOUSE_LL, hook_proc, None, 0)
+        if not hook_id:
+            logger.error("Failed to install scroll hook")
+            return
+        logger.info("Scroll hook installed")
+        msg = ctypes.wintypes.MSG()
+        while rec["running"]:
+            if user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+            else:
+                time.sleep(0.005)
+        user32.UnhookWindowsHookEx(hook_id)
+        logger.info("Scroll hook removed")
+
+    def _poll_queue(self):
+        rec = self._recorder
+        try:
+            if not rec["running"] and (rec["queue"] is None or rec["queue"].empty()):
+                rec["poll_id"] = None
+                return
+            updated = False
+            while rec["queue"] is not None and not rec["queue"].empty():
+                try:
+                    action = rec["queue"].get_nowait()
+                except queue.Empty:
+                    break
+                self.history.push(self.engine.actions)
+                self.engine.actions.append(action)
+                self._update_rec_action_count()
+                updated = True
+            if updated:
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.timeline.ensure_visible(self.active_index)
+                self.update_statistics()
+                self.save_session()
+        except Exception as e:
+            logger.error(f"_poll_queue: {e}")
+        if rec["running"]:
+            rec["poll_id"] = QTimer.singleShot(50, self._poll_queue)
+
+    def _stop_recording(self):
+        if not self._recorder["running"]:
+            return
+        rec = self._recorder
+        rec["running"] = False
+        rec["paused"] = False
+        if rec.get("kbd_thread") and rec["kbd_thread"].is_alive():
+            rec["kbd_thread"].join(timeout=0.05)
+        if rec.get("scroll_thread") and rec["scroll_thread"].is_alive():
+            rec["scroll_thread"].join(timeout=0.2)
+        self._show_rec_badge(False)
+        self.rec_btn.setText(" Record")
+        self.rec_btn.setStyleSheet(f"background-color: {COLORS['error']}; color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600;")
+        self.rec_pause_btn.setText(" Pause")
+        self.rec_pause_btn.setEnabled(False)
+        self.rec_pause_btn.setStyleSheet(f"background: {COLORS['bg_tertiary']}; color: #fff; border-radius: 8px;")
+        self.rec_dot.set_color(COLORS["text_dark"])
+        self.rec_status.setText("IDLE")
+        self.rec_status.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px; font-weight: 600;")
+        self.rec_time.setText("0:00")
+        self.rec_actions.setText("0")
+        if rec["timer_id"]:
+            rec["timer_id"].stop()
+            rec["timer_id"] = None
+        try:
+            if rec["queue"] is not None:
+                now = time.time()
+                for k, t in list(rec["presses"].items()):
+                    hold = now - t
+                    delay = t - rec["last_time"]
+                    if delay > 0.05:
+                        rec["queue"].put(Action("[DELAY]", round(delay, 2), action_type="pause"))
+                    if k.startswith("mouse_"):
+                        pt = ctypes.wintypes.POINT()
+                        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+                        act = Action("[CLICK]", 0.05, action_type="click")
+                        act.click_x, act.click_y = pt.x, pt.y
+                        act.click_button = k.replace("mouse_", "")
+                        act.click_coord_mode = "absolute"
+                        rec["queue"].put(act)
+                    else:
+                        rec["queue"].put(Action(k, round(hold, 2), hold_mode=True, action_type="key"))
+                    rec["last_time"] = now
+            rec["presses"].clear()
+            rec["modifiers"].clear()
+        except Exception as e:
+            logger.error(f"rec flush: {e}")
+        if rec["poll_id"]:
+            try:
+                rec["poll_id"].stop()
+            except Exception as e:
+                logger.debug(f"after_cancel: {e}")
+            rec["poll_id"] = None
+        self._poll_queue_final()
+        rec["kbd_thread"] = None
+        rec["scroll_thread"] = None
+        rec["queue"] = None
+        self.status("Recording stopped")
+
+    def _poll_queue_final(self):
         rec = self._recorder
         try:
             updated = False
@@ -1158,134 +1322,144 @@ class MainWindow(QMainWindow):
                 self.engine.actions.append(action)
                 updated = True
             if updated:
-                self._refresh_all()
-                self._select_action(len(self.engine.actions) - 1)
-                self._save_session()
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.update_statistics()
+                self.save_session()
         except Exception as e:
-            logger.error(f"_poll_rec_queue: {e}")
-        if rec["running"]:
-            QTimer.singleShot(50, self._poll_rec_queue)
+            logger.error(f"_poll_queue_final: {e}")
 
-    def _rec_delete_last(self):
-        try:
-            if self.engine.actions:
+    # ═══════════════════════════════════════════════════════
+    #  MENU SYSTEM
+    # ═══════════════════════════════════════════════════════
+
+    def _show_action_menu(self):
+        m = QMenu(self)
+        C = COLORS
+        m.setStyleSheet(f"""
+            QMenu {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }}
+            QMenu::item {{ padding: 6px 18px; border-radius: 6px; }}
+            QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}
+            QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}
+        """)
+        active = self.session_manager.active
+        profiles_menu = QMenu("Profiles", self)
+        profiles_menu.setStyleSheet(m.styleSheet())
+        for name in self.session_manager.list_profiles():
+            a = QAction(f"  {'>' if name == active else ' '}  {name}", self)
+            a.triggered.connect(lambda checked, n=name: self._switch_profile(n))
+            profiles_menu.addAction(a)
+        profiles_menu.addSeparator()
+        profiles_menu.addAction("New profile…", self._new_profile_dialog)
+        profiles_menu.addAction("Rename…", self._rename_profile_dialog)
+        profiles_menu.addAction("Delete", self._delete_profile_confirm)
+        m.addMenu(profiles_menu)
+        m.addSeparator()
+        m.addAction("Save     Ctrl+S", lambda: (self._do_save_session(), self.status(f"Profile '{self.session_manager.active}' saved")))
+        m.addAction("Export JSON…", self.save)
+        m.addAction("Import JSON…", self.load)
+        m.addAction("Export CSV…", self.export_csv)
+        m.addAction("Import CSV…", self.import_csv)
+        m.addSeparator()
+        m.addAction("Reset statistics", self.reset_stats)
+        m.addAction("Clear all actions", self.clear_all)
+        m.addSeparator()
+        m.addAction("Settings", self.open_settings_dialog)
+        m.addAction("Debug log", self.open_debug_viewer)
+        m.addAction("Check for Updates", self._check_update_manual)
+        m.exec(self.sender().mapToGlobal(self.sender().rect().bottomLeft()))
+
+    # ═══════════════════════════════════════════════════════
+    #  FILE OPERATIONS
+    # ═══════════════════════════════════════════════════════
+
+    def save(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export Macro", "", "JSON (*.json)")
+        if path:
+            try:
+                with open(path, "w") as f:
+                    json.dump([a.to_dict() for a in self.engine.actions], f, indent=2)
+                self.status(f"Exported {len(self.engine.actions)} actions")
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", str(e))
+
+    def load(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import Macro", "", "JSON (*.json)")
+        if path:
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
                 self.history.push(self.engine.actions)
-                self.engine.actions.pop()
-                self._refresh_all()
-                self._select_action(len(self.engine.actions) - 1)
-                self._save_session()
-                self._on_status("Deleted last recorded action")
-        except Exception as e:
-            logger.debug(f"rec_delete_last: {e}")
-
-    # ═══════════════════════════════════════════════════════
-    #  DIALOGS
-    # ═══════════════════════════════════════════════════════
-
-    def _open_settings(self):
-        dlg = SettingsDialog(self, self.settings_manager)
-        dlg.exec()
-
-    def _open_logs(self):
-        dlg = LogViewerDialog(self)
-        dlg.exec()
-
-    def _tray_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.showNormal()
-            self.raise_()
-            self.activateWindow()
-
-    # ═══════════════════════════════════════════════════════
-    #  IMPORT / EXPORT
-    # ═══════════════════════════════════════════════════════
+                self.engine.actions = [Action.from_dict(x) for x in data]
+                self.active_index = -1
+                self.refresh()
+                self.update_statistics()
+                self.save_session()
+                self.status(f"Imported {len(self.engine.actions)} actions")
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", str(e))
 
     def export_csv(self):
         if not self.engine.actions:
             QMessageBox.warning(self, "No Actions", "Nothing to export")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Export CSV", "actions.csv", "CSV (*.csv)")
-        if not path:
-            return
-        try:
-            import csv
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["index", "key", "duration", "hold", "lane", "rand_delay", "rand_key"])
-                for i, a in enumerate(self.engine.actions):
-                    writer.writerow([i + 1, a.key, a.duration, a.hold_mode, a.lane, a.random_delay, a.random_key])
-            self._on_status(f"Exported {len(self.engine.actions)} actions")
-        except Exception as e:
-            QMessageBox.critical(self, "Export Error", str(e))
+        path, _ = QFileDialog.getSaveFileName(self, "Export CSV", "", "CSV (*.csv)")
+        if path:
+            try:
+                with open(path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["index", "key", "duration", "hold", "lane", "rand_delay", "rand_key"])
+                    for i, a in enumerate(self.engine.actions):
+                        writer.writerow([i+1, a.key, a.duration, a.hold_mode, a.lane, a.random_delay, a.random_key])
+                self.status(f"Exported {len(self.engine.actions)} actions to CSV")
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", str(e))
 
     def import_csv(self):
         path, _ = QFileDialog.getOpenFileName(self, "Import CSV", "", "CSV (*.csv)")
-        if not path:
-            return
-        try:
-            import csv
-            self.history.push(self.engine.actions)
-            new_actions = []
-            with open(path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    a = Action(
-                        key=row.get("key", ""),
-                        duration=float(row.get("duration", 0.0)),
-                        hold_mode=row.get("hold", "").lower() in ("true", "1", "yes"),
-                        lane=int(row.get("lane", 0)),
-                        random_delay=float(row.get("rand_delay", 0.0)),
-                        random_key=row.get("rand_key", "").lower() in ("true", "1", "yes"),
-                    )
-                    new_actions.append(a)
-            self.engine.actions.extend(new_actions)
-            self._refresh_all()
-            self._save_session()
-            self._on_status(f"Imported {len(new_actions)} actions")
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", str(e))
+        if path:
+            try:
+                self.history.push(self.engine.actions)
+                new_actions = []
+                with open(path, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        a = Action(
+                            key=row["key"],
+                            duration=float(row["duration"]),
+                            hold_mode=row.get("hold", "False") == "True",
+                            lane=int(row.get("lane", 0)),
+                            random_delay=float(row.get("rand_delay", 0)),
+                            random_key=row.get("rand_key", "False") == "True"
+                        )
+                        new_actions.append(a)
+                self.engine.actions = new_actions
+                self.active_index = -1
+                self.refresh()
+                self.update_statistics()
+                self.save_session()
+                self.status(f"Imported {len(new_actions)} actions from CSV")
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", str(e))
 
-    def save_json(self):
-        if not self.engine.actions:
-            QMessageBox.warning(self, "No Actions", "Nothing to export")
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Export JSON", "actions.json", "JSON (*.json)")
-        if not path:
-            return
-        try:
-            import json
-            data = {
-                "profile": self.session_manager.active,
-                "actions": [a.to_dict() for a in self.engine.actions],
-                "settings": {
-                    "loops": str(self._spin_loop.value()),
-                    "speed": self._spin_speed.value(),
-                    "infinite_loop": self._chk_infinite.isChecked(),
-                },
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            }
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            self._on_status(f"Saved to {path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Save Error", str(e))
-
-    def load_json(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import JSON", "", "JSON (*.json)")
-        if not path:
-            return
-        try:
-            import json
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            actions_data = data.get("actions", [])
+    def clear_all(self):
+        if QMessageBox.question(self, "Clear All",
+            "Remove all actions?") == QMessageBox.StandardButton.Yes:
             self.history.push(self.engine.actions)
-            self.engine.actions = [Action.from_dict(x) for x in actions_data]
-            self._refresh_all()
-            self._save_session()
-            self._on_status(f"Imported {len(self.engine.actions)} actions from JSON")
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", str(e))
+            self.engine.actions.clear()
+            self.active_index = -1
+            self.timeline.selected_indices.clear()
+            self.refresh()
+            self.update_statistics()
+            self.save_session()
+            self.status("All actions cleared")
+
+    def reset_stats(self):
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = None
+        self.update_statistics(immediate=True)
+        self.status("Statistics reset")
 
     # ═══════════════════════════════════════════════════════
     #  UPDATE CHECKING
@@ -1293,53 +1467,331 @@ class MainWindow(QMainWindow):
 
     def _check_update_silent(self):
         def _bg():
-            from updater import check_update
             manifest = check_update(silent=True)
             if manifest:
-                self._pending_update = manifest
-                self._on_status("Update available — check Settings menu")
+                QTimer.singleShot(0, lambda: self._prompt_update(manifest))
         threading.Thread(target=_bg, daemon=True).start()
 
     def _check_update_manual(self):
-        from updater import check_update, perform_update
-        self._on_status("Checking for updates...")
+        self.status("Checking for updates…")
         def _bg():
             manifest = check_update(silent=False)
             if manifest:
-                self._pending_update = manifest
-                self._show_update_dialog(manifest)
+                QTimer.singleShot(0, lambda: self._prompt_update(manifest))
             else:
-                self._on_status("No updates available")
+                QTimer.singleShot(0, lambda: self.status("No updates available"))
         threading.Thread(target=_bg, daemon=True).start()
 
-    def _show_update_dialog(self, manifest):
+    def _prompt_update(self, manifest):
         remote_ver = manifest.get("version", "unknown")
         notes = manifest.get("notes", "")
         msg = f"A new version of MacroForge is available.\n\nCurrent: {VERSION}\nLatest: {remote_ver}"
         if notes:
             msg += f"\n\nRelease notes:\n{notes}"
         reply = QMessageBox.question(self, "Update Available", msg + "\n\nDownload and install now?")
-        if reply == QMessageBox.StandardButton.Yes:
-            self._on_status("Downloading update...")
-            def _download():
-                try:
-                    if perform_update(manifest):
-                        self._on_status("Update installed — restarting...")
-                        QTimer.singleShot(1000, self.close)
-                    else:
-                        self._on_status("Update failed")
-                except Exception as e:
-                    logger.error(f"Update download error: {e}")
-                    self._on_status("Update failed")
-            threading.Thread(target=_download, daemon=True).start()
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        # Simple dialog with progress
+        dlg = QFrame(self, Qt.WindowType.Dialog)
+        dlg.setWindowTitle("Updating MacroForge")
+        dlg.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; border-radius: 10px; padding: 20px;")
+        lo = QVBoxLayout(dlg)
+        lo.addWidget(QLabel(f"Downloading MacroForge {remote_ver}…"))
+        bar = QProgressBar()
+        bar.setRange(0, 100)
+        lo.addWidget(bar)
+        info = QLabel("Starting…")
+        info.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px;")
+        lo.addWidget(info)
+        dlg.show()
+
+        def _on_progress(downloaded, total):
+            pct = downloaded / total * 100 if total else 0
+            mb_down = downloaded / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+            bar.setValue(int(pct))
+            info.setText(f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)")
+
+        def _download():
+            try:
+                if perform_update(manifest, progress_cb=_on_progress):
+                    dlg.close()
+                    self._real_exit()
+                else:
+                    dlg.close()
+                    QMessageBox.critical(self, "Update Failed", "Download failed.")
+            except Exception as e:
+                dlg.close()
+                QMessageBox.critical(self, "Update Error", str(e))
+        threading.Thread(target=_download, daemon=True).start()
 
     # ═══════════════════════════════════════════════════════
-    #  LIFECYCLE
+    #  STATISTICS & STATUS
     # ═══════════════════════════════════════════════════════
+
+    def status(self, msg):
+        self.status_text.setText(msg)
+        logger.info(msg)
+
+    def _invalidate_seq_dur(self):
+        pass  # Can cache sequence duration if needed
+
+    def update_statistics(self, immediate=False):
+        total = len(self.engine.actions)
+        loops = self.loops_spin.value()
+        self._stat_actions.setText(f"{total} actions")
+        self._stat_loops.setText(f"{self.actions_played}/{loops}")
+        seq_dur = sum(a.duration for a in self.engine.actions)
+        self._stat_seq.setText(f"{seq_dur:.2f}s")
+        elapsed = self.session_elapsed_time
+        if self.session_start_time:
+            elapsed += time.time() - self.session_start_time
+        self._stat_time.setText(f"{elapsed:.1f}s")
+
+    # ═══════════════════════════════════════════════════════
+    #  HOTKEYS & SYSTRAY
+    # ═══════════════════════════════════════════════════════
+
+    def _setup_hotkeys(self):
+        try:
+            start_hotkeys({
+                "f9": self._hotkey_toggle_play,
+                "f7": self._hotkey_record,
+            })
+        except Exception as e:
+            logger.warning(f"Hotkeys not available: {e}")
+
+    def _hotkey_toggle_play(self):
+        if self.engine.running:
+            self.stop()
+        else:
+            self.start()
+
+    def _hotkey_record(self):
+        self._toggle_record()
+
+    def _setup_tray(self):
+        try:
+            from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
+            from PyQt6.QtGui import QIcon
+            self._tray_menu = QMenu()
+            self._tray_menu.addAction("Show", self.showNormal)
+            self._tray_menu.addAction("Quit", self._real_exit)
+            self._tray_icon = QSystemTrayIcon(self)
+            self._tray_icon.setContextMenu(self._tray_menu)
+            self._tray_icon.activated.connect(self._tray_activated)
+            self._tray_icon.show()
+        except Exception as e:
+            logger.debug(f"Tray not available: {e}")
+
+    def _tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.showNormal()
+
+    # ═══════════════════════════════════════════════════════
+    #  UTILITIES
+    # ═══════════════════════════════════════════════════════
+
+    def refresh(self):
+        self.timeline.set_actions(self.engine.actions)
+        self.update_statistics()
+
+    def open_debug_viewer(self):
+        try:
+            dv = DebugViewer()
+            dv.show()
+        except Exception as e:
+            logger.error(f"Debug viewer: {e}")
+
+    def open_settings_dialog(self):
+        from ui.dialogs.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self, self.settings_manager)
+        dlg.exec()
+
+    # ═══════════════════════════════════════════════════════
+    #  DIALOGS
+    # ═══════════════════════════════════════════════════════
+
+    def _open_key_dialog(self):
+        from ui.dialogs.key_dialog import KeyDialog
+        dlg = KeyDialog(self)
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions.append(act)
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.timeline.ensure_visible(self.active_index)
+                self.save_session()
+                self.status(f"Added key: {act.key}")
+
+    def _open_click_dialog(self):
+        from ui.dialogs.click_dialog import ClickDialog
+        dlg = ClickDialog(self)
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions.append(act)
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.timeline.ensure_visible(self.active_index)
+                self.save_session()
+                self.status(f"Added click")
+
+    def _open_pause_dialog(self):
+        from ui.dialogs.pause_dialog import PauseDialog
+        dlg = PauseDialog(self)
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions.append(act)
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.timeline.ensure_visible(self.active_index)
+                self.save_session()
+                self.status(f"Added delay")
+
+    def _open_image_dialog(self):
+        from ui.dialogs.image_dialog import ImageDialog
+        dlg = ImageDialog(self)
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions.append(act)
+                self.active_index = len(self.engine.actions) - 1
+                self.refresh()
+                self.timeline.ensure_visible(self.active_index)
+                self.save_session()
+                self.status(f"Added image search")
+
+    def _open_key_editor(self, index):
+        from ui.dialogs.key_dialog import KeyDialog
+        dlg = KeyDialog(self, existing=self.engine.actions[index])
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions[index] = act
+                self.refresh()
+                self.save_session()
+                self.status("Key action updated")
+
+    def _open_click_editor(self, index):
+        from ui.dialogs.click_dialog import ClickDialog
+        dlg = ClickDialog(self, existing=self.engine.actions[index])
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions[index] = act
+                self.refresh()
+                self.save_session()
+                self.status("Click action updated")
+
+    def _open_pause_editor(self, index):
+        from ui.dialogs.pause_dialog import PauseDialog
+        dlg = PauseDialog(self, existing=self.engine.actions[index])
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions[index] = act
+                self.refresh()
+                self.save_session()
+                self.status("Delay action updated")
+
+    def _open_image_editor(self, index):
+        from ui.dialogs.image_dialog import ImageDialog
+        dlg = ImageDialog(self, existing=self.engine.actions[index])
+        if dlg.exec() == 1:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.engine.actions)
+                self.engine.actions[index] = act
+                self.refresh()
+                self.save_session()
+                self.status("Image action updated")
+
+    def _real_exit(self):
+        self._do_save_session()
+        try:
+            stop_hotkeys()
+        except Exception:
+            pass
+        self.close()
 
     def closeEvent(self, event):
-        self._save_session()
-        self.engine.running = False
-        if hasattr(self, '_tray') and self._tray:
-            self._tray.hide()
+        self._do_save_session()
+        try:
+            stop_hotkeys()
+        except Exception:
+            pass
         event.accept()
+
+    def undo(self):
+        if not self.history.can_undo():
+            self.status("Nothing to undo")
+            return
+        result = self.history.undo(self.engine.actions)
+        if result is None:
+            return
+        self.engine.actions = result
+        self.active_index = -1
+        self.refresh()
+        self.update_statistics()
+        self.save_session()
+        self.status("Undone")
+
+    def redo(self):
+        if not self.history.can_redo():
+            self.status("Nothing to redo")
+            return
+        result = self.history.redo(self.engine.actions)
+        if result is None:
+            return
+        self.engine.actions = result
+        self.active_index = -1
+        self.refresh()
+        self.update_statistics()
+        self.save_session()
+        self.status("Redone")
+
+
+class HistoryManager:
+    """Simple undo/redo stack."""
+    def __init__(self, max_size=50):
+        self._undo = []
+        self._redo = []
+        self._max = max_size
+
+    def push(self, actions):
+        import copy
+        self._undo.append([a.to_dict() for a in actions])
+        if len(self._undo) > self._max:
+            self._undo.pop(0)
+        self._redo.clear()
+
+    def can_undo(self):
+        return bool(self._undo)
+
+    def can_redo(self):
+        return bool(self._redo)
+
+    def undo(self, current_actions):
+        if not self._undo:
+            return None
+        self._redo.append([a.to_dict() for a in current_actions])
+        data = self._undo.pop()
+        return [Action.from_dict(d) for d in data]
+
+    def redo(self, current_actions):
+        if not self._redo:
+            return None
+        self._undo.append([a.to_dict() for a in current_actions])
+        data = self._redo.pop()
+        return [Action.from_dict(d) for d in data]
+

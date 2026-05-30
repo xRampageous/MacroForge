@@ -2,6 +2,7 @@
 dist/
 build/
 *.spec
+!MacroForge.spec
 *.exe
 *.update.exe
 MacroForge.ico

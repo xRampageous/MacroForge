@@ -1,1 +1,1 @@
-"""MacroForge PyQt6 UI package."""
+"""MacroForge PyQt6 UI — fresh modern rebuild."""

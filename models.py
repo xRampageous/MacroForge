@@ -378,11 +378,18 @@ class SettingsManager:
         except Exception:
             pass
 
+    @property
+    def settings(self) -> dict:
+        return self._data
+
     def get(self, key: str, default=None):
         return self._data.get(key, default)
 
     def set(self, key: str, value):
         self._data[key] = value
+        self._save()
+
+    def save(self):
         self._save()
 
     def all(self) -> dict:

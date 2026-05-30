@@ -56,6 +56,20 @@ class ExecutionEngine:
         self.input = PlatformInput()    # Fast Windows SendInput backend
         self.ai_matcher = None          # Lazy-load AIImageMatcher when first image search uses it
         self._img_template_cache = {}   # action_b64_key -> [PIL.Image, ...]
+        self.loops = 1
+
+    def start(self):
+        import threading
+        t = threading.Thread(target=self.run, args=(self.loops,), daemon=True)
+        t.start()
+
+    @property
+    def speed(self):
+        return self.speed_multiplier
+
+    @speed.setter
+    def speed(self, value):
+        self.speed_multiplier = value
 
     def capture_focus_window(self):
         """Capture whichever window currently has focus (call on Start)."""

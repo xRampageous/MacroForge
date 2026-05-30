@@ -26,7 +26,6 @@ def main():
     app.setStyle("Fusion")
 
     logger.info("MacroForge PyQt6 starting")
-
     window = MainWindow()
     window.show()
 
