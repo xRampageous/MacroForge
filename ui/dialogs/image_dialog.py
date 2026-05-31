@@ -41,20 +41,19 @@ class CaptureOverlay(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
-            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
-        # Cover all screens
-        geo = QApplication.primaryScreen().geometry()
-        for scr in QApplication.screens():
-            geo = geo.united(scr.geometry())
-        self.setGeometry(geo)
+        # Use primary screen for capture
+        screen = QApplication.primaryScreen()
+        self.setGeometry(screen.geometry())
         self._start = None
         self._end = None
         self._dragging = False
         self.region = None
         self._closed = False
+        self.setMouseTracking(True)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -71,23 +70,25 @@ class CaptureOverlay(QWidget):
         painter.end()
 
     def mousePressEvent(self, event):
-        self._start = event.pos()
-        self._end = event.pos()
-        self._dragging = True
-        self.update()
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._start = event.position().toPoint()
+            self._end = self._start
+            self._dragging = True
+            self.update()
 
     def mouseMoveEvent(self, event):
         if self._dragging:
-            self._end = event.pos()
+            self._end = event.position().toPoint()
             self.update()
 
     def mouseReleaseEvent(self, event):
-        self._dragging = False
-        self._end = event.pos()
-        r = QRect(self._start, self._end).normalized()
-        if r.width() > 2 and r.height() > 2:
-            self.region = (r.left(), r.top(), r.width(), r.height())
-        self._do_close()
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+            self._end = event.position().toPoint()
+            r = QRect(self._start, self._end).normalized()
+            if r.width() > 2 and r.height() > 2:
+                self.region = (r.left(), r.top(), r.width(), r.height())
+            self._do_close()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
@@ -98,6 +99,7 @@ class CaptureOverlay(QWidget):
         if not self._closed:
             self._closed = True
             self.close()
+            self.deleteLater()
 
 
 class ImageDialog(QDialog):
@@ -279,15 +281,16 @@ class ImageDialog(QDialog):
         self.hide()
         QApplication.processEvents()
         import time
-        time.sleep(0.3)
+        time.sleep(0.15)
         overlay = CaptureOverlay()
-        overlay.showFullScreen()
+        overlay.show()
         overlay.raise_()
         overlay.activateWindow()
-        # Run a local event loop until overlay closes
+        # Simple event loop to wait for overlay to close
         while not overlay._closed:
             QApplication.processEvents()
-            time.sleep(0.02)
+            time.sleep(0.016)
+        time.sleep(0.05)
         self.show()
         self.raise_()
         self.activateWindow()
