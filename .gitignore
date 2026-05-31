@@ -39,3 +39,11 @@ profiles/
 # OS
 .DS_Store
 Thumbs.db
+
+# Legacy v1.1.0 backups (not part of the live app)
+*_v1.1.0.py
+_v110.py
+_orig_v110.py
+_tk_backup.py
+_tk_ref.py
+_chars.txt
