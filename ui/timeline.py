@@ -29,10 +29,10 @@ from PyQt6.QtWidgets import (
     QGraphicsTextItem, QGraphicsLineItem, QGraphicsPixmapItem,
     QFrame, QMenu
 )
-from PyQt6.QtCore import Qt, QRectF, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor, QPen, QBrush, QFont, QPainter, QPixmap,
-    QLinearGradient, QFontMetrics
+    QLinearGradient, QFontMetrics, QPolygonF
 )
 
 from ui.theme import COLORS, TYPE_COLORS, TYPE_GLOW
@@ -52,8 +52,11 @@ class TimelineRow:
 
         self.left = scene.addRect(0, 0, 4, 30, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["accent"])))
 
-        self.bar_bg = scene.addRect(0, 0, 100, 4, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["bg_tertiary"])))
-        self.bar_fill = scene.addRect(0, 0, 50, 4, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["accent"])))
+        self.bar_bg = scene.addRect(0, 0, 100, 3, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["border"])))
+        grad = QLinearGradient(0, 0, 100, 0)
+        grad.setColorAt(0, QColor(C["accent_secondary"]))
+        grad.setColorAt(1, QColor(C["accent"]))
+        self.bar_fill = scene.addRect(0, 0, 50, 3, QPen(Qt.PenStyle.NoPen), QBrush(grad))
 
         self.t_index = scene.addText("", QFont("Segoe UI", 8, QFont.Weight.Bold))
         self.t_index.setDefaultTextColor(QColor(C["text_dim"]))
@@ -83,27 +86,27 @@ class TimelineRow:
     def set_pos(self, x, y, w, row_h):
         self.y = y
         pad = 4
-        self.bg.setRect(x + pad, y, w - pad * 2, row_h - 2)
-        self.glow.setRect(x + pad, y, w - pad * 2, row_h - 2)
-        self.left.setRect(x + pad, y, 4, row_h - 2)
+        self.bg.setRect(int(x + pad), int(y), int(w - pad * 2), int(row_h - 2))
+        self.glow.setRect(int(x + pad), int(y), int(w - pad * 2), int(row_h - 2))
+        self.left.setRect(int(x + pad), int(y), 4, int(row_h - 2))
 
         ci, ck, bs, bw, cl, cf = self._calc_cols(w)
-        bar_y = y + (row_h - 4) / 2
-        cy = y + row_h / 2
+        bar_y = int(y + row_h - 8)
+        cy = int(y + row_h // 2)
 
-        self.bar_bg.setRect(bs, bar_y, bw, 4)
-        self.bar_fill.setRect(bs, bar_y, bw, 4)
+        self.bar_bg.setRect(int(bs), int(bar_y), int(bw), 3)
+        self.bar_fill.setRect(int(bs), int(bar_y), int(bw), 3)
 
         fm = QFontMetrics(self.t_index.font())
         ih = fm.height()
 
-        self.t_index.setPos(ci, cy - ih / 2)
-        self.t_key.setPos(ck + 20, cy - ih / 2)
-        self.t_dur.setPos(bs + bw / 2 - 20, bar_y - ih - 2)
-        self.t_lane.setPos(cl, cy - ih / 2)
-        self.t_flags.setPos(cf, cy - ih / 2)
+        self.t_index.setPos(int(ci), int(cy - ih // 2))
+        self.t_key.setPos(int(ck + 20), int(cy - ih // 2))
+        self.t_dur.setPos(int(bs + bw // 2 - 20), int(bar_y - ih - 2))
+        self.t_lane.setPos(int(cl), int(cy - ih // 2))
+        self.t_flags.setPos(int(cf), int(cy - ih // 2))
 
-        self._icon_x = ck + 6
+        self._icon_x = int(ck + 6)
         self._icon_y = cy
 
     def _calc_cols(self, w):
@@ -132,30 +135,36 @@ class TimelineRow:
             self.img_item.setVisible(True)
 
     def draw_icon(self, action_type, color):
-        """Draw simple shape icon for action type."""
-        # Remove old icon items
+        """Draw cleaner action type icons."""
         for item in self.icon_group.childItems():
             self.icon_group.removeFromGroup(item)
             self.scene.removeItem(item)
 
-        size = 12
-        x, y = self._icon_x - size / 2, self._icon_y - size / 2
+        size = 10
+        ix = int(self._icon_x - size // 2)
+        iy = int(self._icon_y - size // 2)
         pen = QPen(Qt.PenStyle.NoPen)
         brush = QBrush(QColor(color))
+        C = QColor(color)
 
         if action_type == "key":
-            r = self.scene.addRect(x, y, size, size, pen, brush)
+            # Small rounded keycap
+            r = self.scene.addRect(ix, iy + 1, size, size - 2, QPen(C, 1.5), QBrush(Qt.BrushStyle.NoBrush))
         elif action_type == "click":
-            r = self.scene.addEllipse(x, y, size, size, pen, brush)
+            # Target dot
+            self.scene.addEllipse(ix + 2, iy + 2, size - 4, size - 4, pen, brush)
+            r = self.scene.addEllipse(ix, iy, size, size, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
         elif action_type == "image":
-            pts = [x + size / 2, y, x + size, y + size, x, y + size]
-            poly = self.scene.addPolygon(pts, pen, brush)
+            # Picture frame
+            r = self.scene.addRect(ix, iy + 1, size, size - 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
+            self.scene.addLine(ix + 2, int(iy + size - 3), int(ix + size // 2), iy + 3, QPen(C, 1))
+            self.scene.addLine(int(ix + size // 2), iy + 3, int(ix + size - 2), int(iy + size - 4), QPen(C, 1))
         elif action_type == "pause":
-            r = self.scene.addRect(x + 3, y, 3, size, pen, brush)
-            r2 = self.scene.addRect(x + 7, y, 3, size, pen, brush)
+            r = self.scene.addRect(int(ix + 2), iy + 1, 2, size - 2, pen, brush)
+            r2 = self.scene.addRect(int(ix + 6), iy + 1, 2, size - 2, pen, brush)
             self.icon_group.addToGroup(r2)
         else:
-            r = self.scene.addEllipse(x, y, size, size, pen, brush)
+            r = self.scene.addEllipse(ix + 1, iy + 1, size - 2, size - 2, pen, brush)
 
         self.icon_group.addToGroup(r)
         self.icon_group.setVisible(True)
@@ -180,7 +189,7 @@ class TimelineRow:
                 self.img_item = scene.addPixmap(scaled)
             else:
                 self.img_item.setPixmap(scaled)
-            self.img_item.setPos(self._icon_x, self._icon_y - scaled.height() / 2)
+            self.img_item.setPos(int(self._icon_x), int(self._icon_y - scaled.height() // 2))
             self.img_item.setVisible(True)
             # Hide icon when image shown
             self.icon_group.setVisible(False)
@@ -235,22 +244,22 @@ class TimelineRow:
         t = "key"  # default, will be set by caller
 
         bg = QColor(C["bg_secondary"])
-        glow_color = QColor(C["accent"])
         glow_visible = False
 
         if is_hover:
-            bg = QColor("#1c1f2b")
+            bg = QColor(C["bg_hover"])
         if is_active:
-            bg = QColor("#25293a")
+            bg = QColor(C["bg_tertiary"])
             glow_visible = True
         if is_multi:
-            bg = QColor("#2a2f45")
+            bg = QColor(C["bg_card"])
             glow_visible = True
         if is_playing:
-            bg = QColor("#0f2d22")
+            bg = QColor(C["playing_glow"].replace("20", "35"))
             glow_visible = True
 
         self.bg.setBrush(QBrush(bg))
+        self.glow.setPen(QPen(QColor(C["accent"]), 1 if is_active else 2))
         self.glow.setVisible(glow_visible)
 
         # Progress bar
@@ -269,8 +278,8 @@ class TimelineRow:
 
         self._was_playing = is_playing
 
-        bar_y = self.y + (row_h - 4) / 2
-        self.bar_fill.setRect(bs, bar_y, progress, 4)
+        bar_y = int(self.y + row_h - 8)
+        self.bar_fill.setRect(int(bs), int(bar_y), int(progress), 3)
 
 
 class TimelineView(QGraphicsView):
@@ -315,9 +324,6 @@ class TimelineView(QGraphicsView):
 
         self._running = True
         self._last_frame = time.perf_counter()
-        self._fps_counter = 0
-        self._fps_timer = time.perf_counter()
-        self._current_fps = 0
 
         self._render_lock = False
         self._last_action_count = 0
@@ -331,10 +337,13 @@ class TimelineView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
-        self.setStyleSheet(f"background-color: {COLORS['bg']}; border: 1px solid {COLORS['border']}; border-radius: 8px;")
+        # Do NOT set stylesheet on QGraphicsView — use background brush instead
+        self.setBackgroundBrush(QBrush(QColor(COLORS["bg"])))
+        # No border-radius on QGraphicsView — causes rendering crashes in frozen builds
+        self.setStyleSheet(f"border: 1px solid {COLORS['border']};")
 
         self.scene = QGraphicsScene(self)
-        self.scene.setSceneRect(0, 0, 600, 400)
+        self.scene.setSceneRect(0, 0, 800, 600)
         self.setScene(self.scene)
 
         # Header
@@ -388,9 +397,9 @@ class TimelineView(QGraphicsView):
             t = self.scene.addText(text, QFont("Segoe UI", 8, QFont.Weight.Bold))
             t.setDefaultTextColor(QColor(C["text_dim"]))
             if anchor == 0:
-                t.setPos(x - t.boundingRect().width() / 2, 2)
+                t.setPos(int(x - int(t.boundingRect().width()) // 2), 2)
             else:
-                t.setPos(x, 2)
+                t.setPos(int(x), 2)
             self._header_labels.append(t)
 
     def _get_cols(self, w):
@@ -410,6 +419,11 @@ class TimelineView(QGraphicsView):
                 self.scene.removeItem(item)
             if row.img_item:
                 self.scene.removeItem(row.img_item)
+            # Remove icon group (and any remaining child items)
+            for child in row.icon_group.childItems():
+                row.icon_group.removeFromGroup(child)
+                self.scene.removeItem(child)
+            self.scene.removeItem(row.icon_group)
         self.visible_pool.clear()
 
         h = max(self.viewport().height(), 300)
@@ -493,13 +507,6 @@ class TimelineView(QGraphicsView):
         now = time.perf_counter()
         dt = now - self._last_frame
         self._last_frame = now
-
-        # FPS
-        self._fps_counter += 1
-        if now - self._fps_timer >= 1:
-            self._current_fps = self._fps_counter
-            self._fps_counter = 0
-            self._fps_timer = now
 
         # Inertial scroll
         if abs(self.scroll_velocity) > 0.1:
@@ -631,18 +638,6 @@ class TimelineView(QGraphicsView):
             self.scroll_velocity = max(-self.MAX_VELOCITY, min(self.MAX_VELOCITY, self.scroll_velocity))
         event.accept()
 
-    def mouseMoveEvent(self, event):
-        pos = self.mapToScene(event.pos())
-        y = pos.y()
-        if y < self.HEADER_H:
-            return
-        row_h = self._row_h()
-        idx = int((y - self.HEADER_H + self.scroll_offset) / row_h)
-        if idx != self.hover_index:
-            self.hover_index = idx
-            self._dirty_all = True
-        super().mouseMoveEvent(event)
-
     def mousePressEvent(self, event):
         pos = self.mapToScene(event.pos())
         y = pos.y()
@@ -710,11 +705,11 @@ class TimelineView(QGraphicsView):
                 self.drag_target = target
 
                 w = self.viewport().width()
-                ghost_y = pos.y() - row_h / 2
+                ghost_y = int(pos.y() - row_h // 2)
                 self._ghost_rect.setRect(6, ghost_y, w - 12, row_h - 4)
-                self._ghost_text.setPos(30, pos.y() - 8)
+                self._ghost_text.setPos(30, int(pos.y()) - 8)
 
-                target_y = self.HEADER_H + (target * row_h) - self.scroll_offset
+                target_y = int(self.HEADER_H + (target * row_h) - self.scroll_offset)
                 self._drop_line.setLine(0, target_y, w, target_y)
 
         super().mouseMoveEvent(event)

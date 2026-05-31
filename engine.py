@@ -340,7 +340,7 @@ class ExecutionEngine:
                     actual_action = self.apply_randomization(action)
 
                     self.current_action_index = i
-                    self.play_cb(i)
+                    self.play_cb(i, actual_action.duration)
 
                     # Refocus locked window before every action
                     self._refocus()

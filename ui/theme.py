@@ -8,59 +8,51 @@ gradient highlights, and smooth micro-interactions.
 #  COLOR PALETTE
 # ═══════════════════════════════════════════════════════
 COLORS = {
-    # Base
-    "bg": "#08080f",
-    "bg_secondary": "#0f0f18",
-    "bg_tertiary": "#161622",
-    "bg_card": "#1a1a2e",
-    "bg_hover": "#222238",
-    "bg_pressed": "#2a2a42",
+    "bg": "#0b0c14",
+    "bg_secondary": "#11121c",
+    "bg_tertiary": "#181a28",
+    "bg_card": "#1c1e30",
+    "bg_hover": "#252740",
+    "bg_pressed": "#2d2f4a",
     "bg_glass": "#ffffff08",
 
-    # Accents
-    "accent": "#00e5a0",
-    "accent_secondary": "#00c288",
-    "accent_glow": "#00e5a020",
-    "accent_hover": "#33ffbd",
-    "accent_dim": "#00e5a060",
+    "accent": "#38b4ff",
+    "accent_secondary": "#2a8fd4",
+    "accent_glow": "#38b4ff20",
+    "accent_hover": "#6ecfff",
+    "accent_dim": "#38b4ff60",
 
-    # Semantic
-    "error": "#ff4757",
-    "error_bg": "#ff475715",
-    "warning": "#ffa502",
-    "warning_bg": "#ffa50215",
-    "success": "#2ed573",
-    "success_bg": "#2ed57315",
-    "info": "#1e90ff",
-    "info_bg": "#1e90ff15",
+    "error": "#ff5577",
+    "error_bg": "#ff557715",
+    "warning": "#ffaa33",
+    "warning_bg": "#ffaa3315",
+    "success": "#44ee88",
+    "success_bg": "#44ee8815",
+    "info": "#38b4ff",
+    "info_bg": "#38b4ff15",
 
-    # Text
-    "text": "#e8eaf0",
-    "text_dim": "#7a7d9e",
-    "text_dark": "#4a4d6a",
-    "text_inverse": "#08080f",
+    "text": "#e0e2f0",
+    "text_dim": "#6b6d8a",
+    "text_dark": "#3a3c55",
+    "text_inverse": "#0b0c14",
 
-    # Borders
-    "border": "#252540",
-    "border_light": "#353555",
-    "border_accent": "#00e5a040",
+    "border": "#222340",
+    "border_light": "#333560",
+    "border_accent": "#38b4ff40",
 
-    # Type colors
-    "key": "#00e5a0",
-    "click": "#60a5fa",
-    "image": "#f59e0b",
-    "pause": "#9ca3af",
-    "condition": "#d26bff",
+    "key": "#38b4ff",
+    "click": "#ff5577",
+    "image": "#ffcc44",
+    "pause": "#8899aa",
+    "condition": "#c46bff",
 
-    # Playback
-    "playing": "#38b4a8",
-    "playing_glow": "#38b4a820",
+    "playing": "#44ee88",
+    "playing_glow": "#44ee8820",
     "lane": "#2a3a4c",
 
-    # Neon
     "neon_blue": "#38b4ff",
-    "neon_purple": "#d26bff",
-    "neon_gold": "#f0a844",
+    "neon_purple": "#c46bff",
+    "neon_gold": "#ffcc44",
 }
 
 TYPE_COLORS = {
@@ -128,6 +120,7 @@ def build_stylesheet() -> str:
     }}
     QLabel#status {{ color: {C['text_dim']}; font-size: 11px; }}
     QLabel#stats {{ color: {C['text_dim']}; font-size: 11px; }}
+    QLabel#hint {{ color: {C['text_dark']}; font-size: 10px; font-style: italic; }}
 
     /* ═══════════════════════════════════════════════════════ */
     /*  BUTTONS                                               */
@@ -179,6 +172,28 @@ def build_stylesheet() -> str:
         border-color: {C['error']};
     }}
 
+    QPushButton#success {{
+        background-color: {C['success_bg']};
+        color: {C['success']};
+        border: 1px solid {C['success']}40;
+    }}
+    QPushButton#success:hover {{
+        background-color: {C['success']};
+        color: #ffffff;
+        border-color: {C['success']};
+    }}
+
+    QPushButton#warning {{
+        background-color: {C['warning_bg']};
+        color: {C['warning']};
+        border: 1px solid {C['warning']}40;
+    }}
+    QPushButton#warning:hover {{
+        background-color: {C['warning']};
+        color: #ffffff;
+        border-color: {C['warning']};
+    }}
+
     QPushButton#tool {{
         background: transparent;
         border: 1px solid {C['border']};
@@ -215,6 +230,41 @@ def build_stylesheet() -> str:
         background-color: {C['accent_glow']};
         color: {C['accent']};
         font-weight: 600;
+    }}
+
+    QPushButton#action_add {{
+        background-color: {C['bg_tertiary']};
+        color: {C['text_dim']};
+        border: 1px solid {C['border']};
+        border-radius: 8px;
+        padding: 6px 10px;
+        text-align: left;
+        font-size: 12px;
+    }}
+    QPushButton#action_add:hover {{
+        background-color: {C['bg_hover']};
+        color: {C['accent']};
+        border-color: {C['accent']};
+    }}
+
+    QPushButton#icon_btn {{
+        background: transparent; border: none; border-radius: 6px;
+        padding: 4px; min-width: 28px; min-height: 28px;
+    }}
+    QPushButton#icon_btn:hover {{ background-color: {C['bg_hover']}; }}
+
+    QPushButton#compact {{
+        background-color: {C['bg_tertiary']};
+        color: {C['text_dim']};
+        border: 1px solid {C['border']};
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11px;
+    }}
+    QPushButton#compact:hover {{
+        background-color: {C['bg_hover']};
+        color: {C['text']};
+        border-color: {C['border_light']};
     }}
 
     /* ═══════════════════════════════════════════════════════ */
