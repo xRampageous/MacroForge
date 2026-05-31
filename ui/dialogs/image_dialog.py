@@ -108,21 +108,18 @@ class ImageDialog(QDialog):
         self.setWindowTitle("Image Search Action")
         self.setMinimumWidth(480)
         C = COLORS
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {C['bg']}; }}
-            QLabel {{ color: {C['text_dim']}; font-size: 12px; }}
-            QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 12px; }}
-            QLineEdit:focus {{ border-color: {C['accent']}; }}
-            QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 4px 8px; font-size: 12px; min-width: 120px; }}
-            QCheckBox {{ color: {C['text_dim']}; font-size: 11px; spacing: 4px; }}
-        """)
+        self._accent = C['image']
+        from ui.dialogs._common import dialog_stylesheet, make_header
+        self.setStyleSheet(dialog_stylesheet(self._accent))
 
         lo = QVBoxLayout(self)
         lo.setSpacing(8)
         lo.setContentsMargins(14, 14, 14, 14)
 
+        lo.addWidget(make_header("Image Search", self._accent, "image", "Find an image on screen and react"))
+
         # ── IMAGE ──
-        _section("IMAGE", C['accent'], lo)
+        _section("IMAGE", self._accent, lo)
         img_row = QHBoxLayout()
         self.img_path = QLineEdit()
         self.img_path.setPlaceholderText("Select image file...")

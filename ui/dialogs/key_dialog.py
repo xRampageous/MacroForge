@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from models import Action
 from ui.theme import COLORS
+from ui.dialogs._common import dialog_stylesheet, make_header, make_buttons
 
 KEY_VALUES = ["a","b","c","d","e","f","g","h","i","j","k","l","m",
               "n","o","p","q","r","s","t","u","v","w","x","y","z",
@@ -20,25 +21,14 @@ class KeyDialog(QDialog):
         self.setWindowTitle("Key Action")
         self.setMinimumWidth(380)
         C = COLORS
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {C['bg']}; }}
-            QLabel {{ color: {C['text_dim']}; font-size: 12px; }}
-            QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; font-size: 12px; }}
-            QLineEdit:focus {{ border-color: {C['accent']}; }}
-            QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; }}
-            QCheckBox {{ color: {C['text_dim']}; font-size: 12px; }}
-            QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {C['border']}; border-radius: 5px; }}
-            QCheckBox::indicator:checked {{ background-color: {C['accent']}; border-color: {C['accent']}; }}
-        """)
+        self._accent = C['key']
+        self.setStyleSheet(dialog_stylesheet(self._accent))
 
         lo = QVBoxLayout(self)
         lo.setSpacing(10)
         lo.setContentsMargins(16, 16, 16, 16)
 
-        # Section header
-        hdr = QLabel("KEY PRESS")
-        hdr.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
-        lo.addWidget(hdr)
+        lo.addWidget(make_header("Key Press", self._accent, "key", "Simulate a keyboard key press or hold"))
 
         # Key
         key_row = QHBoxLayout()
@@ -52,7 +42,7 @@ class KeyDialog(QDialog):
 
         # Section
         hdr2 = QLabel("TIMING & BEHAVIOUR")
-        hdr2.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
+        hdr2.setStyleSheet(f"color: {self._accent}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
         lo.addWidget(hdr2)
 
         # Fields
@@ -79,18 +69,7 @@ class KeyDialog(QDialog):
 
         # Buttons
         lo.addStretch()
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        cancel = QPushButton("Cancel")
-        cancel.setStyleSheet(f"background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 8px 16px;")
-        cancel.clicked.connect(self.reject)
-        ok = QPushButton("Add Key")
-        ok.setObjectName("accent")
-        ok.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {C['accent']},stop:1 {C['accent_secondary']}); color: {C['text_inverse']}; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 700;")
-        ok.clicked.connect(self.accept)
-        btn_row.addWidget(cancel)
-        btn_row.addWidget(ok)
-        lo.addLayout(btn_row)
+        lo.addLayout(make_buttons(self, "Add Key", self._accent, self.accept, "key"))
 
     def _field(self, label, value):
         row = QHBoxLayout()

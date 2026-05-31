@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from models import Action
 from ui.theme import COLORS
+from ui.dialogs._common import dialog_stylesheet, make_header, make_buttons
 
 
 class ClickDialog(QDialog):
@@ -13,21 +14,14 @@ class ClickDialog(QDialog):
         self.setWindowTitle("Click Action")
         self.setMinimumWidth(360)
         C = COLORS
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {C['bg']}; }}
-            QLabel {{ color: {C['text_dim']}; font-size: 12px; }}
-            QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; font-size: 12px; }}
-            QLineEdit:focus {{ border-color: {C['accent']}; }}
-            QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; }}
-        """)
+        self._accent = C['click']
+        self.setStyleSheet(dialog_stylesheet(self._accent))
 
         lo = QVBoxLayout(self)
         lo.setSpacing(10)
         lo.setContentsMargins(16, 16, 16, 16)
 
-        hdr = QLabel("CLICK")
-        hdr.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
-        lo.addWidget(hdr)
+        lo.addWidget(make_header("Mouse Click", self._accent, "click", "Click at a screen coordinate"))
 
         # Coordinates
         coord = QHBoxLayout()
@@ -78,17 +72,7 @@ class ClickDialog(QDialog):
         lo.addLayout(lbl_row)
 
         lo.addStretch()
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        cancel = QPushButton("Cancel")
-        cancel.setStyleSheet(f"background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 8px 16px;")
-        cancel.clicked.connect(self.reject)
-        ok = QPushButton("Add Click")
-        ok.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {C['accent']},stop:1 {C['accent_secondary']}); color: {C['text_inverse']}; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 700;")
-        ok.clicked.connect(self.accept)
-        btn_row.addWidget(cancel)
-        btn_row.addWidget(ok)
-        lo.addLayout(btn_row)
+        lo.addLayout(make_buttons(self, "Add Click", self._accent, self.accept, "click"))
 
     def get_action(self):
         try:

@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QCheckBox, QSpinBox
 )
 from ui.theme import COLORS
+from ui.dialogs._common import dialog_stylesheet, make_header, make_buttons
 
 
 class SettingsDialog(QDialog):
@@ -13,24 +14,14 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Settings")
         self.setMinimumWidth(400)
         C = COLORS
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {C['bg']}; }}
-            QLabel {{ color: {C['text_dim']}; font-size: 12px; }}
-            QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; font-size: 12px; }}
-            QLineEdit:focus {{ border-color: {C['accent']}; }}
-            QSpinBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 10px; }}
-            QCheckBox {{ color: {C['text_dim']}; font-size: 12px; }}
-            QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {C['border']}; border-radius: 5px; }}
-            QCheckBox::indicator:checked {{ background-color: {C['accent']}; border-color: {C['accent']}; }}
-        """)
+        self._accent = C['accent']
+        self.setStyleSheet(dialog_stylesheet(self._accent))
 
         lo = QVBoxLayout(self)
         lo.setSpacing(10)
         lo.setContentsMargins(16, 16, 16, 16)
 
-        hdr = QLabel("SETTINGS")
-        hdr.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
-        lo.addWidget(hdr)
+        lo.addWidget(make_header("Settings", self._accent, "settings", "Application preferences"))
 
         # Retry count
         retry_row = QHBoxLayout()
@@ -61,17 +52,7 @@ class SettingsDialog(QDialog):
         lo.addWidget(self.minimize_tray)
 
         lo.addStretch()
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        cancel = QPushButton("Cancel")
-        cancel.setStyleSheet(f"background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 8px 16px;")
-        cancel.clicked.connect(self.reject)
-        ok = QPushButton("Save")
-        ok.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {C['accent']},stop:1 {C['accent_secondary']}); color: {C['text_inverse']}; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 700;")
-        ok.clicked.connect(self._save)
-        btn_row.addWidget(cancel)
-        btn_row.addWidget(ok)
-        lo.addLayout(btn_row)
+        lo.addLayout(make_buttons(self, "Save", self._accent, self._save, "save"))
 
     def _save(self):
         self.settings_manager.settings["retry_count"] = self.retry.value()
