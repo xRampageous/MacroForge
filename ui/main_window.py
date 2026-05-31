@@ -1642,12 +1642,9 @@ class MainWindow(QMainWindow):
 
     def open_debug_viewer(self):
         try:
-            import tkinter as tk
             from debugger import DebugViewer
-            root = tk.Tk()
-            root.withdraw()
-            dv = DebugViewer(root, COLORS)
-            root.mainloop()
+            dv = DebugViewer(self)
+            dv.show()
         except Exception as e:
             logger.error(f"Debug viewer: {e}")
 

@@ -7,6 +7,10 @@ import os
 import sys
 import time
 from datetime import datetime
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QCheckBox
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QColor
+from ui.theme import COLORS
 
 
 class DebugLogger:
@@ -107,75 +111,63 @@ def get_log_path() -> str:
 
 
 # =====================================================================
-#  In-app debug viewer window  (lazy-imports tkinter — kept for compat)
+#  In-app debug viewer window (PyQt6)
 # =====================================================================
 
-class DebugViewer:
+class DebugViewer(QDialog):
     """A floating window that tails the debug log."""
 
-    def __init__(self, master, colors: dict):
-        import tkinter as tk
-        from tkinter import ttk
-        self._tk = tk
-        self._ttk = ttk
-        self._master = master
-        self.colors = colors
-        self._win = tk.Toplevel(master)
-        self._win.title("MacroForge Debug Log")
-        self._win.geometry("800x400")
-        self._win.configure(bg=colors["bg_secondary"])
-        self._win.protocol("WM_DELETE_WINDOW", self._on_close)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("MacroForge Debug Log")
+        self.setMinimumSize(800, 400)
+        self.resize(800, 400)
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {COLORS['bg']}; }}
+            QTextEdit {{ background-color: {COLORS['bg']}; color: {COLORS['text']}; font-family: Consolas; font-size: 9pt; border: none; }}
+            QPushButton {{ background-color: {COLORS['bg_tertiary']}; color: {COLORS['text']}; border: 1px solid {COLORS['border']}; padding: 4px 12px; border-radius: 4px; }}
+            QPushButton:hover {{ background-color: {COLORS['border']}; }}
+            QCheckBox {{ color: {COLORS['text']}; }}
+        """)
         self._build_ui()
         self._seed_history()
         logger.add_listener(self._append_line)
 
     def _build_ui(self):
-        C = self.colors
-        tk = self._tk
-        ttk = self._ttk
-        toolbar = tk.Frame(self._win, bg=C["bg_secondary"], pady=4)
-        toolbar.pack(fill="x", padx=6, pady=(4, 0))
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
 
-        self._auto_scroll = tk.BooleanVar(value=True)
-        tk.Checkbutton(toolbar, text="Auto-scroll", variable=self._auto_scroll,
-                       bg=C["bg_secondary"], fg=C["text"],
-                       selectcolor=C["accent"],
-                       activebackground=C["bg_secondary"],
-                       font=("Segoe UI", 8)).pack(side="left")
+        # Toolbar
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(6)
 
-        tk.Button(toolbar, text="Clear", command=self._clear,
-                  bg=C["bg_tertiary"], fg=C["text"],
-                  relief="flat", font=("Segoe UI", 8),
-                  cursor="hand2").pack(side="right")
+        self._auto_scroll = True
+        self._auto_scroll_cb = QCheckBox("Auto-scroll")
+        self._auto_scroll_cb.setChecked(True)
+        self._auto_scroll_cb.toggled.connect(self._set_auto_scroll)
+        toolbar.addWidget(self._auto_scroll_cb)
 
-        tk.Button(toolbar, text="Open log file", command=self._open_log,
-                  bg=C["bg_tertiary"], fg=C["text"],
-                  relief="flat", font=("Segoe UI", 8),
-                  cursor="hand2").pack(side="right", padx=(0, 6))
+        toolbar.addStretch()
 
-        text_frame = tk.Frame(self._win, bg=C["bg_secondary"])
-        text_frame.pack(fill="both", expand=True, padx=6, pady=6)
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(self._clear)
+        toolbar.addWidget(clear_btn)
 
-        self.text = tk.Text(
-            text_frame,
-            wrap="none",
-            bg=C["bg"],
-            fg=C["text"],
-            insertbackground=C["accent"],
-            font=("Consolas", 9),
-            relief="flat",
-            state="disabled",
-            padx=6, pady=6
-        )
-        self.text.pack(side="left", fill="both", expand=True)
+        open_btn = QPushButton("Open log file")
+        open_btn.clicked.connect(self._open_log)
+        toolbar.addWidget(open_btn)
 
-        sb = ttk.Scrollbar(text_frame, command=self.text.yview)
-        sb.pack(side="right", fill="y")
-        self.text.config(yscrollcommand=sb.set)
+        layout.addLayout(toolbar)
 
-        self.text.tag_config("INFO", foreground="#4ade80")
-        self.text.tag_config("WARN", foreground="#fbbf24")
-        self.text.tag_config("ERROR", foreground="#f87171")
+        # Text area
+        self.text = QTextEdit()
+        self.text.setReadOnly(True)
+        self.text.setFont(QFont("Consolas", 9))
+        layout.addWidget(self.text)
+
+    def _set_auto_scroll(self, checked):
+        self._auto_scroll = checked
 
     def _seed_history(self):
         for ts, level, msg in logger.get_entries():
@@ -193,17 +185,20 @@ class DebugViewer:
         self._insert(ts, level, msg)
 
     def _insert(self, ts: str, level: str, msg: str):
-        self.text.config(state="normal")
-        tag = level if level in ("INFO", "WARN", "ERROR") else None
-        self.text.insert("end", f"[{ts}] {level:5s} | {msg}\n", tag)
-        self.text.config(state="disabled")
-        if self._auto_scroll.get():
-            self.text.see("end")
+        color_map = {
+            "INFO": "#4ade80",
+            "WARN": "#fbbf24",
+            "ERROR": "#f87171"
+        }
+        color = color_map.get(level, COLORS["text"])
+        self.text.setTextColor(QColor(color))
+        self.text.append(f"[{ts}] {level:5s} | {msg}")
+        if self._auto_scroll:
+            sb = self.text.verticalScrollBar()
+            sb.setValue(sb.maximum())
 
     def _clear(self):
-        self.text.config(state="normal")
-        self.text.delete("1.0", "end")
-        self.text.config(state="disabled")
+        self.text.clear()
 
     def _open_log(self):
         import subprocess
@@ -212,6 +207,6 @@ class DebugViewer:
         except Exception:
             pass
 
-    def _on_close(self):
+    def closeEvent(self, event):
         logger.remove_listener(self._append_line)
-        self._win.destroy()
+        super().closeEvent(event)
