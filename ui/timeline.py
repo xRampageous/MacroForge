@@ -134,6 +134,16 @@ class TimelineRow:
         if self.img_item:
             self.img_item.setVisible(True)
 
+    def set_dim(self, dim: bool):
+        """Fade the entire row when it doesn't match an active search filter."""
+        op = 0.28 if dim else 1.0
+        for item in (self.bg, self.left, self.bar_bg, self.bar_fill,
+                     self.t_index, self.t_key, self.t_dur, self.t_lane, self.t_flags):
+            item.setOpacity(op)
+        self.icon_group.setOpacity(op)
+        if self.img_item:
+            self.img_item.setOpacity(op)
+
     def draw_icon(self, action_type, color):
         """Draw cleaner action type icons."""
         for item in self.icon_group.childItems():
@@ -330,6 +340,7 @@ class TimelineView(QGraphicsView):
         self._dirty_all = True
 
         self._image_preview_cache = {}
+        self._search = ""
 
         self.setMinimumHeight(160)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -402,6 +413,39 @@ class TimelineView(QGraphicsView):
                 t.setPos(int(x), 2)
             self._header_labels.append(t)
 
+        # Right-aligned total readout (count + cumulative duration)
+        self._total_label = self.scene.addText("", QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._total_label.setDefaultTextColor(QColor(C["accent"]))
+        self._header_labels.append(self._total_label)
+        self._update_total_label(w)
+
+    def _update_total_label(self, w=None):
+        if not getattr(self, "_total_label", None):
+            return
+        if w is None:
+            w = self.viewport().width()
+        total_dur = 0.0
+        for a in self._actions:
+            try:
+                total_dur += float(getattr(a, "duration", 0.0)) * max(1, int(getattr(a, "repeat_count", 1)))
+            except Exception:
+                pass
+        n = len(self._actions)
+        if total_dur >= 60:
+            dur_txt = f"{int(total_dur // 60)}m {total_dur % 60:.0f}s"
+        else:
+            dur_txt = f"{total_dur:.1f}s"
+        txt = f"{n} action{'s' if n != 1 else ''}  ·  {dur_txt}"
+        self._total_label.setPlainText(txt)
+        tw = int(self._total_label.boundingRect().width())
+        self._total_label.setPos(int(w - tw - 10), 2)
+        self._total_label.setZValue(101)
+
+    def set_search(self, text: str):
+        """Highlight rows matching text; dim the rest. Empty clears the filter."""
+        self._search = (text or "").strip().lower()
+        self._dirty_all = True
+
     def _get_cols(self, w):
         idx = max(8, int(w * 0.03))
         key = max(40, int(w * 0.12))
@@ -451,6 +495,7 @@ class TimelineView(QGraphicsView):
         self._actions = actions
         self._dirty_all = True
         self._clamp_scroll()
+        self._update_total_label()
 
     def set_active(self, index):
         self.active_index = index
@@ -579,6 +624,16 @@ class TimelineView(QGraphicsView):
                 row.animate(action_index, is_playing, is_active, is_hover, is_multi,
                             self._action_dur, self._action_start, self._paused,
                             self._paused_at, self._pause_offset, cols, row_h)
+
+                # Search filter: dim rows that don't match
+                if self._search:
+                    hay = " ".join(str(x).lower() for x in (
+                        getattr(action, "key", ""), getattr(action, "label", ""),
+                        getattr(action, "action_type", ""),
+                    ))
+                    row.set_dim(self._search not in hay)
+                else:
+                    row.set_dim(False)
 
                 row.show()
 

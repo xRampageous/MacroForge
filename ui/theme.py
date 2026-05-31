@@ -8,51 +8,61 @@ gradient highlights, and smooth micro-interactions.
 #  COLOR PALETTE
 # ═══════════════════════════════════════════════════════
 COLORS = {
-    "bg": "#0b0c14",
-    "bg_secondary": "#11121c",
-    "bg_tertiary": "#181a28",
-    "bg_card": "#1c1e30",
-    "bg_hover": "#252740",
-    "bg_pressed": "#2d2f4a",
-    "bg_glass": "#ffffff08",
+    # ── Surfaces (deep indigo-black with subtle blue undertone) ──
+    "bg": "#080910",
+    "bg_secondary": "#0e0f1a",
+    "bg_tertiary": "#161827",
+    "bg_card": "#1a1d30",
+    "bg_hover": "#222540",
+    "bg_pressed": "#2a2d4d",
+    "bg_glass": "#ffffff06",
 
-    "accent": "#38b4ff",
-    "accent_secondary": "#2a8fd4",
-    "accent_glow": "#38b4ff20",
-    "accent_hover": "#6ecfff",
-    "accent_dim": "#38b4ff60",
+    # ── Primary accent (electric cyan-blue) ──
+    "accent": "#4cc4ff",
+    "accent_secondary": "#2f95e0",
+    "accent_glow": "#4cc4ff22",
+    "accent_hover": "#7ad6ff",
+    "accent_dim": "#4cc4ff66",
 
-    "error": "#ff5577",
-    "error_bg": "#ff557715",
-    "warning": "#ffaa33",
-    "warning_bg": "#ffaa3315",
-    "success": "#44ee88",
-    "success_bg": "#44ee8815",
-    "info": "#38b4ff",
-    "info_bg": "#38b4ff15",
+    # ── Semantic ──
+    "error": "#ff5c79",
+    "error_bg": "#ff5c7918",
+    "warning": "#ffb13d",
+    "warning_bg": "#ffb13d18",
+    "success": "#3fe08a",
+    "success_bg": "#3fe08a18",
+    "info": "#4cc4ff",
+    "info_bg": "#4cc4ff18",
 
-    "text": "#e0e2f0",
-    "text_dim": "#6b6d8a",
-    "text_dark": "#3a3c55",
-    "text_inverse": "#0b0c14",
+    # ── Text ──
+    "text": "#e6e8f5",
+    "text_dim": "#787a9c",
+    "text_dark": "#42445f",
+    "text_inverse": "#06070d",
 
-    "border": "#222340",
-    "border_light": "#333560",
-    "border_accent": "#38b4ff40",
+    # ── Borders ──
+    "border": "#24263f",
+    "border_light": "#383b63",
+    "border_accent": "#4cc4ff44",
 
-    "key": "#38b4ff",
-    "click": "#ff5577",
-    "image": "#ffcc44",
-    "pause": "#8899aa",
-    "condition": "#c46bff",
+    # ── Action-type accents (vibrant, distinct) ──
+    "key": "#4cc4ff",       # cyan
+    "click": "#ff5c79",     # rose
+    "image": "#ffcc4d",     # amber
+    "pause": "#9aa6c4",     # slate
+    "condition": "#c77dff", # violet
 
-    "playing": "#44ee88",
-    "playing_glow": "#44ee8820",
+    # ── Playback ──
+    "playing": "#3fe08a",
+    "playing_glow": "#3fe08a22",
     "lane": "#2a3a4c",
 
-    "neon_blue": "#38b4ff",
-    "neon_purple": "#c46bff",
-    "neon_gold": "#ffcc44",
+    # ── Neon highlights ──
+    "neon_blue": "#4cc4ff",
+    "neon_purple": "#c77dff",
+    "neon_gold": "#ffcc4d",
+    "neon_green": "#3fe08a",
+    "neon_rose": "#ff5c79",
 }
 
 TYPE_COLORS = {
@@ -246,6 +256,70 @@ def build_stylesheet() -> str:
         color: {C['accent']};
         border-color: {C['accent']};
     }}
+
+    /* ── Colorful per-action-type add buttons ── */
+    QPushButton#add_key {{
+        background-color: {C['bg_tertiary']}; color: {C['text']};
+        border: 1px solid {C['key']}40; border-left: 3px solid {C['key']};
+        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+    }}
+    QPushButton#add_key:hover {{ background-color: {C['key']}22; border-color: {C['key']}; color: {C['key']}; }}
+
+    QPushButton#add_click {{
+        background-color: {C['bg_tertiary']}; color: {C['text']};
+        border: 1px solid {C['click']}40; border-left: 3px solid {C['click']};
+        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+    }}
+    QPushButton#add_click:hover {{ background-color: {C['click']}22; border-color: {C['click']}; color: {C['click']}; }}
+
+    QPushButton#add_image {{
+        background-color: {C['bg_tertiary']}; color: {C['text']};
+        border: 1px solid {C['image']}40; border-left: 3px solid {C['image']};
+        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+    }}
+    QPushButton#add_image:hover {{ background-color: {C['image']}22; border-color: {C['image']}; color: {C['image']}; }}
+
+    QPushButton#add_pause {{
+        background-color: {C['bg_tertiary']}; color: {C['text']};
+        border: 1px solid {C['pause']}40; border-left: 3px solid {C['pause']};
+        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+    }}
+    QPushButton#add_pause:hover {{ background-color: {C['pause']}22; border-color: {C['pause']}; color: {C['pause']}; }}
+
+    QPushButton#add_condition {{
+        background-color: {C['bg_tertiary']}; color: {C['text']};
+        border: 1px solid {C['condition']}40; border-left: 3px solid {C['condition']};
+        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+    }}
+    QPushButton#add_condition:hover {{ background-color: {C['condition']}22; border-color: {C['condition']}; color: {C['condition']}; }}
+
+    /* ── Circular playback control buttons ── */
+    QPushButton#play_btn {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['success']}, stop:1 #2bbf6e);
+        color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+    }}
+    QPushButton#play_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5cf0a0, stop:1 {C['success']}); }}
+    QPushButton#play_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; }}
+
+    QPushButton#pause_btn {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['warning']}, stop:1 #e09020);
+        color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+    }}
+    QPushButton#pause_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffc766, stop:1 {C['warning']}); }}
+    QPushButton#pause_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; }}
+
+    QPushButton#stop_btn {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
+        color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+    }}
+    QPushButton#stop_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff7a92, stop:1 {C['error']}); }}
+    QPushButton#stop_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; }}
+
+    QPushButton#record_btn {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
+        color: #ffffff; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+    }}
+    QPushButton#record_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff7a92, stop:1 {C['error']}); }}
 
     QPushButton#icon_btn {{
         background: transparent; border: none; border-radius: 6px;

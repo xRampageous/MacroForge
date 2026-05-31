@@ -502,6 +502,19 @@ class MainWindow(QMainWindow):
         hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
         tl_hl.addWidget(hints)
         tl_hl.addStretch()
+        self.tl_search = QLineEdit()
+        self.tl_search.setPlaceholderText("Search actions…")
+        self.tl_search.setClearButtonEnabled(True)
+        self.tl_search.setFixedWidth(180)
+        self.tl_search.setFixedHeight(24)
+        self.tl_search.addAction(icon("search", 14, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
+        self.tl_search.setStyleSheet(
+            f"QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 12px; padding: 2px 8px; font-size: 11px; }} "
+            f"QLineEdit:focus {{ border-color: {C['accent']}; }}"
+        )
+        self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
+        tl_hl.addWidget(self.tl_search)
         content_lo.addWidget(tl_header)
 
         self.timeline = TimelineView()
