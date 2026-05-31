@@ -185,7 +185,8 @@ class MainWindow(QMainWindow):
         rec_lbl.setObjectName("section")
         sb_lo.addWidget(rec_lbl)
         rec_card = QFrame()
-        rec_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
+        rec_card.setObjectName("rec_card")
+        rec_card.setStyleSheet(f"QFrame#rec_card {{ background-color: {C['bg_tertiary']}; border-radius: 8px; }}")
         rc_lo = QVBoxLayout(rec_card)
         rc_lo.setContentsMargins(6, 6, 6, 6)
         rc_lo.setSpacing(4)
@@ -232,7 +233,8 @@ class MainWindow(QMainWindow):
         play_lbl.setObjectName("section")
         sb_lo.addWidget(play_lbl)
         play_card = QFrame()
-        play_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
+        play_card.setObjectName("play_card")
+        play_card.setStyleSheet(f"QFrame#play_card {{ background-color: {C['bg_tertiary']}; border-radius: 8px; }}")
         pc_lo = QVBoxLayout(play_card)
         pc_lo.setContentsMargins(6, 6, 6, 6)
         pc_lo.setSpacing(5)
@@ -333,7 +335,8 @@ class MainWindow(QMainWindow):
         insp_lbl.setObjectName("section")
         sb_lo.addWidget(insp_lbl)
         insp_card = QFrame()
-        insp_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
+        insp_card.setObjectName("insp_card")
+        insp_card.setStyleSheet(f"QFrame#insp_card {{ background-color: {C['bg_tertiary']}; border-radius: 8px; }}")
         icard_lo = QVBoxLayout(insp_card)
         icard_lo.setContentsMargins(6, 6, 6, 6)
         icard_lo.setSpacing(4)
@@ -451,30 +454,63 @@ class MainWindow(QMainWindow):
         content_lo.setContentsMargins(0, 0, 0, 0)
         content_lo.setSpacing(0)
 
-        # Title bar
+        # ── Header / top bar ──
         title = QFrame()
-        title.setStyleSheet(f"background-color: {C['bg']}; border-bottom: 1px solid {C['border']};")
+        title.setObjectName("topbar")
+        title.setFixedHeight(44)
+        title.setStyleSheet(
+            f"QFrame#topbar {{ background-color: {C['bg_secondary']}; "
+            f"border-bottom: 1px solid {C['border']}; }}"
+        )
         tl = QHBoxLayout(title)
-        tl.setContentsMargins(10, 4, 10, 4)
-        self.title_label = QLabel("MacroForge")
-        self.title_label.setStyleSheet(f"color: {C['accent']}; font-size: 15px; font-weight: 700; letter-spacing: 1px;")
-        tl.addWidget(self.title_label)
+        tl.setContentsMargins(12, 6, 12, 6)
+        tl.setSpacing(8)
+
+        # Profile switcher (left)
+        self.profile_btn = QPushButton("Default")
+        self.profile_btn.setObjectName("profile_switcher")
+        self.profile_btn.setIcon(icon("folder", 14, C["accent"]))
+        self.profile_btn.setIconSize(QSize(14, 14))
+        self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.profile_btn.setToolTip("Switch profile")
+        self.profile_btn.setStyleSheet(
+            f"QPushButton#profile_switcher {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 9px; padding: 6px 14px; "
+            f"font-weight: 700; text-align: left; }} "
+            f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+        )
+        self.profile_btn.clicked.connect(self._show_profile_menu)
+        tl.addWidget(self.profile_btn)
+
         tl.addStretch()
+
+        # Status pill (far right)
+        status_pill = QFrame()
+        status_pill.setObjectName("status_pill")
+        status_pill.setStyleSheet(
+            f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
+            f"border: 1px solid {C['border']}; border-radius: 13px; }}"
+        )
+        sp_lo = QHBoxLayout(status_pill)
+        sp_lo.setContentsMargins(11, 5, 13, 5)
+        sp_lo.setSpacing(7)
         self.status_dot = StatusDot()
         self.status_dot.set_color(C["text_dark"])
-        tl.addWidget(self.status_dot)
+        sp_lo.addWidget(self.status_dot)
         self.status_text = QLabel("Ready")
-        self.status_text.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
-        tl.addWidget(self.status_text)
+        self.status_text.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 600; background: transparent;")
+        sp_lo.addWidget(self.status_text)
+        tl.addWidget(status_pill)
+
         up_btn = QPushButton()
         up_btn.setObjectName("icon_btn")
-        up_btn.setIcon(icon("update", 14, C["text_dim"]))
+        up_btn.setIcon(icon("update", 16, C["text_dim"]))
         up_btn.setToolTip("Check for updates")
         up_btn.clicked.connect(self._check_update_manual)
         tl.addWidget(up_btn)
         gear = QPushButton()
         gear.setObjectName("icon_btn")
-        gear.setIcon(icon("menu", 14, C["text_dim"]))
+        gear.setIcon(icon("menu", 16, C["text_dim"]))
         gear.setToolTip("Menu")
         gear.clicked.connect(self._show_action_menu)
         tl.addWidget(gear)
@@ -534,9 +570,10 @@ class MainWindow(QMainWindow):
         obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(f"  {text}")
         btn.setObjectName(obj)
-        btn.setIcon(icon(icon_name, 14, color))
+        icon_color = COLORS["text_inverse"] if obj != "action_add" else color
+        btn.setIcon(icon(icon_name, 14, icon_color))
         btn.setIconSize(QSize(14, 14))
-        btn.setMinimumHeight(32)
+        btn.setMinimumHeight(34)
         btn.clicked.connect(callback)
         layout.addWidget(btn)
 
@@ -687,11 +724,38 @@ class MainWindow(QMainWindow):
                 btn.setStyleSheet(f"color: {COLORS['text_dim']}; border-bottom: 2px solid transparent; padding: 6px 14px;")
             btn.clicked.connect(lambda checked, n=name: self._switch_profile(n))
             self._tabs_lo.insertWidget(self._tabs_lo.count() - 1, btn)
+        self._refresh_profile_btn()
+
+    def _refresh_profile_btn(self):
+        if hasattr(self, "profile_btn"):
+            self.profile_btn.setText(f"{self.session_manager.active}  \u25be")
+
+    def _show_profile_menu(self):
+        C = COLORS
+        m = QMenu(self)
+        m.setStyleSheet(
+            f"QMenu {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }} "
+            f"QMenu::item {{ padding: 6px 18px; border-radius: 6px; }} "
+            f"QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }} "
+            f"QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}"
+        )
+        active = self.session_manager.active
+        for name in self.session_manager.list_profiles():
+            label = f"\u2713  {name}" if name == active else f"     {name}"
+            act = m.addAction(label)
+            act.triggered.connect(lambda checked, n=name: self._switch_profile(n))
+        m.addSeparator()
+        m.addAction(icon("plus", 14, C["accent"]), "New profile\u2026", self._new_profile_dialog)
+        m.addAction(icon("edit", 14, C["accent"]), "Rename\u2026", self._rename_profile_dialog)
+        m.addAction(icon("trash", 14, C["error"]), "Delete", self._delete_profile_confirm)
+        m.exec(self.profile_btn.mapToGlobal(self.profile_btn.rect().bottomLeft()))
 
     def _switch_profile(self, name):
         self._do_save_session()
         self.session_manager.switch_profile(name)
         self.load_last_session()
+        self._refresh_profile_btn()
         self.status(f"Switched to '{name}'")
 
     def _new_profile_dialog(self):
@@ -1513,22 +1577,40 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, lambda: self._prompt_update(manifest))
         threading.Thread(target=_bg, daemon=True).start()
 
+    def _set_update_done(self):
+        self._update_checking = False
+
+    def _update_no_results(self):
+        self._update_checking = False
+        self.status("No updates found")
+
     def _check_update_manual(self):
+        # Prevent overlapping checks
+        if getattr(self, "_update_checking", False):
+            return
+        self._update_checking = True
         self.status("Checking for updates…")
+
         def _bg():
             try:
                 manifest = check_update(silent=False)
-                if manifest:
-                    QTimer.singleShot(0, lambda: self._prompt_update(manifest))
-                else:
-                    error = get_last_update_error()
-                    if error:
-                        QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error}"))
-                    else:
-                        QTimer.singleShot(0, lambda: self.status("No updates available"))
             except Exception as e:
-                QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Update Error", f"Update check failed:\n\n{e}"))
+                QTimer.singleShot(0, lambda: (self._set_update_done(),
+                    QMessageBox.critical(self, "Update Error", f"Update check failed:\n\n{e}")))
+                return
+            if manifest:
+                QTimer.singleShot(0, lambda: (self._set_update_done(), self._prompt_update(manifest)))
+            else:
+                error = get_last_update_error()
+                if error:
+                    QTimer.singleShot(0, lambda: (self._set_update_done(),
+                        QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error}")))
+                else:
+                    QTimer.singleShot(0, self._update_no_results)
+
         threading.Thread(target=_bg, daemon=True).start()
+        # Safety net: never leave the UI stuck on "Checking…"
+        QTimer.singleShot(20000, lambda: self._update_no_results() if getattr(self, "_update_checking", False) else None)
 
     def _prompt_update(self, manifest):
         remote_ver = manifest.get("version", "unknown")

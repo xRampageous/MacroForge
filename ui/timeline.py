@@ -83,6 +83,15 @@ class TimelineRow:
         self.zoom = 0
         self._was_playing = False
 
+        # Layout anchors (set properly in set_pos)
+        self._text_y = 0
+        self._text_x_normal = 20
+        self._text_x_image = 44
+        self._thumb_x = 6
+        self._cy = 0
+        self._icon_x = 6
+        self._icon_y = 0
+
     def set_pos(self, x, y, w, row_h):
         self.y = y
         pad = 4
@@ -100,11 +109,17 @@ class TimelineRow:
         fm = QFontMetrics(self.t_index.font())
         ih = fm.height()
 
-        self.t_index.setPos(int(ci), int(cy - ih // 2))
-        self.t_key.setPos(int(ck + 20), int(cy - ih // 2))
+        self._text_y = int(cy - ih // 2)
+        self._text_x_normal = int(ck + 20)
+        self._text_x_image = int(ck + 44)
+        self._thumb_x = int(ck + 4)
+        self._cy = int(cy)
+
+        self.t_index.setPos(int(ci), self._text_y)
+        self.t_key.setPos(self._text_x_normal, self._text_y)
         self.t_dur.setPos(int(bs + bw // 2 - 20), int(bar_y - ih - 2))
-        self.t_lane.setPos(int(cl), int(cy - ih // 2))
-        self.t_flags.setPos(int(cf), int(cy - ih // 2))
+        self.t_lane.setPos(int(cl), self._text_y)
+        self.t_flags.setPos(int(cf), self._text_y)
 
         self._icon_x = int(ck + 6)
         self._icon_y = cy
@@ -192,14 +207,19 @@ class TimelineRow:
             pixmap.loadFromData(img_bytes)
             if pixmap.isNull():
                 return
-            # Scale to fit row
-            max_h = 24
-            scaled = pixmap.scaledToHeight(max_h, Qt.TransformationMode.SmoothTransformation)
+            # Bound thumbnail to a small box (keep aspect) so it never overflows the row
+            max_h = 22
+            max_w = 34
+            scaled = pixmap.scaled(max_w, max_h, Qt.AspectRatioMode.KeepAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
             if not self.img_item:
                 self.img_item = scene.addPixmap(scaled)
             else:
                 self.img_item.setPixmap(scaled)
-            self.img_item.setPos(int(self._icon_x), int(self._icon_y - scaled.height() // 2))
+            thumb_x = getattr(self, "_thumb_x", self._icon_x)
+            cy = getattr(self, "_cy", self._icon_y)
+            self.img_item.setPos(int(thumb_x), int(cy - scaled.height() // 2))
+            self.img_item.setZValue(1)
             self.img_item.setVisible(True)
             # Hide icon when image shown
             self.icon_group.setVisible(False)
@@ -237,12 +257,14 @@ class TimelineRow:
         # Update icon
         self.draw_icon(t, color)
 
-        if t == "image":
+        if t == "image" and getattr(action, "image_data", ""):
             self.set_image_preview(action, self.scene)
+            self.t_key.setPos(self._text_x_image, self._text_y)
         else:
             if self.img_item:
                 self.img_item.setVisible(False)
             self.icon_group.setVisible(True)
+            self.t_key.setPos(self._text_x_normal, self._text_y)
 
         self.bound_index = index
         self.zoom = zoom
@@ -413,33 +435,9 @@ class TimelineView(QGraphicsView):
                 t.setPos(int(x), 2)
             self._header_labels.append(t)
 
-        # Right-aligned total readout (count + cumulative duration)
-        self._total_label = self.scene.addText("", QFont("Segoe UI", 8, QFont.Weight.Bold))
-        self._total_label.setDefaultTextColor(QColor(C["accent"]))
-        self._header_labels.append(self._total_label)
-        self._update_total_label(w)
-
     def _update_total_label(self, w=None):
-        if not getattr(self, "_total_label", None):
-            return
-        if w is None:
-            w = self.viewport().width()
-        total_dur = 0.0
-        for a in self._actions:
-            try:
-                total_dur += float(getattr(a, "duration", 0.0)) * max(1, int(getattr(a, "repeat_count", 1)))
-            except Exception:
-                pass
-        n = len(self._actions)
-        if total_dur >= 60:
-            dur_txt = f"{int(total_dur // 60)}m {total_dur % 60:.0f}s"
-        else:
-            dur_txt = f"{total_dur:.1f}s"
-        txt = f"{n} action{'s' if n != 1 else ''}  ·  {dur_txt}"
-        self._total_label.setPlainText(txt)
-        tw = int(self._total_label.boundingRect().width())
-        self._total_label.setPos(int(w - tw - 10), 2)
-        self._total_label.setZValue(101)
+        # Total readout lives in the stats panel; no-op here to avoid header overlap.
+        return
 
     def set_search(self, text: str):
         """Highlight rows matching text; dim the rest. Empty clears the filter."""

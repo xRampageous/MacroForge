@@ -257,41 +257,46 @@ def build_stylesheet() -> str:
         border-color: {C['accent']};
     }}
 
-    /* ── Colorful per-action-type add buttons ── */
+    /* ── Colorful per-action-type add buttons (filled) ── */
     QPushButton#add_key {{
-        background-color: {C['bg_tertiary']}; color: {C['text']};
-        border: 1px solid {C['key']}40; border-left: 3px solid {C['key']};
-        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['key']}, stop:1 {C['key']}cc);
+        color: {C['text_inverse']}; border: none;
+        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
-    QPushButton#add_key:hover {{ background-color: {C['key']}22; border-color: {C['key']}; color: {C['key']}; }}
+    QPushButton#add_key:hover {{ background: {C['key']}; }}
+    QPushButton#add_key:pressed {{ background: {C['key']}cc; }}
 
     QPushButton#add_click {{
-        background-color: {C['bg_tertiary']}; color: {C['text']};
-        border: 1px solid {C['click']}40; border-left: 3px solid {C['click']};
-        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['click']}, stop:1 {C['click']}cc);
+        color: {C['text_inverse']}; border: none;
+        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
-    QPushButton#add_click:hover {{ background-color: {C['click']}22; border-color: {C['click']}; color: {C['click']}; }}
+    QPushButton#add_click:hover {{ background: {C['click']}; }}
+    QPushButton#add_click:pressed {{ background: {C['click']}cc; }}
 
     QPushButton#add_image {{
-        background-color: {C['bg_tertiary']}; color: {C['text']};
-        border: 1px solid {C['image']}40; border-left: 3px solid {C['image']};
-        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['image']}, stop:1 {C['image']}cc);
+        color: {C['text_inverse']}; border: none;
+        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
-    QPushButton#add_image:hover {{ background-color: {C['image']}22; border-color: {C['image']}; color: {C['image']}; }}
+    QPushButton#add_image:hover {{ background: {C['image']}; }}
+    QPushButton#add_image:pressed {{ background: {C['image']}cc; }}
 
     QPushButton#add_pause {{
-        background-color: {C['bg_tertiary']}; color: {C['text']};
-        border: 1px solid {C['pause']}40; border-left: 3px solid {C['pause']};
-        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['pause']}, stop:1 {C['pause']}cc);
+        color: {C['text_inverse']}; border: none;
+        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
-    QPushButton#add_pause:hover {{ background-color: {C['pause']}22; border-color: {C['pause']}; color: {C['pause']}; }}
+    QPushButton#add_pause:hover {{ background: {C['pause']}; }}
+    QPushButton#add_pause:pressed {{ background: {C['pause']}cc; }}
 
     QPushButton#add_condition {{
-        background-color: {C['bg_tertiary']}; color: {C['text']};
-        border: 1px solid {C['condition']}40; border-left: 3px solid {C['condition']};
-        border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px; font-weight: 600;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['condition']}, stop:1 {C['condition']}cc);
+        color: {C['text_inverse']}; border: none;
+        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
-    QPushButton#add_condition:hover {{ background-color: {C['condition']}22; border-color: {C['condition']}; color: {C['condition']}; }}
+    QPushButton#add_condition:hover {{ background: {C['condition']}; }}
+    QPushButton#add_condition:pressed {{ background: {C['condition']}cc; }}
 
     /* ── Circular playback control buttons ── */
     QPushButton#play_btn {{
