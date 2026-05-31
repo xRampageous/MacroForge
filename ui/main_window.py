@@ -238,28 +238,32 @@ class MainWindow(QMainWindow):
         pc_lo.setSpacing(5)
 
         trow = QHBoxLayout()
+        trow.setSpacing(6)
         self.start_btn = QPushButton()
-        self.start_btn.setObjectName("success")
-        self.start_btn.setIcon(icon("play", 14, C["success"]))
+        self.start_btn.setObjectName("play_btn")
+        self.start_btn.setIcon(icon("play", 16, C["text_inverse"]))
+        self.start_btn.setIconSize(QSize(16, 16))
         self.start_btn.setToolTip("Start (F9)")
-        self.start_btn.setFixedSize(30, 26)
+        self.start_btn.setFixedSize(36, 32)
         self.start_btn.clicked.connect(self.start)
         trow.addWidget(self.start_btn)
 
         self.pause_btn = QPushButton()
-        self.pause_btn.setObjectName("warning")
-        self.pause_btn.setIcon(icon("pause", 12, C["warning"]))
+        self.pause_btn.setObjectName("pause_btn")
+        self.pause_btn.setIcon(icon("pause", 14, C["text_inverse"]))
+        self.pause_btn.setIconSize(QSize(14, 14))
         self.pause_btn.setToolTip("Pause (Esc)")
-        self.pause_btn.setFixedSize(28, 26)
+        self.pause_btn.setFixedSize(32, 32)
         self.pause_btn.setEnabled(False)
         self.pause_btn.clicked.connect(self.engine.toggle_pause)
         trow.addWidget(self.pause_btn)
 
         self.stop_btn = QPushButton()
-        self.stop_btn.setObjectName("danger")
-        self.stop_btn.setIcon(icon("stop", 12, C["error"]))
+        self.stop_btn.setObjectName("stop_btn")
+        self.stop_btn.setIcon(icon("stop", 14, C["text_inverse"]))
+        self.stop_btn.setIconSize(QSize(14, 14))
         self.stop_btn.setToolTip("Stop")
-        self.stop_btn.setFixedSize(28, 26)
+        self.stop_btn.setFixedSize(32, 32)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop)
         trow.addWidget(self.stop_btn)
@@ -524,27 +528,15 @@ class MainWindow(QMainWindow):
         main_lo.addWidget(content, stretch=1)
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):
+        # Map icon/type to the colorful theme object name
+        type_map = {"key": "add_key", "click": "add_click", "delay": "add_pause",
+                    "image": "add_image", "condition": "add_condition"}
+        obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(f"  {text}")
-        btn.setObjectName("action_add")
-        btn.setIcon(icon(icon_name, 14, COLORS['text_dim']))
+        btn.setObjectName(obj)
+        btn.setIcon(icon(icon_name, 14, color))
         btn.setIconSize(QSize(14, 14))
-        btn.setMinimumHeight(30)
-        btn.setStyleSheet(f"""
-            QPushButton#action_add {{
-                background-color: {COLORS['bg_tertiary']};
-                color: {COLORS['text_dim']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 6px 10px;
-                text-align: left;
-                font-size: 12px;
-            }}
-            QPushButton#action_add:hover {{
-                background-color: {COLORS['bg_hover']};
-                color: {color};
-                border-color: {color};
-            }}
-        """)
+        btn.setMinimumHeight(32)
         btn.clicked.connect(callback)
         layout.addWidget(btn)
 
@@ -987,11 +979,11 @@ class MainWindow(QMainWindow):
     def _do_pause_cb(self, paused):
         self.timeline.set_paused(paused)
         if paused:
-            self.pause_btn.setIcon(icon("play", 12, COLORS["warning"]))
+            self.pause_btn.setIcon(icon("play", 14, COLORS["text_inverse"]))
             self.pause_btn.setToolTip("Resume (Esc)")
             self.status_text.setText("Paused")
         else:
-            self.pause_btn.setIcon(icon("pause", 12, COLORS["warning"]))
+            self.pause_btn.setIcon(icon("pause", 14, COLORS["text_inverse"]))
             self.pause_btn.setToolTip("Pause (Esc)")
             self.status_text.setText("Running")
 
