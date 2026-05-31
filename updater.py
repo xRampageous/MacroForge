@@ -43,7 +43,11 @@ def check_update(silent: bool = True) -> dict | None:
     """
     Return manifest dict if a newer version is available, else None.
     If UPDATE_URL is empty, silently returns None.
+    Returns None on error and sets _last_error for UI display.
     """
+    global _last_error
+    _last_error = None
+
     logger.info(f"check_update: UPDATE_URL={UPDATE_URL!r}, VERSION={VERSION!r}, TUPLE={VERSION_TUPLE}")
     if not UPDATE_URL.strip():
         logger.warning("check_update: UPDATE_URL is empty — skipping")
@@ -53,6 +57,7 @@ def check_update(silent: bool = True) -> dict | None:
         import time as _time, random as _random
         cache_bust = f"{_time.time():.6f}_{_random.randint(100000, 999999)}"
         req_url = f"{UPDATE_URL}?t={cache_bust}" if "?" not in UPDATE_URL else f"{UPDATE_URL}&t={cache_bust}"
+        logger.info(f"check_update: fetching {req_url}")
         req = urllib.request.Request(
             req_url,
             headers={
@@ -63,8 +68,11 @@ def check_update(silent: bool = True) -> dict | None:
         with urllib.request.urlopen(req, timeout=MANIFEST_TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
+        _last_error = str(e)
+        logger.error(f"check_update: request failed: {e}")
         if not silent:
-            logger.warning(f"Update check failed: {e}")
+            # Raise so the UI can display the error
+            raise
         return None
 
     remote_ver = data.get("version", "").strip()
@@ -75,8 +83,11 @@ def check_update(silent: bool = True) -> dict | None:
 
     try:
         remote_tuple = tuple(int(p) for p in remote_ver.split(".") if p.isdigit())
-    except Exception:
-        logger.info("check_update: failed to parse remote version")
+    except Exception as e:
+        _last_error = f"Failed to parse version '{remote_ver}': {e}"
+        logger.error(f"check_update: {e}")
+        if not silent:
+            raise
         return None
 
     logger.info(f"check_update: compare {VERSION_TUPLE} vs {remote_tuple}")
@@ -85,6 +96,14 @@ def check_update(silent: bool = True) -> dict | None:
         return data
     logger.info(f"check_update: no update ({VERSION} >= {remote_ver})")
     return None
+
+
+_last_error = None
+
+
+def get_last_update_error() -> str:
+    """Return the last error from check_update, or None."""
+    return _last_error
 
 
 def _write_batch_updater(work_dir: Path, current_exe: Path, extract_dir: Path, zip_file: Path) -> Path:

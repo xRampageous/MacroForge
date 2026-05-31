@@ -31,7 +31,7 @@ from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequ
 
 from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager
-from updater import check_update, perform_update
+from updater import check_update, perform_update, get_last_update_error
 from version import VERSION
 from hotkeys import start_hotkeys, stop_hotkeys
 from debugger import logger, DebugViewer, get_log_path
@@ -1511,11 +1511,18 @@ class MainWindow(QMainWindow):
     def _check_update_manual(self):
         self.status("Checking for updates…")
         def _bg():
-            manifest = check_update(silent=False)
-            if manifest:
-                QTimer.singleShot(0, lambda: self._prompt_update(manifest))
-            else:
-                QTimer.singleShot(0, lambda: self.status("No updates available"))
+            try:
+                manifest = check_update(silent=False)
+                if manifest:
+                    QTimer.singleShot(0, lambda: self._prompt_update(manifest))
+                else:
+                    error = get_last_update_error()
+                    if error:
+                        QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error}"))
+                    else:
+                        QTimer.singleShot(0, lambda: self.status("No updates available"))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Update Error", f"Update check failed:\n\n{e}"))
         threading.Thread(target=_bg, daemon=True).start()
 
     def _prompt_update(self, manifest):
@@ -1635,8 +1642,12 @@ class MainWindow(QMainWindow):
 
     def open_debug_viewer(self):
         try:
-            dv = DebugViewer()
-            dv.show()
+            import tkinter as tk
+            from debugger import DebugViewer
+            root = tk.Tk()
+            root.withdraw()
+            dv = DebugViewer(root, COLORS)
+            root.mainloop()
         except Exception as e:
             logger.error(f"Debug viewer: {e}")
 
