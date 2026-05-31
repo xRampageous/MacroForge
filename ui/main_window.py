@@ -23,7 +23,8 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
     QProgressBar, QFrame, QGraphicsEllipseItem, QMenu,
     QSpinBox, QDoubleSpinBox, QGraphicsScene, QGraphicsView,
-    QFileDialog, QMessageBox, QInputDialog, QGraphicsTextItem
+    QFileDialog, QMessageBox, QInputDialog, QGraphicsTextItem,
+    QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut
@@ -36,6 +37,7 @@ from hotkeys import start_hotkeys, stop_hotkeys
 from debugger import logger, DebugViewer, get_log_path
 from ui.theme import build_stylesheet, COLORS
 from ui.timeline import TimelineView
+from ui.icons import icon
 
 
 class StatusDot(QWidget):
@@ -97,6 +99,7 @@ class MainWindow(QMainWindow):
             self._complete_cb,
             self._progress_cb
         )
+        self.engine.pause_cb = self._pause_cb
 
         # State
         self.active_index = -1
@@ -138,6 +141,11 @@ class MainWindow(QMainWindow):
     #  UI CONSTRUCTION
     # ═══════════════════════════════════════════════════════
 
+    def _hsep(self):
+        sep = QFrame()
+        sep.setStyleSheet(f"background-color: {COLORS['border']}; min-height: 1px; max-height: 1px;")
+        return sep
+
     def _build_ui(self):
         C = COLORS
         central = QWidget()
@@ -153,128 +161,282 @@ class MainWindow(QMainWindow):
         sidebar.setStyleSheet(f"background-color: {C['bg_secondary']}; border-right: 1px solid {C['border']};")
         sb_lo = QVBoxLayout(sidebar)
         sb_lo.setContentsMargins(8, 8, 8, 8)
-        sb_lo.setSpacing(10)
+        sb_lo.setSpacing(6)
 
         # Branding
         brand = QLabel("MACROFORGE")
         brand.setObjectName("title")
-        brand.setStyleSheet(f"color: {C['accent']}; font-size: 14px; font-weight: 800; letter-spacing: 2px;")
+        brand.setStyleSheet(f"color: {C['accent']}; font-size: 13px; font-weight: 800; letter-spacing: 2px;")
         sb_lo.addWidget(brand)
 
-        # Add Actions
-        add_lbl = QLabel("ADD ACTION")
+        # ── Add Actions ──
+        add_lbl = QLabel("ADD")
         add_lbl.setObjectName("section")
         sb_lo.addWidget(add_lbl)
+        self._add_btn("Key", self._open_key_dialog, C["key"], sb_lo, "key")
+        self._add_btn("Click", self._open_click_dialog, C["click"], sb_lo, "click")
+        self._add_btn("Delay", self._open_pause_dialog, C["pause"], sb_lo, "delay")
+        self._add_btn("Image", self._open_image_dialog, C["image"], sb_lo, "image")
 
-        self._add_btn("Key", self._open_key_dialog, C["key"], sb_lo)
-        self._add_btn("Click", self._open_click_dialog, C["click"], sb_lo)
-        self._add_btn("Delay", self._open_pause_dialog, C["pause"], sb_lo)
-        self._add_btn("Image", self._open_image_dialog, C["image"], sb_lo)
+        sb_lo.addWidget(self._hsep())
 
-        # Separator
-        sep = QFrame()
-        sep.setStyleSheet(f"background-color: {C['border']}; min-height: 1px; max-height: 1px;")
-        sb_lo.addWidget(sep)
-
-        # Playback card
-        play_lbl = QLabel("PLAYBACK")
-        play_lbl.setObjectName("section")
-        sb_lo.addWidget(play_lbl)
-
-        play_card = QFrame()
-        play_card.setObjectName("glass_card")
-        play_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 10px; padding: 8px;")
-        pc_lo = QVBoxLayout(play_card)
-        pc_lo.setContentsMargins(8, 8, 8, 8)
-        pc_lo.setSpacing(6)
-
-        # Speed
-        self.speed_combo = QComboBox()
-        self.speed_combo.addItems(["0.25x", "0.5x", "1.0x", "1.5x", "2.0x", "3.0x"])
-        self.speed_combo.setCurrentIndex(2)
-        self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        pc_lo.addWidget(self._label_row("Speed", self.speed_combo))
-
-        # Loops
-        self.loops_spin = QSpinBox()
-        self.loops_spin.setRange(1, 9999)
-        self.loops_spin.setValue(1)
-        pc_lo.addWidget(self._label_row("Loops", self.loops_spin))
-
-        # Checkboxes
-        self.inf_check = QCheckBox("Infinite")
-        self.sim_check = QCheckBox("Simulate")
-        self.human_check = QCheckBox("Human curve")
-        self.focus_check = QCheckBox("Focus lock")
-        self.human_check.setChecked(True)
-        for cb in (self.inf_check, self.sim_check, self.human_check, self.focus_check):
-            pc_lo.addWidget(cb)
-
-        sb_lo.addWidget(play_card)
-
-        # Recorder card
-        rec_lbl = QLabel("RECORDER")
+        # ── Recorder ──
+        rec_lbl = QLabel("REC")
         rec_lbl.setObjectName("section")
         sb_lo.addWidget(rec_lbl)
-
         rec_card = QFrame()
-        rec_card.setObjectName("glass_card")
-        rec_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 10px; padding: 8px;")
+        rec_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
         rc_lo = QVBoxLayout(rec_card)
-        rc_lo.setContentsMargins(8, 8, 8, 8)
-        rc_lo.setSpacing(6)
-
-        # Status
-        status_row = QHBoxLayout()
+        rc_lo.setContentsMargins(6, 6, 6, 6)
+        rc_lo.setSpacing(4)
+        rrow = QHBoxLayout()
         self.rec_dot = StatusDot()
         self.rec_dot.set_color(C["text_dark"])
-        status_row.addWidget(self.rec_dot)
+        rrow.addWidget(self.rec_dot)
         self.rec_status = QLabel("IDLE")
-        self.rec_status.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 600;")
-        status_row.addWidget(self.rec_status)
-        status_row.addStretch()
-        rc_lo.addLayout(status_row)
-
-        # Time + actions
-        info_row = QHBoxLayout()
+        self.rec_status.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 600;")
+        rrow.addWidget(self.rec_status)
+        rrow.addStretch()
         self.rec_time = QLabel("0:00")
-        self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
-        self.rec_actions = QLabel("0")
-        self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
-        info_row.addWidget(self.rec_time)
-        info_row.addStretch()
-        info_row.addWidget(self.rec_actions)
-        rc_lo.addLayout(info_row)
-
-        # Buttons
-        btn_row = QHBoxLayout()
-        self.rec_btn = QPushButton(" Record")
-        self.rec_btn.setObjectName("danger")
-        self.rec_btn.setStyleSheet(f"background-color: {C['error']}; color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600;")
+        self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
+        rrow.addWidget(self.rec_time)
+        rc_lo.addLayout(rrow)
+        brow = QHBoxLayout()
+        self.rec_btn = QPushButton()
+        self.rec_btn.setObjectName("icon_btn")
+        self.rec_btn.setIcon(icon("record", 16, C["error"]))
+        self.rec_btn.setToolTip("Record (F7)")
         self.rec_btn.clicked.connect(self._toggle_record)
-        self.rec_pause_btn = QPushButton(" Pause")
+        self.rec_pause_btn = QPushButton()
+        self.rec_pause_btn.setObjectName("icon_btn")
+        self.rec_pause_btn.setIcon(icon("pause", 14, C["accent"]))
+        self.rec_pause_btn.setToolTip("Pause")
         self.rec_pause_btn.setEnabled(False)
-        self.rec_pause_btn.setObjectName("accent")
         self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
-        btn_row.addWidget(self.rec_btn)
-        btn_row.addWidget(self.rec_pause_btn)
-        rc_lo.addLayout(btn_row)
+        brow.addWidget(self.rec_btn)
+        brow.addWidget(self.rec_pause_btn)
+        brow.addStretch()
+        rc_lo.addLayout(brow)
+        sb_lo.addWidget(rec_card)
 
-        # Store refs
         self._recorder["btn"] = self.rec_btn
         self._recorder["pause_btn"] = self.rec_pause_btn
         self._recorder["status_dot"] = self.rec_dot
         self._recorder["status_lbl"] = self.rec_status
         self._recorder["time_lbl"] = self.rec_time
-        self._recorder["actions_lbl"] = self.rec_actions
 
-        sb_lo.addWidget(rec_card)
+        sb_lo.addWidget(self._hsep())
 
-        # Hotkey hints
-        hints = QLabel("F7 Record/Stop\nEsc Stop")
-        hints.setObjectName("status")
-        hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 9px; padding-top: 4px;")
-        sb_lo.addWidget(hints)
+        # ── Playback ──
+        play_lbl = QLabel("PLAY")
+        play_lbl.setObjectName("section")
+        sb_lo.addWidget(play_lbl)
+        play_card = QFrame()
+        play_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
+        pc_lo = QVBoxLayout(play_card)
+        pc_lo.setContentsMargins(6, 6, 6, 6)
+        pc_lo.setSpacing(5)
+
+        trow = QHBoxLayout()
+        self.start_btn = QPushButton()
+        self.start_btn.setObjectName("success")
+        self.start_btn.setIcon(icon("play", 14, C["success"]))
+        self.start_btn.setToolTip("Start (F9)")
+        self.start_btn.setFixedSize(30, 26)
+        self.start_btn.clicked.connect(self.start)
+        trow.addWidget(self.start_btn)
+
+        self.pause_btn = QPushButton()
+        self.pause_btn.setObjectName("warning")
+        self.pause_btn.setIcon(icon("pause", 12, C["warning"]))
+        self.pause_btn.setToolTip("Pause (Esc)")
+        self.pause_btn.setFixedSize(28, 26)
+        self.pause_btn.setEnabled(False)
+        self.pause_btn.clicked.connect(self.engine.toggle_pause)
+        trow.addWidget(self.pause_btn)
+
+        self.stop_btn = QPushButton()
+        self.stop_btn.setObjectName("danger")
+        self.stop_btn.setIcon(icon("stop", 12, C["error"]))
+        self.stop_btn.setToolTip("Stop")
+        self.stop_btn.setFixedSize(28, 26)
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop)
+        trow.addWidget(self.stop_btn)
+        trow.addStretch()
+        pc_lo.addLayout(trow)
+
+        srow = QHBoxLayout()
+        self.speed_combo = QComboBox()
+        self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
+        self.speed_combo.setCurrentIndex(3)
+        self.speed_combo.currentTextChanged.connect(self._on_speed_change)
+        self.speed_combo.setFixedWidth(62)
+        srow.addWidget(self.speed_combo)
+        self.loops_spin = QSpinBox()
+        self.loops_spin.setRange(1, 9999)
+        self.loops_spin.setValue(1)
+        self.loops_spin.setFixedWidth(48)
+        srow.addWidget(self.loops_spin)
+        self.inf_check = QCheckBox("\u221e")
+        self.inf_check.setToolTip("Infinite loop")
+        srow.addWidget(self.inf_check)
+        srow.addStretch()
+        pc_lo.addLayout(srow)
+
+        crow = QHBoxLayout()
+        self.sim_check = QCheckBox("Sim")
+        self.sim_check.setToolTip("Simulation mode")
+        self.sim_check.setStyleSheet("font-size: 9px;")
+        crow.addWidget(self.sim_check)
+        self.human_check = QCheckBox("Hum")
+        self.human_check.setToolTip("Human curve")
+        self.human_check.setChecked(True)
+        self.human_check.setStyleSheet("font-size: 9px;")
+        crow.addWidget(self.human_check)
+        self.focus_check = QCheckBox("Fcs")
+        self.focus_check.setToolTip("Focus lock")
+        self.focus_check.setStyleSheet("font-size: 9px;")
+        crow.addWidget(self.focus_check)
+        crow.addStretch()
+        pc_lo.addLayout(crow)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(3)
+        pc_lo.addWidget(self.progress_bar)
+        strow = QHBoxLayout()
+        self.progress_label = QLabel("0%")
+        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; min-width: 20px;")
+        strow.addWidget(self.progress_label)
+        self._stat_actions = QLabel("0 actions")
+        self._stat_loops = QLabel("0/1")
+        self._stat_seq = QLabel("0.00s")
+        self._stat_time = QLabel("0.0s")
+        for lbl in (self._stat_actions, self._stat_loops, self._stat_seq, self._stat_time):
+            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
+            strow.addWidget(lbl)
+        strow.addStretch()
+        pc_lo.addLayout(strow)
+        sb_lo.addWidget(play_card)
+
+        sb_lo.addWidget(self._hsep())
+
+        # ── Inspector ──
+        insp_lbl = QLabel("INSPECTOR")
+        insp_lbl.setObjectName("section")
+        sb_lo.addWidget(insp_lbl)
+        insp_card = QFrame()
+        insp_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
+        icard_lo = QVBoxLayout(insp_card)
+        icard_lo.setContentsMargins(6, 6, 6, 6)
+        icard_lo.setSpacing(4)
+
+        ibrow = QHBoxLayout()
+        self.insp_hint = QLabel("Select to edit")
+        self.insp_hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; font-style: italic;")
+        ibrow.addWidget(self.insp_hint)
+        ibrow.addStretch()
+        for name, slot, tip, clr in [("check", self._apply_inspector, "Apply", C["success"]),
+                          ("cross", self._cancel_inspector, "Cancel", C["error"]),
+                          ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
+                          ("duplicate", self._duplicate_inspector, "Duplicate", C["accent"]),
+                          ("edit", self._open_active_dialog, "Edit", C["accent"])]:
+            b = QPushButton()
+            b.setObjectName("icon_btn")
+            b.setIcon(icon(name, 12, clr))
+            b.setToolTip(tip)
+            b.setFixedSize(22, 22)
+            if slot:
+                b.clicked.connect(slot)
+            ibrow.addWidget(b)
+        icard_lo.addLayout(ibrow)
+
+        # Inspector forms (vertical in sidebar)
+        self._insp_lo = QVBoxLayout()
+        self._insp_lo.setSpacing(4)
+        self._insp_lo.setContentsMargins(0, 0, 0, 0)
+
+        # Key inspector
+        self.insp_key = QWidget()
+        ik_lo = QVBoxLayout(self.insp_key)
+        ik_lo.setContentsMargins(0, 0, 0, 0)
+        ik_lo.setSpacing(3)
+        self.ik_key = QLineEdit(); self.ik_key.setPlaceholderText("key")
+        self.ik_dur = QLineEdit(); self.ik_dur.setPlaceholderText("duration")
+        self.ik_hold = QCheckBox("Hold mode")
+        self.ik_repeat = QLineEdit(); self.ik_repeat.setText("1")
+        self.ik_label = QLineEdit(); self.ik_label.setPlaceholderText("label")
+        ik_lo.addWidget(QLabel("Key"))
+        ik_lo.addWidget(self.ik_key)
+        ik_lo.addWidget(QLabel("Duration"))
+        ik_lo.addWidget(self.ik_dur)
+        ik_lo.addWidget(self.ik_hold)
+        ik_lo.addWidget(QLabel("Repeat"))
+        ik_lo.addWidget(self.ik_repeat)
+        ik_lo.addWidget(QLabel("Label"))
+        ik_lo.addWidget(self.ik_label)
+
+        # Pause inspector
+        self.insp_pause = QWidget()
+        ip_lo = QVBoxLayout(self.insp_pause)
+        ip_lo.setContentsMargins(0, 0, 0, 0)
+        ip_lo.setSpacing(3)
+        self.ip_dur = QLineEdit(); self.ip_dur.setPlaceholderText("duration")
+        self.ip_label = QLineEdit(); self.ip_label.setPlaceholderText("label")
+        ip_lo.addWidget(QLabel("Duration"))
+        ip_lo.addWidget(self.ip_dur)
+        ip_lo.addWidget(QLabel("Label"))
+        ip_lo.addWidget(self.ip_label)
+
+        # Click inspector
+        self.insp_click = QWidget()
+        ic_lo = QVBoxLayout(self.insp_click)
+        ic_lo.setContentsMargins(0, 0, 0, 0)
+        ic_lo.setSpacing(3)
+        self.ic_x = QLineEdit(); self.ic_x.setPlaceholderText("x")
+        self.ic_y = QLineEdit(); self.ic_y.setPlaceholderText("y")
+        self.ic_btn = QComboBox()
+        self.ic_btn.addItems(["left", "right", "middle"])
+        self.ic_rand = QLineEdit(); self.ic_rand.setPlaceholderText("rand")
+        self.ic_repeat = QLineEdit(); self.ic_repeat.setText("1")
+        self.ic_label = QLineEdit(); self.ic_label.setPlaceholderText("label")
+        ic_lo.addWidget(QLabel("X, Y"))
+        xy_row = QHBoxLayout()
+        xy_row.addWidget(self.ic_x)
+        xy_row.addWidget(self.ic_y)
+        ic_lo.addLayout(xy_row)
+        ic_lo.addWidget(QLabel("Button"))
+        ic_lo.addWidget(self.ic_btn)
+        ic_lo.addWidget(QLabel("Randomness"))
+        ic_lo.addWidget(self.ic_rand)
+        ic_lo.addWidget(QLabel("Repeat"))
+        ic_lo.addWidget(self.ic_repeat)
+        ic_lo.addWidget(QLabel("Label"))
+        ic_lo.addWidget(self.ic_label)
+
+        # Image inspector
+        self.insp_image = QWidget()
+        ii_lo = QVBoxLayout(self.insp_image)
+        ii_lo.setContentsMargins(0, 0, 0, 0)
+        ii_lo.setSpacing(3)
+        self.ii_sim = QLineEdit(); self.ii_sim.setText("0.8")
+        self.ii_wait = QLineEdit(); self.ii_wait.setText("10.0")
+        ii_lo.addWidget(QLabel("Similarity"))
+        ii_lo.addWidget(self.ii_sim)
+        ii_lo.addWidget(QLabel("Wait timeout"))
+        ii_lo.addWidget(self.ii_wait)
+
+        self._insp_lo.addWidget(self.insp_key)
+        self._insp_lo.addWidget(self.insp_pause)
+        self._insp_lo.addWidget(self.insp_click)
+        self._insp_lo.addWidget(self.insp_image)
+        for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
+            w.setVisible(False)
+        icard_lo.addLayout(self._insp_lo)
+        sb_lo.addWidget(insp_card)
         sb_lo.addStretch()
 
         main_lo.addWidget(sidebar)
@@ -289,24 +451,27 @@ class MainWindow(QMainWindow):
         title = QFrame()
         title.setStyleSheet(f"background-color: {C['bg']}; border-bottom: 1px solid {C['border']};")
         tl = QHBoxLayout(title)
-        tl.setContentsMargins(10, 6, 10, 6)
-
+        tl.setContentsMargins(10, 4, 10, 4)
         self.title_label = QLabel("MacroForge")
-        self.title_label.setStyleSheet(f"color: {C['accent']}; font-size: 16px; font-weight: 700; letter-spacing: 1px;")
+        self.title_label.setStyleSheet(f"color: {C['accent']}; font-size: 15px; font-weight: 700; letter-spacing: 1px;")
         tl.addWidget(self.title_label)
         tl.addStretch()
-
         self.status_dot = StatusDot()
         self.status_dot.set_color(C["text_dark"])
         tl.addWidget(self.status_dot)
-
         self.status_text = QLabel("Ready")
         self.status_text.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
         tl.addWidget(self.status_text)
-
-        gear = QPushButton("\u2699")
-        gear.setFixedSize(28, 28)
-        gear.setStyleSheet(f"background: transparent; color: {C['text_dim']}; border: 1px solid {C['border']}; border-radius: 6px; font-size: 14px;")
+        up_btn = QPushButton()
+        up_btn.setObjectName("icon_btn")
+        up_btn.setIcon(icon("update", 14, C["text_dim"]))
+        up_btn.setToolTip("Check for updates")
+        up_btn.clicked.connect(self._check_update_manual)
+        tl.addWidget(up_btn)
+        gear = QPushButton()
+        gear.setObjectName("icon_btn")
+        gear.setIcon(icon("menu", 14, C["text_dim"]))
+        gear.setToolTip("Menu")
         gear.clicked.connect(self._show_action_menu)
         tl.addWidget(gear)
         content_lo.addWidget(title)
@@ -333,187 +498,39 @@ class MainWindow(QMainWindow):
         tl_lbl = QLabel("TIMELINE")
         tl_lbl.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
         tl_hl.addWidget(tl_lbl)
+        hints = QLabel("scroll \u00b7 Ctrl+wheel zoom \u00b7 drag to reorder \u00b7 Del")
+        hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        tl_hl.addWidget(hints)
         tl_hl.addStretch()
-        self.fps_lbl = QLabel("60 FPS")
-        self.fps_lbl.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
-        tl_hl.addWidget(self.fps_lbl)
         content_lo.addWidget(tl_header)
 
         self.timeline = TimelineView()
         self.timeline.set_actions(self.engine.actions)
         content_lo.addWidget(self.timeline, stretch=1)
 
-        # Inspector header
-        insp_h = QFrame()
-        insp_h.setStyleSheet(f"background-color: {C['bg_secondary']}; border-top: 1px solid {C['border']}; border-bottom: 1px solid {C['border']};")
-        ih_l = QHBoxLayout(insp_h)
-        ih_l.setContentsMargins(10, 4, 10, 4)
-        ih_lbl = QLabel("INSPECTOR")
-        ih_lbl.setStyleSheet(f"color: {C['neon_purple']}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;")
-        ih_l.addWidget(ih_lbl)
-        ih_l.addStretch()
-        self.insp_btns = QHBoxLayout()
-        for txt, slot in [("\u2713", self._apply_inspector), ("\u2715", self._cancel_inspector),
-                          ("\U0001F5D1", lambda: self.delete_action(self.active_index)),
-                          ("\u2398", self._duplicate_inspector), ("\u270E", self._open_active_dialog)]:
-            b = QPushButton(txt)
-            b.setFixedSize(24, 24)
-            b.setStyleSheet(f"background: transparent; color: {C['text_dim']}; border: 1px solid {C['border']}; border-radius: 6px; font-size: 10px;")
-            if slot:
-                b.clicked.connect(slot)
-            self.insp_btns.addWidget(b)
-        ih_l.addLayout(self.insp_btns)
-        content_lo.addWidget(insp_h)
-
-        # Inspector panel (stacked)
-        self._inspector_stack = QFrame()
-        self._inspector_stack.setStyleSheet(f"background-color: {C['bg_secondary']}; min-height: 38px; max-height: 38px;")
-        self._inspector_stack.setFixedHeight(38)
-        self._insp_lo = QHBoxLayout(self._inspector_stack)
-        self._insp_lo.setContentsMargins(6, 4, 6, 4)
-        self._insp_lo.setSpacing(6)
-
-        # Key inspector
-        self.insp_key = QWidget()
-        ik_lo = QHBoxLayout(self.insp_key)
-        ik_lo.setContentsMargins(0, 0, 0, 0)
-        ik_lo.setSpacing(6)
-        self.ik_key = QLineEdit(); self.ik_key.setFixedWidth(60); self.ik_key.setPlaceholderText("key")
-        self.ik_dur = QLineEdit(); self.ik_dur.setFixedWidth(50); self.ik_dur.setPlaceholderText("dur")
-        self.ik_hold = QCheckBox("Hold")
-        self.ik_repeat = QLineEdit(); self.ik_repeat.setFixedWidth(30); self.ik_repeat.setText("1")
-        self.ik_label = QLineEdit(); self.ik_label.setFixedWidth(60); self.ik_label.setPlaceholderText("label")
-        ik_lo.addWidget(QLabel("Key"))
-        ik_lo.addWidget(self.ik_key)
-        ik_lo.addWidget(QLabel("Dur"))
-        ik_lo.addWidget(self.ik_dur)
-        ik_lo.addWidget(self.ik_hold)
-        ik_lo.addWidget(QLabel("Rep"))
-        ik_lo.addWidget(self.ik_repeat)
-        ik_lo.addWidget(QLabel("Label"))
-        ik_lo.addWidget(self.ik_label)
-        ik_lo.addStretch()
-
-        # Pause inspector
-        self.insp_pause = QWidget()
-        ip_lo = QHBoxLayout(self.insp_pause)
-        ip_lo.setContentsMargins(0, 0, 0, 0)
-        self.ip_dur = QLineEdit(); self.ip_dur.setFixedWidth(50)
-        self.ip_label = QLineEdit(); self.ip_label.setFixedWidth(60); self.ip_label.setPlaceholderText("label")
-        ip_lo.addWidget(QLabel("Dur"))
-        ip_lo.addWidget(self.ip_dur)
-        ip_lo.addWidget(QLabel("Label"))
-        ip_lo.addWidget(self.ip_label)
-        ip_lo.addStretch()
-
-        # Click inspector
-        self.insp_click = QWidget()
-        ic_lo = QHBoxLayout(self.insp_click)
-        ic_lo.setContentsMargins(0, 0, 0, 0)
-        self.ic_x = QLineEdit(); self.ic_x.setFixedWidth(40)
-        self.ic_y = QLineEdit(); self.ic_y.setFixedWidth(40)
-        self.ic_btn = QComboBox()
-        self.ic_btn.addItems(["left", "right", "middle"]); self.ic_btn.setFixedWidth(70)
-        self.ic_rand = QLineEdit(); self.ic_rand.setFixedWidth(30)
-        self.ic_repeat = QLineEdit(); self.ic_repeat.setFixedWidth(30); self.ic_repeat.setText("1")
-        self.ic_label = QLineEdit(); self.ic_label.setFixedWidth(60); self.ic_label.setPlaceholderText("label")
-        ic_lo.addWidget(QLabel("X"))
-        ic_lo.addWidget(self.ic_x)
-        ic_lo.addWidget(QLabel("Y"))
-        ic_lo.addWidget(self.ic_y)
-        ic_lo.addWidget(self.ic_btn)
-        ic_lo.addWidget(QLabel("\u00B1"))
-        ic_lo.addWidget(self.ic_rand)
-        ic_lo.addWidget(QLabel("Rep"))
-        ic_lo.addWidget(self.ic_repeat)
-        ic_lo.addWidget(QLabel("Label"))
-        ic_lo.addWidget(self.ic_label)
-        ic_lo.addStretch()
-
-        # Image inspector
-        self.insp_image = QWidget()
-        ii_lo = QHBoxLayout(self.insp_image)
-        ii_lo.setContentsMargins(0, 0, 0, 0)
-        self.ii_sim = QLineEdit(); self.ii_sim.setFixedWidth(40); self.ii_sim.setText("0.8")
-        self.ii_wait = QLineEdit(); self.ii_wait.setFixedWidth(40); self.ii_wait.setText("10.0")
-        ii_lo.addWidget(QLabel("Sim"))
-        ii_lo.addWidget(self.ii_sim)
-        ii_lo.addWidget(QLabel("Wait"))
-        ii_lo.addWidget(self.ii_wait)
-        ii_lo.addStretch()
-
-        self._insp_lo.addWidget(self.insp_key)
-        self._insp_lo.addWidget(self.insp_pause)
-        self._insp_lo.addWidget(self.insp_click)
-        self._insp_lo.addWidget(self.insp_image)
-        for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
-            w.setVisible(False)
-        content_lo.addWidget(self._inspector_stack)
-
-        # Playback dock
-        dock = QFrame()
-        dock.setStyleSheet(f"background-color: {C['bg_secondary']}; border-top: 2px solid {C['accent']};")
-        dk = QHBoxLayout(dock)
-        dk.setContentsMargins(10, 6, 10, 6)
-
-        self.start_btn = QPushButton("\u25B6  Start")
-        self.start_btn.setObjectName("accent")
-        self.start_btn.clicked.connect(self.start)
-        dk.addWidget(self.start_btn)
-
-        self.pause_btn = QPushButton("\u23F8  Pause")
-        self.pause_btn.setEnabled(False)
-        self.pause_btn.clicked.connect(self.engine.toggle_pause)
-        dk.addWidget(self.pause_btn)
-
-        self.stop_btn = QPushButton("\u25A0  Stop")
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.clicked.connect(self.stop)
-        dk.addWidget(self.stop_btn)
-
-        dk.addSpacing(16)
-        hints2 = QLabel("F9 start/stop  \u00B7  Esc pause  \u00B7  Ctrl+Z undo  \u00B7  Del delete")
-        hints2.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
-        dk.addWidget(hints2)
-        dk.addStretch()
-        content_lo.addWidget(dock)
-
-        # Status bar
-        status = QFrame()
-        status.setStyleSheet(f"background-color: {C['bg']}; border-top: 1px solid {C['border']};")
-        sl = QHBoxLayout(status)
-        sl.setContentsMargins(8, 4, 8, 4)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(4)
-        sl.addWidget(self.progress_bar, stretch=1)
-
-        self.progress_label = QLabel("0%")
-        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; min-width: 28px;")
-        sl.addWidget(self.progress_label)
-
-        sl.addSpacing(8)
-        self._stat_actions = QLabel("0 actions")
-        self._stat_loops = QLabel("0/1")
-        self._stat_seq = QLabel("0.00s")
-        self._stat_time = QLabel("0.0s")
-        for lbl in (self._stat_actions, self._stat_loops, self._stat_seq, self._stat_time):
-            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
-            sl.addWidget(lbl)
-        content_lo.addWidget(status)
-
         main_lo.addWidget(content, stretch=1)
 
-    def _add_btn(self, text, callback, color, layout):
-        btn = QPushButton(text)
-        btn.setObjectName("sidebar")
+    def _add_btn(self, text, callback, color, layout, icon_name="plus"):
+        btn = QPushButton(f"  {text}")
+        btn.setObjectName("action_add")
+        btn.setIcon(icon(icon_name, 14, COLORS['text_dim']))
+        btn.setIconSize(QSize(14, 14))
+        btn.setMinimumHeight(30)
         btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; border: none; border-radius: 8px;
-                padding: 8px 12px; text-align: left; color: {COLORS['text_dim']}; font-size: 12px; }}
-            QPushButton:hover {{ background-color: {COLORS['bg_hover']}; color: {color}; }}
+            QPushButton#action_add {{
+                background-color: {COLORS['bg_tertiary']};
+                color: {COLORS['text_dim']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 6px 10px;
+                text-align: left;
+                font-size: 12px;
+            }}
+            QPushButton#action_add:hover {{
+                background-color: {COLORS['bg_hover']};
+                color: {color};
+                border-color: {color};
+            }}
         """)
         btn.clicked.connect(callback)
         layout.addWidget(btn)
@@ -530,8 +547,6 @@ class MainWindow(QMainWindow):
         for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
             w.setVisible(False)
         if show:
-            self._inspector_stack.setFixedHeight(38)
-            self._inspector_stack.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; min-height: 38px; max-height: 38px;")
             mapping = {
                 "key": self.insp_key,
                 "pause": self.insp_pause,
@@ -539,9 +554,6 @@ class MainWindow(QMainWindow):
                 "image": self.insp_image,
             }
             mapping.get(action_type, self.insp_key).setVisible(True)
-        else:
-            self._inspector_stack.setFixedHeight(0)
-            self._inspector_stack.setStyleSheet(f"background-color: {COLORS['bg']}; min-height: 0px; max-height: 0px;")
 
     # ═══════════════════════════════════════════════════════
     #  KEYBOARD SHORTCUTS
@@ -944,15 +956,36 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
 
     def _status_cb(self, msg):
-        self.status(msg)
+        # Marshal to main thread — engine runs in background thread
+        QTimer.singleShot(0, lambda: self.status(msg))
 
     def _play_cb(self, idx, dur):
+        QTimer.singleShot(0, lambda: self._do_play_cb(idx, dur))
+
+    def _do_play_cb(self, idx, dur):
         self.playing_index = idx
         self.actions_played += 1
         self.timeline.set_playing(idx, dur)
         self.update_statistics()
 
+    def _pause_cb(self, paused):
+        QTimer.singleShot(0, lambda: self._do_pause_cb(paused))
+
+    def _do_pause_cb(self, paused):
+        self.timeline.set_paused(paused)
+        if paused:
+            self.pause_btn.setIcon(icon("play", 12, COLORS["warning"]))
+            self.pause_btn.setToolTip("Resume (Esc)")
+            self.status_text.setText("Paused")
+        else:
+            self.pause_btn.setIcon(icon("pause", 12, COLORS["warning"]))
+            self.pause_btn.setToolTip("Pause (Esc)")
+            self.status_text.setText("Running")
+
     def _complete_cb(self):
+        QTimer.singleShot(0, self._do_complete_cb)
+
+    def _do_complete_cb(self):
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
@@ -965,6 +998,9 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
 
     def _progress_cb(self, pct):
+        QTimer.singleShot(0, lambda: self._do_progress_cb(pct))
+
+    def _do_progress_cb(self, pct):
         self.progress_bar.setValue(int(pct))
         self.progress_label.setText(f"{int(pct)}%")
 
@@ -1509,20 +1545,20 @@ class MainWindow(QMainWindow):
             pct = downloaded / total * 100 if total else 0
             mb_down = downloaded / (1024 * 1024)
             mb_total = total / (1024 * 1024)
-            bar.setValue(int(pct))
-            info.setText(f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)")
+            # Marshal to main thread
+            QTimer.singleShot(0, lambda: (
+                bar.setValue(int(pct)),
+                info.setText(f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)")
+            ))
 
         def _download():
             try:
                 if perform_update(manifest, progress_cb=_on_progress):
-                    dlg.close()
-                    self._real_exit()
+                    QTimer.singleShot(0, lambda: (dlg.close(), self._real_exit()))
                 else:
-                    dlg.close()
-                    QMessageBox.critical(self, "Update Failed", "Download failed.")
+                    QTimer.singleShot(0, lambda: (dlg.close(), QMessageBox.critical(self, "Update Failed", "Download failed.")))
             except Exception as e:
-                dlg.close()
-                QMessageBox.critical(self, "Update Error", str(e))
+                QTimer.singleShot(0, lambda: (dlg.close(), QMessageBox.critical(self, "Update Error", str(e))))
         threading.Thread(target=_download, daemon=True).start()
 
     # ═══════════════════════════════════════════════════════
@@ -1530,7 +1566,8 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def status(self, msg):
-        self.status_text.setText(msg)
+        # Thread-safe: always marshal Qt widget access to main thread
+        QTimer.singleShot(0, lambda: self.status_text.setText(msg))
         logger.info(msg)
 
     def _invalidate_seq_dur(self):
@@ -1615,7 +1652,7 @@ class MainWindow(QMainWindow):
     def _open_key_dialog(self):
         from ui.dialogs.key_dialog import KeyDialog
         dlg = KeyDialog(self)
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1629,7 +1666,7 @@ class MainWindow(QMainWindow):
     def _open_click_dialog(self):
         from ui.dialogs.click_dialog import ClickDialog
         dlg = ClickDialog(self)
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1643,7 +1680,7 @@ class MainWindow(QMainWindow):
     def _open_pause_dialog(self):
         from ui.dialogs.pause_dialog import PauseDialog
         dlg = PauseDialog(self)
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1657,7 +1694,7 @@ class MainWindow(QMainWindow):
     def _open_image_dialog(self):
         from ui.dialogs.image_dialog import ImageDialog
         dlg = ImageDialog(self)
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1671,7 +1708,7 @@ class MainWindow(QMainWindow):
     def _open_key_editor(self, index):
         from ui.dialogs.key_dialog import KeyDialog
         dlg = KeyDialog(self, existing=self.engine.actions[index])
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1683,7 +1720,7 @@ class MainWindow(QMainWindow):
     def _open_click_editor(self, index):
         from ui.dialogs.click_dialog import ClickDialog
         dlg = ClickDialog(self, existing=self.engine.actions[index])
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1695,7 +1732,7 @@ class MainWindow(QMainWindow):
     def _open_pause_editor(self, index):
         from ui.dialogs.pause_dialog import PauseDialog
         dlg = PauseDialog(self, existing=self.engine.actions[index])
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)
@@ -1707,7 +1744,7 @@ class MainWindow(QMainWindow):
     def _open_image_editor(self, index):
         from ui.dialogs.image_dialog import ImageDialog
         dlg = ImageDialog(self, existing=self.engine.actions[index])
-        if dlg.exec() == 1:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
                 self.history.push(self.engine.actions)

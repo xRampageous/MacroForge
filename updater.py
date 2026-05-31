@@ -117,7 +117,7 @@ if exist "{internal_cur}" (
 )
 
 :: Copy new files from extracted ZIP
-xcopy /E /I /Y /Q "{e}\*" "{w}" >nul 2>&1
+xcopy /E /I /Y /Q "{e}\\*" "{w}" >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Failed to copy new files. >>"%~dp0_update.log"
     :: Rollback

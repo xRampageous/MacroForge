@@ -201,29 +201,7 @@ echo     %DIST_DIR%\MacroForge-v%VER%.zip   (if build_helper ran)
 echo     %SCRIPT_DIR%update.json             (if build_helper ran)
 echo.
 
-:: GitHub CLI release
-where gh >nul 2>&1
-if %errorlevel% == 0 (
-    echo  [AUTO] GitHub CLI detected.
-    set /p PUSH="  Create GitHub release v%VER%? (y/n): "
-    if /I "!PUSH!"=="y" (
-        gh release create v%VER% --repo xRampageous/MacroForge --title "MacroForge v%VER%" --notes "Release v%VER%" 2>nul
-        gh release upload v%VER% --repo xRampageous/MacroForge --clobber "%DIST_DIR%\MacroForge\MacroForge.exe" "%DIST_DIR%\MacroForge-v%VER%.zip" 2>nul
-        if %errorlevel% equ 0 (
-            echo  [AUTO] Release v%VER% published.
-        ) else (
-            echo  [AUTO] Upload failed.
-        )
-    ) else (
-        echo  Skipped.
-    )
-) else (
-    echo  GitHub CLI not found.
-    echo    Install:  https://cli.github.com/
-    echo    Manual:   https://github.com/xRampageous/MacroForge/releases/new
-)
-
 echo.
-echo   Done.
+echo   Build done. To release automatically, run: release_auto.bat
+echo   Manual release: https://github.com/xRampageous/MacroForge/releases/new
 popd
-ping -n 3 127.0.0.1 >nul 2>&1
