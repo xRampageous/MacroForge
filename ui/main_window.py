@@ -588,8 +588,7 @@ class MainWindow(QMainWindow):
         tl_hl.addWidget(self.tl_search)
         content_lo.addWidget(tl_header)
 
-        self.timeline = TimelineView()
-        self.timeline.setModel(self.action_model)
+        self.timeline = TimelineView(model=self.action_model)
         content_lo.addWidget(self.timeline, stretch=1)
 
         # ── Bottom status bar ──
@@ -1654,11 +1653,10 @@ class MainWindow(QMainWindow):
                             label=row.get("label", "")
                         )
                         new_actions.append(a)
-                self.engine.actions = new_actions
+                for a in new_actions:
+                    self.action_model.add_action(a)
                 self.active_index = -1
-                self.timeline.set_actions(self.engine.actions)
                 self.timeline.refresh()
-                self.refresh()
                 self.update_statistics()
                 self.save_session()
                 self.status(f"Imported {len(new_actions)} actions from CSV")
@@ -1668,10 +1666,9 @@ class MainWindow(QMainWindow):
     def clear_all(self):
         if QMessageBox.question(self, "Clear All",
             "Remove all actions?") == QMessageBox.StandardButton.Yes:
-            self.history.push(self.engine.actions)
-            self.engine.actions.clear()
+            self.history.push(self.action_model.actions())
+            self.action_model.clear()
             self.active_index = -1
-            self.timeline.selected_indices.clear()
             self.refresh()
             self.update_statistics()
             self.save_session()
@@ -1951,10 +1948,9 @@ class MainWindow(QMainWindow):
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 act = dlg.get_action()
                 if act:
-                    self.history.push(self.engine.actions)
-                    self.engine.actions.append(act)
-                    self.active_index = len(self.engine.actions) - 1
-                    self.refresh()
+                    self.history.push(self.action_model.actions())
+                    self.action_model.add_action(act)
+                    self.active_index = len(self.action_model.actions()) - 1
                     self.timeline.ensure_visible(self.active_index)
                     self.save_session()
                     self.status(f"Added key: {act.key}")
@@ -1969,10 +1965,9 @@ class MainWindow(QMainWindow):
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 act = dlg.get_action()
                 if act:
-                    self.history.push(self.engine.actions)
-                    self.engine.actions.append(act)
-                    self.active_index = len(self.engine.actions) - 1
-                    self.refresh()
+                    self.history.push(self.action_model.actions())
+                    self.action_model.add_action(act)
+                    self.active_index = len(self.action_model.actions()) - 1
                     self.timeline.ensure_visible(self.active_index)
                     self.save_session()
                     self.status("Added click")
@@ -1987,10 +1982,9 @@ class MainWindow(QMainWindow):
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 act = dlg.get_action()
                 if act:
-                    self.history.push(self.engine.actions)
-                    self.engine.actions.append(act)
-                    self.active_index = len(self.engine.actions) - 1
-                    self.refresh()
+                    self.history.push(self.action_model.actions())
+                    self.action_model.add_action(act)
+                    self.active_index = len(self.action_model.actions()) - 1
                     self.timeline.ensure_visible(self.active_index)
                     self.save_session()
                     self.status("Added delay")

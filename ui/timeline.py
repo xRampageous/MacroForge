@@ -56,9 +56,9 @@ class TimelineView(QListView):
     action_context_menu = pyqtSignal(int, object)
     action_dragged = pyqtSignal(int, int)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, model=None):
         super().__init__(parent)
-        self.setModel(ActionListModel())
+        self.setModel(model or ActionListModel())
         self.setItemDelegate(TimelineDelegate())
         self.setSelectionMode(QListView.SelectionMode.SingleSelection)
         self.setFrameShape(QListView.Shape.NoFrame)
@@ -75,7 +75,8 @@ class TimelineView(QListView):
         self.action_double_clicked.emit(index.row())
 
     def set_actions(self, actions):
-        self.model()._actions = actions
+        self.model()._actions.clear()
+        self.model()._actions.extend(actions)
         self.model().beginResetModel()
         self.model().endResetModel()
 
