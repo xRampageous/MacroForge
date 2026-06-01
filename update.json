@@ -1,6 +1,6 @@
 {
-  "version": "1.2.10",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.10/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.10/MacroForge-v1.2.10.zip",
-  "notes": "v1.2.10: Fixed update dialog not appearing \u2014 replaced fragile QTimer.singleShot lambdas with pyqtSignal-based cross-thread callbacks, wrapped prompt in try/except, reset prompt flag on fresh checks"
+  "version": "1.2.12",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.12/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.12/MacroForge-v1.2.12.zip",
+  "notes": "v1.2.12: Added version label in sidebar + window/taskbar icon. Upgraded build system with --fast/--no-zip/--no-smoke flags and unified release.bat pipeline"
 }
