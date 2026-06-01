@@ -21,13 +21,14 @@ def _hsep(color):
     return f
 
 
-class CaptureOverlay(QDialog):
+class CaptureOverlay(QWidget):
     """Fullscreen overlay for selecting a screen region to capture."""
     def __init__(self):
         super().__init__(None)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
@@ -37,6 +38,7 @@ class CaptureOverlay(QDialog):
         self._end = None
         self._dragging = False
         self.region = None
+        self._done = False
         self.setMouseTracking(True)
         
         # Add instruction label
@@ -84,12 +86,14 @@ class CaptureOverlay(QDialog):
             r = QRect(self._start, self._end).normalized()
             if r.width() > 2 and r.height() > 2:
                 self.region = (r.left(), r.top(), r.width(), r.height())
-            self.accept()
+            self._done = True
+            self.close()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.region = None
-            self.reject()
+            self._done = True
+            self.close()
 
 
 class ImageDialog(QDialog):
@@ -618,18 +622,25 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
-        # Hide parent dialog completely (like tkinter withdraw)
+        # Hide parent dialog
         logger.debug("image_dialog._do_capture: hiding dialog")
         self.hide()
         import time
         time.sleep(0.1)
-        # Show overlay as modal dialog (like tkinter grab_set)
+        # Show overlay (non-modal)
         overlay = CaptureOverlay()
         logger.debug("image_dialog._do_capture: showing overlay")
-        result = overlay.exec()
-        logger.debug(f"image_dialog._do_capture: overlay returned result={result}")
+        overlay.show()
+        overlay.raise_()
+        overlay.activateWindow()
+        # Simple blocking wait without Qt event loop
+        import time
+        while not overlay._done:
+            QApplication.processEvents()
+            time.sleep(0.01)
+        logger.debug("image_dialog._do_capture: overlay closed")
         # Capture after overlay closes
-        if result == QDialog.DialogCode.Accepted and overlay.region:
+        if overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
             if return_region:
@@ -637,10 +648,19 @@ class ImageDialog(QDialog):
             else:
                 try:
                     shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
+                    # Save to cache file
+                    import os
+                    import uuid
+                    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache")
+                    os.makedirs(cache_dir, exist_ok=True)
+                    filename = f"{uuid.uuid4()}.png"
+                    filepath = os.path.join(cache_dir, filename)
+                    shot.save(filepath)
+                    logger.debug(f"image_dialog._do_capture: saved to {filepath}")
+                    # Still return base64 for compatibility
                     buf = io.BytesIO()
                     shot.save(buf, format="PNG")
                     b64 = base64.b64encode(buf.getvalue()).decode()
-                    logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
                     callback(b64)
                 except Exception as e:
                     logger.exception("image_dialog._do_capture: capture failed")
@@ -648,11 +668,12 @@ class ImageDialog(QDialog):
         else:
             logger.debug("image_dialog._do_capture: no region selected or cancelled")
             callback(None)
-        # Show parent dialog again (like tkinter deiconify)
+        # Show parent dialog again
         logger.debug("image_dialog._do_capture: showing dialog")
         self.show()
         self.raise_()
         self.activateWindow()
+        overlay.deleteLater()
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")

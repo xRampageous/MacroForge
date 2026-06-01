@@ -1,6 +1,6 @@
 {
-  "version": "1.2.50",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.50/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.50/MacroForge-v1.2.50.zip",
-  "notes": "v1.2.50: Fixed indentation error in modernized image_dialog.py that prevented dialog from opening. v1.2.49: Using user-provided modernized image_dialog.py with QDialog modal overlay approach. v1.2.48: Revert to non-modal QWidget overlay with callback - no nested exec(), no hiding parent, should fix crash. v1.2.47: Converted CaptureOverlay to QDialog with modal exec() to match v1.1.0 tkinter approach - should fix grey screen and crash issues. v1.2.46: Removed WA_ShowWithoutActivating from CaptureOverlay to fix mouse event blocking, added logging to track dialog result. v1.2.45: Using minimize() instead of hide(). v1.2.44: Removed hide/show cycle, fixed debug log truncation."
+  "version": "1.2.51",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.51/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.51/MacroForge-v1.2.51.zip",
+  "notes": "v1.2.51: Rewrote capture to use simple while loop without Qt event loops - truly synchronous blocking capture. v1.2.50: Fixed indentation error in modernized image_dialog.py that prevented dialog from opening. v1.2.49: Using user-provided modernized image_dialog.py with QDialog modal overlay approach. v1.2.48: Revert to non-modal QWidget overlay with callback - no nested exec(), no hiding parent, should fix crash. v1.2.47: Converted CaptureOverlay to QDialog with modal exec() to match v1.1.0 tkinter approach - should fix grey screen and crash issues. v1.2.46: Removed WA_ShowWithoutActivating from CaptureOverlay to fix mouse event blocking, added logging to track dialog result. v1.2.45: Using minimize() instead of hide(). v1.2.44: Removed hide/show cycle, fixed debug log truncation."
 }
