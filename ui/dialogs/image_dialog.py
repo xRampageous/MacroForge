@@ -607,11 +607,9 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
-        # Minimize dialog instead of hiding to avoid triggering exec() return
-        logger.debug("image_dialog._do_capture: minimizing dialog")
-        self.showMinimized()
-        import time
-        time.sleep(0.1)
+        # Don't hide dialog - overlay covers screen including dialog
+        # This prevents dialog rejection while overlay is active
+        logger.debug("image_dialog._do_capture: showing overlay")
         overlay = CaptureOverlay()
         loop = QEventLoop()
         overlay.closed.connect(loop.quit)
@@ -621,7 +619,7 @@ class ImageDialog(QDialog):
         logger.debug("image_dialog._do_capture: starting event loop")
         loop.exec()
         logger.debug("image_dialog._do_capture: event loop finished")
-        # Capture immediately after overlay closes (dialog still minimized)
+        # Capture after overlay closes
         if overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
@@ -640,12 +638,8 @@ class ImageDialog(QDialog):
                     QMessageBox.critical(self, "Capture Error", str(e))
         else:
             logger.debug("image_dialog._do_capture: no region selected")
-        # Restore dialog after capture
-        logger.debug("image_dialog._do_capture: restoring dialog")
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
-        logger.debug(f"image_dialog._do_capture: dialog result after restore={self.result()}")
+        # Dialog is still visible, no need to restore
+        logger.debug("image_dialog._do_capture: done")
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
