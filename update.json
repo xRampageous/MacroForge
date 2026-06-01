@@ -1,6 +1,6 @@
 {
-  "version": "1.2.15",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.15/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.15/MacroForge-v1.2.15.zip",
-  "notes": "v1.2.15: Fixed update dialog size and progress bar visibility. Progress now updates even when Content-Length is missing. App now force-exits with os._exit(0) so the updater batch can replace files reliably."
+  "version": "1.2.16",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.16/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.16/MacroForge-v1.2.16.zip",
+  "notes": "v1.2.16: Code cleanup and bug fixes. Removed dead Config class, duplicate QSS blocks, and unused imports. Fixed Qt.Key.Key_Down typo, debugger log rotation, dynamic app version, and PyInstaller missing module reference. Deferred pynput warning to runtime."
 }
