@@ -620,27 +620,29 @@ class ImageDialog(QDialog):
         loop.exec()
         logger.debug("image_dialog._do_capture: event loop finished")
         time.sleep(0.05)
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        # Capture BEFORE showing dialog again to avoid interference
         if overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
             if return_region:
                 callback((x, y, w, h))
-                return
-            try:
-                shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
-                buf = io.BytesIO()
-                shot.save(buf, format="PNG")
-                b64 = base64.b64encode(buf.getvalue()).decode()
-                logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
-                callback(b64)
-            except Exception as e:
-                logger.exception("image_dialog._do_capture: capture failed")
-                QMessageBox.critical(self, "Capture Error", str(e))
+            else:
+                try:
+                    shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
+                    buf = io.BytesIO()
+                    shot.save(buf, format="PNG")
+                    b64 = base64.b64encode(buf.getvalue()).decode()
+                    logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
+                    callback(b64)
+                except Exception as e:
+                    logger.exception("image_dialog._do_capture: capture failed")
+                    QMessageBox.critical(self, "Capture Error", str(e))
         else:
             logger.debug("image_dialog._do_capture: no region selected")
+        # Show dialog again after capture is complete
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
