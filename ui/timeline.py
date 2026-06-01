@@ -75,10 +75,10 @@ class _PoolRow(QGraphicsItemGroup):
         self._idx_txt.setDefaultTextColor(QColor(COLORS["text_dim"]))
         self._idx_txt.setPos(int(ci), text_y)
 
-        for child in self._icon_grp.childItems():
-            self._icon_grp.removeFromGroup(child)
-            self._scene.removeItem(child)
-        if self._img_item:
+        for child in list(self._icon_grp.childItems()):
+            if child.scene():
+                self._scene.removeItem(child)
+        if self._img_item and self._img_item.scene():
             self._scene.removeItem(self._img_item)
             self._img_item = None
 
@@ -165,7 +165,6 @@ class _PoolRow(QGraphicsItemGroup):
             self._img_item = QGraphicsPixmapItem(scaled)
             self._img_item.setPos(int(thumb_x), int(cy - scaled.height() // 2))
             self._img_item.setZValue(2)
-            self._scene.addItem(self._img_item)
             self._icon_grp.addToGroup(self._img_item)
         except Exception: pass
 
@@ -238,7 +237,7 @@ class _PoolRow(QGraphicsItemGroup):
         self.hide()
         self._bound_idx = -1
         self._cache_key = None
-        if self._img_item:
+        if self._img_item and self._img_item.scene():
             self._scene.removeItem(self._img_item)
             self._img_item = None
 
