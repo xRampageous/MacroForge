@@ -1,6 +1,6 @@
 {
-  "version": "1.2.18",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.18/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.18/MacroForge-v1.2.18.zip",
-  "notes": "v1.2.18: PyQt6 modernization. Updated deprecated mouse event APIs: event.pos() -> event.position(), event.globalPos() -> event.globalPosition(). All enums already using PyQt6 namespaced style. Verified full codebase PyQt6 compatibility."
+  "version": "1.2.19",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.19/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.19/MacroForge-v1.2.19.zip",
+  "notes": "v1.2.19: Fixed update prompt flag not being reset on silent startup check. Ensures update prompt can appear reliably on each app restart. PyQt6 modernization from v1.2.18 included."
 }
