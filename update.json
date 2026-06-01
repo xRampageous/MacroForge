@@ -1,6 +1,6 @@
 {
-  "version": "1.2.19",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.19/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.19/MacroForge-v1.2.19.zip",
-  "notes": "v1.2.19: Fixed update prompt flag not being reset on silent startup check. Ensures update prompt can appear reliably on each app restart. PyQt6 modernization from v1.2.18 included."
+  "version": "1.2.20",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.20/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.20/MacroForge-v1.2.20.zip",
+  "notes": "v1.2.20: Fixed updater not applying update after download. Rewrote batch updater with: delay after process exit for file locks, retry logic for _internal folder rename, robocopy with xcopy fallback, post-update exe verification."
 }
