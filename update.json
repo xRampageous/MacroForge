@@ -1,6 +1,6 @@
 {
-  "version": "1.2.29",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.29/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.29/MacroForge-v1.2.29.zip",
-  "notes": "v1.2.29: Fixed cv2/OpenCV bundling error that caused startup crash after tkinter fix. Uses collect_all() for cv2 binaries, datas, and hiddenimports. v1.2.28: Excluded tkinter from build. v1.2.27: Timeline row pooling rewrite. v1.2.26: Updater dialog cleanup. v1.2.25: Timeline rebuild, updater auto-exit fix."
+  "version": "1.2.30",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.30/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.30/MacroForge-v1.2.30.zip",
+  "notes": "v1.2.30: Fixed timeline playback not updating \u2014 replaced broken QTimer.singleShot from engine thread with pyqtSignal for all engine callbacks (play, pause, complete, progress, status). v1.2.29: Fixed cv2 bundling. v1.2.28: Excluded tkinter. v1.2.27: Timeline rewrite."
 }

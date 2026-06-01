@@ -90,6 +90,13 @@ class MainWindow(QMainWindow):
     _do_exit = pyqtSignal()
     _close_update_dlg = pyqtSignal()
 
+    # Engine -> main thread signals
+    _play_action = pyqtSignal(int, float)     # idx, dur
+    _pause_state = pyqtSignal(bool)
+    _complete = pyqtSignal()
+    _progress = pyqtSignal(int)
+    _status_msg = pyqtSignal(str)
+
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
         self.setWindowTitle("MacroForge")
@@ -161,6 +168,12 @@ class MainWindow(QMainWindow):
         self._update_error.connect(self._on_update_error)
         self._do_exit.connect(self._real_exit)
         self._close_update_dlg.connect(self._on_close_update_dlg)
+
+        self._play_action.connect(self._do_play_cb)
+        self._pause_state.connect(self._do_pause_cb)
+        self._complete.connect(self._do_complete_cb)
+        self._progress.connect(self._do_progress_cb)
+        self._status_msg.connect(self.status)
 
         self._check_update_silent()
         self.load_last_session()
@@ -1117,11 +1130,10 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
 
     def _status_cb(self, msg):
-        # Marshal to main thread — engine runs in background thread
-        QTimer.singleShot(0, lambda: self.status(msg))
+        self._status_msg.emit(msg)
 
     def _play_cb(self, idx, dur):
-        QTimer.singleShot(0, lambda: self._do_play_cb(idx, dur))
+        self._play_action.emit(idx, dur)
 
     def _do_play_cb(self, idx, dur):
         self.playing_index = idx
@@ -1132,7 +1144,7 @@ class MainWindow(QMainWindow):
         self.update_statistics()
 
     def _pause_cb(self, paused):
-        QTimer.singleShot(0, lambda: self._do_pause_cb(paused))
+        self._pause_state.emit(paused)
 
     def _do_pause_cb(self, paused):
         self.timeline.set_paused(paused)
@@ -1146,7 +1158,7 @@ class MainWindow(QMainWindow):
             self.status_text.setText("Running")
 
     def _complete_cb(self):
-        QTimer.singleShot(0, self._do_complete_cb)
+        self._complete.emit()
 
     def _do_complete_cb(self):
         self.start_btn.setEnabled(True)
@@ -1162,7 +1174,7 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
 
     def _progress_cb(self, pct):
-        QTimer.singleShot(0, lambda: self._do_progress_cb(pct))
+        self._progress.emit(pct)
 
     def _do_progress_cb(self, pct):
         self.progress_bar.setValue(int(pct))
