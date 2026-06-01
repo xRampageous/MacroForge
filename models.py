@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 from copy import deepcopy
 from datetime import datetime
 from collections import deque
+from PyQt6.QtCore import QAbstractListModel, Qt, QModelIndex, QVariant
 
 # =========================================================
 # DATA MODEL
@@ -109,6 +110,67 @@ class Action:
 
     def is_click(self) -> bool:
         return self.action_type == "click"
+
+# =========================================================
+# REACTIVE ACTION MODEL
+# =========================================================
+class ActionListModel(QAbstractListModel):
+    ActionRole = Qt.ItemDataRole.UserRole + 1
+
+    def __init__(self, actions=None):
+        super().__init__()
+        self._actions = actions or []
+
+    # -------------------------
+    # REQUIRED MODEL METHODS
+    # -------------------------
+    def rowCount(self, parent=QModelIndex()):
+        return len(self._actions)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return QVariant()
+
+        action = self._actions[index.row()]
+
+        if role == Qt.ItemDataRole.DisplayRole:
+            return action.label or action.key
+
+        if role == self.ActionRole:
+            return action
+
+        return QVariant()
+
+    def roleNames(self):
+        return {
+            self.ActionRole: b"action"
+        }
+
+    # -------------------------
+    # API (REACTIVE UPDATES)
+    # -------------------------
+    def add_action(self, action):
+        row = len(self._actions)
+        self.beginInsertRows(QModelIndex(), row, row)
+        self._actions.append(action)
+        self.endInsertRows()
+
+    def remove_action(self, row):
+        if 0 <= row < len(self._actions):
+            self.beginRemoveRows(QModelIndex(), row, row)
+            self._actions.pop(row)
+            self.endRemoveRows()
+
+    def clear(self):
+        self.beginResetModel()
+        self._actions.clear()
+        self.endResetModel()
+
+    def get(self, row):
+        return self._actions[row]
+
+    def actions(self):
+        return self._actions
 
 # HISTORY / UNDO-REDO
 # =========================================================

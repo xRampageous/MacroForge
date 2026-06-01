@@ -30,7 +30,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut, QIcon
 
 from engine import ExecutionEngine
-from models import Action, ProfileManager, SettingsManager
+from models import Action, ProfileManager, SettingsManager, ActionListModel
 from updater import check_update, perform_update, get_last_update_error
 from version import VERSION
 # from hotkeys import start_hotkeys, stop_hotkeys  # DISABLED — pynput causes Qt dialog crashes
@@ -119,6 +119,7 @@ class MainWindow(QMainWindow):
         # Backend refs
         self.session_manager = profile_manager or ProfileManager()
         self.settings_manager = settings_manager or SettingsManager(self.session_manager.base_dir)
+        self.action_model = ActionListModel()
         self.engine = ExecutionEngine(
             self._status_cb,
             self._play_cb,
@@ -126,6 +127,7 @@ class MainWindow(QMainWindow):
             self._progress_cb
         )
         self.engine.pause_cb = self._pause_cb
+        self.engine.actions = self.action_model.actions()
 
         # State
         self.active_index = -1
@@ -587,7 +589,7 @@ class MainWindow(QMainWindow):
         content_lo.addWidget(tl_header)
 
         self.timeline = TimelineView()
-        self.timeline.set_actions(self.engine.actions)
+        self.timeline.setModel(self.action_model)
         content_lo.addWidget(self.timeline, stretch=1)
 
         # ── Bottom status bar ──
@@ -2011,12 +2013,10 @@ class MainWindow(QMainWindow):
                 logger.info(f"_open_image_dialog: get_action done act={act is not None}")
                 if act is not None:
                     logger.info("_open_image_dialog: pushing history")
-                    self.history.push(self.engine.actions)
-                    logger.info("_open_image_dialog: appending action")
-                    self.engine.actions.append(act)
-                    self.active_index = len(self.engine.actions) - 1
-                    logger.info("_open_image_dialog: calling refresh")
-                    self.refresh()
+                    self.history.push(self.action_model.actions())
+                    logger.info("_open_image_dialog: adding action to model")
+                    self.action_model.add_action(act)
+                    self.active_index = len(self.action_model.actions()) - 1
                     logger.info("_open_image_dialog: calling ensure_visible")
                     self.timeline.ensure_visible(self.active_index)
                     logger.info("_open_image_dialog: calling save_session")
