@@ -39,6 +39,7 @@ COLORS = {
     "text_dim": "#787a9c",
     "text_dark": "#42445f",
     "text_inverse": "#06070d",
+    "btn_text": "#ffffff",
 
     # ── Borders ──
     "border": "#24263f",
@@ -260,7 +261,7 @@ def build_stylesheet() -> str:
     /* ── Colorful per-action-type add buttons (filled) ── */
     QPushButton#add_key {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['key']}, stop:1 {C['key']}cc);
-        color: {C['text_inverse']}; border: none;
+        color: #ffffff; border: none;
         border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
     QPushButton#add_key:hover {{ background: {C['key']}; }}
@@ -268,7 +269,7 @@ def build_stylesheet() -> str:
 
     QPushButton#add_click {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['click']}, stop:1 {C['click']}cc);
-        color: {C['text_inverse']}; border: none;
+        color: #ffffff; border: none;
         border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
     QPushButton#add_click:hover {{ background: {C['click']}; }}
@@ -276,7 +277,7 @@ def build_stylesheet() -> str:
 
     QPushButton#add_image {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['image']}, stop:1 {C['image']}cc);
-        color: {C['text_inverse']}; border: none;
+        color: #ffffff; border: none;
         border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
     QPushButton#add_image:hover {{ background: {C['image']}; }}
@@ -284,7 +285,7 @@ def build_stylesheet() -> str:
 
     QPushButton#add_pause {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['pause']}, stop:1 {C['pause']}cc);
-        color: {C['text_inverse']}; border: none;
+        color: #ffffff; border: none;
         border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
     QPushButton#add_pause:hover {{ background: {C['pause']}; }}
@@ -292,7 +293,7 @@ def build_stylesheet() -> str:
 
     QPushButton#add_condition {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['condition']}, stop:1 {C['condition']}cc);
-        color: {C['text_inverse']}; border: none;
+        color: #ffffff; border: none;
         border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
     }}
     QPushButton#add_condition:hover {{ background: {C['condition']}; }}
@@ -304,21 +305,21 @@ def build_stylesheet() -> str:
         color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
     }}
     QPushButton#play_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5cf0a0, stop:1 {C['success']}); }}
-    QPushButton#play_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; }}
+    QPushButton#play_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#pause_btn {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['warning']}, stop:1 #e09020);
         color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
     }}
     QPushButton#pause_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffc766, stop:1 {C['warning']}); }}
-    QPushButton#pause_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; }}
+    QPushButton#pause_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#stop_btn {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
-        color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+        color: {C['btn_text']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
     }}
     QPushButton#stop_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff7a92, stop:1 {C['error']}); }}
-    QPushButton#stop_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; }}
+    QPushButton#stop_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#record_btn {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
@@ -331,6 +332,58 @@ def build_stylesheet() -> str:
         padding: 4px; min-width: 28px; min-height: 28px;
     }}
     QPushButton#icon_btn:hover {{ background-color: {C['bg_hover']}; }}
+
+    /* ── Form widgets for inspector readability ── */
+    QLineEdit {{
+        background-color: {C['bg_secondary']};
+        color: {C['text']};
+        border: 1px solid {C['border']};
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+    }}
+    QLineEdit:focus {{ border-color: {C['accent']}; }}
+    QLineEdit::placeholder {{ color: {C['text_dark']}; }}
+
+    QComboBox {{
+        background-color: {C['bg_secondary']};
+        color: {C['text']};
+        border: 1px solid {C['border']};
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+    }}
+    QComboBox:focus {{ border-color: {C['accent']}; }}
+    QComboBox::drop-down {{ border: none; width: 24px; }}
+    QComboBox QAbstractItemView {{
+        background-color: {C['bg_tertiary']};
+        color: {C['text']};
+        border: 1px solid {C['border']};
+        selection-background-color: {C['accent_glow']};
+        selection-color: {C['accent']};
+    }}
+
+    QCheckBox {{ color: {C['text']}; font-size: 12px; spacing: 6px; }}
+    QCheckBox::indicator {{
+        width: 14px; height: 14px;
+        border-radius: 3px;
+        border: 1px solid {C['border_light']};
+        background-color: {C['bg_secondary']};
+    }}
+    QCheckBox::indicator:checked {{
+        background-color: {C['accent']};
+        border-color: {C['accent']};
+    }}
+
+    QSpinBox {{
+        background-color: {C['bg_secondary']};
+        color: {C['text']};
+        border: 1px solid {C['border']};
+        border-radius: 6px;
+        padding: 2px 4px;
+        font-size: 12px;
+    }}
+    QSpinBox:focus {{ border-color: {C['accent']}; }}
 
     QPushButton#compact {{
         background-color: {C['bg_tertiary']};

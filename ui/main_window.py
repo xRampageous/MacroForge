@@ -136,6 +136,7 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         self._check_update_silent()
         self.load_last_session()
+        self._restore_window_geometry()
 
     # ═══════════════════════════════════════════════════════
     #  UI CONSTRUCTION
@@ -201,6 +202,9 @@ class MainWindow(QMainWindow):
         self.rec_time = QLabel("0:00")
         self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
         rrow.addWidget(self.rec_time)
+        self.rec_actions = QLabel("0")
+        self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
+        rrow.addWidget(self.rec_actions)
         rc_lo.addLayout(rrow)
         brow = QHBoxLayout()
         self.rec_btn = QPushButton()
@@ -225,6 +229,7 @@ class MainWindow(QMainWindow):
         self._recorder["status_dot"] = self.rec_dot
         self._recorder["status_lbl"] = self.rec_status
         self._recorder["time_lbl"] = self.rec_time
+        self._recorder["actions_lbl"] = self.rec_actions
 
         sb_lo.addWidget(self._hsep())
 
@@ -241,9 +246,10 @@ class MainWindow(QMainWindow):
 
         trow = QHBoxLayout()
         trow.setSpacing(6)
+        _white = "#ffffff"
         self.start_btn = QPushButton()
         self.start_btn.setObjectName("play_btn")
-        self.start_btn.setIcon(icon("play", 16, C["text_inverse"]))
+        self.start_btn.setIcon(icon("play", 16, _white))
         self.start_btn.setIconSize(QSize(16, 16))
         self.start_btn.setToolTip("Start (F9)")
         self.start_btn.setFixedSize(36, 32)
@@ -252,7 +258,7 @@ class MainWindow(QMainWindow):
 
         self.pause_btn = QPushButton()
         self.pause_btn.setObjectName("pause_btn")
-        self.pause_btn.setIcon(icon("pause", 14, C["text_inverse"]))
+        self.pause_btn.setIcon(icon("pause", 14, _white))
         self.pause_btn.setIconSize(QSize(14, 14))
         self.pause_btn.setToolTip("Pause (Esc)")
         self.pause_btn.setFixedSize(32, 32)
@@ -262,7 +268,7 @@ class MainWindow(QMainWindow):
 
         self.stop_btn = QPushButton()
         self.stop_btn.setObjectName("stop_btn")
-        self.stop_btn.setIcon(icon("stop", 14, C["text_inverse"]))
+        self.stop_btn.setIcon(icon("stop", 14, _white))
         self.stop_btn.setIconSize(QSize(14, 14))
         self.stop_btn.setToolTip("Stop")
         self.stop_btn.setFixedSize(32, 32)
@@ -293,39 +299,16 @@ class MainWindow(QMainWindow):
         crow = QHBoxLayout()
         self.sim_check = QCheckBox("Sim")
         self.sim_check.setToolTip("Simulation mode")
-        self.sim_check.setStyleSheet("font-size: 9px;")
         crow.addWidget(self.sim_check)
         self.human_check = QCheckBox("Hum")
         self.human_check.setToolTip("Human curve")
         self.human_check.setChecked(True)
-        self.human_check.setStyleSheet("font-size: 9px;")
         crow.addWidget(self.human_check)
         self.focus_check = QCheckBox("Fcs")
         self.focus_check.setToolTip("Focus lock")
-        self.focus_check.setStyleSheet("font-size: 9px;")
         crow.addWidget(self.focus_check)
         crow.addStretch()
         pc_lo.addLayout(crow)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(3)
-        pc_lo.addWidget(self.progress_bar)
-        strow = QHBoxLayout()
-        self.progress_label = QLabel("0%")
-        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; min-width: 20px;")
-        strow.addWidget(self.progress_label)
-        self._stat_actions = QLabel("0 actions")
-        self._stat_loops = QLabel("0/1")
-        self._stat_seq = QLabel("0.00s")
-        self._stat_time = QLabel("0.0s")
-        for lbl in (self._stat_actions, self._stat_loops, self._stat_seq, self._stat_time):
-            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
-            strow.addWidget(lbl)
-        strow.addStretch()
-        pc_lo.addLayout(strow)
         sb_lo.addWidget(play_card)
 
         sb_lo.addWidget(self._hsep())
@@ -341,11 +324,9 @@ class MainWindow(QMainWindow):
         icard_lo.setContentsMargins(6, 6, 6, 6)
         icard_lo.setSpacing(4)
 
+        # Toolbar
         ibrow = QHBoxLayout()
-        self.insp_hint = QLabel("Select to edit")
-        self.insp_hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; font-style: italic;")
-        ibrow.addWidget(self.insp_hint)
-        ibrow.addStretch()
+        ibrow.setSpacing(4)
         for name, slot, tip, clr in [("check", self._apply_inspector, "Apply", C["success"]),
                           ("cross", self._cancel_inspector, "Cancel", C["error"]),
                           ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
@@ -355,11 +336,18 @@ class MainWindow(QMainWindow):
             b.setObjectName("icon_btn")
             b.setIcon(icon(name, 12, clr))
             b.setToolTip(tip)
-            b.setFixedSize(22, 22)
+            b.setFixedSize(24, 24)
             if slot:
                 b.clicked.connect(slot)
             ibrow.addWidget(b)
+        ibrow.addStretch()
         icard_lo.addLayout(ibrow)
+
+        # Empty state
+        self.insp_empty = QLabel("Select an action to inspect")
+        self.insp_empty.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; font-style: italic; padding: 8px 0;")
+        self.insp_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icard_lo.addWidget(self.insp_empty)
 
         # Inspector forms (vertical in sidebar)
         self._insp_lo = QVBoxLayout()
@@ -516,20 +504,6 @@ class MainWindow(QMainWindow):
         tl.addWidget(gear)
         content_lo.addWidget(title)
 
-        # Profile tabs
-        tabs = QFrame()
-        tabs.setStyleSheet(f"background-color: {C['bg']}; border-bottom: 1px solid {C['border']};")
-        self._tabs_lo = QHBoxLayout(tabs)
-        self._tabs_lo.setContentsMargins(6, 2, 6, 2)
-        self._tabs_lo.setSpacing(2)
-        self._tabs_lo.addStretch()
-        new_tab_btn = QPushButton("+")
-        new_tab_btn.setFixedSize(26, 24)
-        new_tab_btn.setStyleSheet(f"background: transparent; color: {C['accent']}; border: 1px solid {C['border']}; border-radius: 6px; font-weight: bold;")
-        new_tab_btn.clicked.connect(self._new_profile_dialog)
-        self._tabs_lo.insertWidget(0, new_tab_btn)
-        content_lo.addWidget(tabs)
-
         # Timeline
         tl_header = QFrame()
         tl_header.setStyleSheet(f"background-color: {C['bg_secondary']}; border-top: 2px solid {C['accent']}; border-bottom: 1px solid {C['border']};")
@@ -561,6 +535,55 @@ class MainWindow(QMainWindow):
         self.timeline.set_actions(self.engine.actions)
         content_lo.addWidget(self.timeline, stretch=1)
 
+        # ── Bottom status bar ──
+        status_bar = QFrame()
+        status_bar.setObjectName("status_bar")
+        status_bar.setStyleSheet(
+            f"QFrame#status_bar {{ background-color: {C['bg_secondary']}; "
+            f"border-top: 1px solid {C['border']}; }}"
+        )
+        status_bar.setFixedHeight(32)
+        sbar_lo = QHBoxLayout(status_bar)
+        sbar_lo.setContentsMargins(10, 4, 10, 4)
+        sbar_lo.setSpacing(10)
+
+        # Progress bar (left side)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(4)
+        self.progress_bar.setFixedWidth(120)
+        self.progress_bar.setStyleSheet(
+            f"QProgressBar {{ background-color: {C['border']}; border-radius: 2px; }}"
+            f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 2px; }}"
+        )
+        sbar_lo.addWidget(self.progress_bar)
+        self.progress_label = QLabel("0%")
+        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; min-width: 26px;")
+        sbar_lo.addWidget(self.progress_label)
+        sbar_lo.addSpacing(12)
+
+        # Stats
+        self._stat_actions = QLabel("0 actions")
+        self._stat_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+        sbar_lo.addWidget(self._stat_actions)
+
+        self._stat_loops = QLabel("0/1")
+        self._stat_loops.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+        sbar_lo.addWidget(self._stat_loops)
+
+        self._stat_seq = QLabel("0.00s")
+        self._stat_seq.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+        sbar_lo.addWidget(self._stat_seq)
+
+        self._stat_time = QLabel("0.0s")
+        self._stat_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+        sbar_lo.addWidget(self._stat_time)
+
+        sbar_lo.addStretch()
+        content_lo.addWidget(status_bar)
+
         main_lo.addWidget(content, stretch=1)
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):
@@ -588,6 +611,7 @@ class MainWindow(QMainWindow):
     def _show_inspector(self, show=True, action_type="key"):
         for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
             w.setVisible(False)
+        self.insp_empty.setVisible(not show)
         if show:
             mapping = {
                 "key": self.insp_key,
@@ -666,9 +690,14 @@ class MainWindow(QMainWindow):
                 self.inf_check.setChecked(settings.get("infinite_loop", False))
                 self.human_check.setChecked(settings.get("human_curve", True))
                 self.timeline.zoom = settings.get("zoom", 1.0)
-                if "geometry" in settings:
-                    self.restoreGeometry(bytes.fromhex(settings["geometry"]))
+                # Window geometry is stored GLOBALLY (see _restore_window_geometry),
+                # never per-profile, so switching profiles never moves the window.
                 self._invalidate_seq_dur()
+                self.active_index = -1
+                self.timeline.selected_indices.clear()
+                self.timeline.set_active(-1)
+                self.timeline.clear_playing()
+                self.timeline.set_actions(self.engine.actions)  # sync new list reference
                 self.timeline.refresh()
                 self.refresh()
                 self.actions_played = 0
@@ -685,7 +714,7 @@ class MainWindow(QMainWindow):
             self.engine.actions = []
             self.update_statistics(immediate=True)
             self.status("Ready")
-        self._rebuild_profile_tabs()
+        self._refresh_profile_btn()
 
     def save_session(self):
         if not self.auto_save_enabled:
@@ -700,31 +729,29 @@ class MainWindow(QMainWindow):
             "speed": float(self.speed_combo.currentText().replace("x", "")),
             "infinite_loop": self.inf_check.isChecked(),
             "human_curve": self.human_check.isChecked(),
-            "geometry": self.saveGeometry().toHex().data().decode(),
             "zoom": self.timeline.zoom,
         }
         self.session_manager.save_profile(self.engine.actions, settings)
+        self._save_window_geometry()
         self._save_session_after = None
 
-    def _rebuild_profile_tabs(self):
-        # Remove existing tabs
-        while self._tabs_lo.count() > 2:
-            item = self._tabs_lo.takeAt(1)
-            if item.widget():
-                item.widget().deleteLater()
-        active = self.session_manager.active
-        for name in self.session_manager.list_profiles():
-            btn = QPushButton(name)
-            btn.setObjectName("tab")
-            is_active = name == active
-            btn.setChecked(is_active)
-            if is_active:
-                btn.setStyleSheet(f"color: {COLORS['accent']}; border-bottom: 2px solid {COLORS['accent']}; padding: 6px 14px; font-weight: 600;")
-            else:
-                btn.setStyleSheet(f"color: {COLORS['text_dim']}; border-bottom: 2px solid transparent; padding: 6px 14px;")
-            btn.clicked.connect(lambda checked, n=name: self._switch_profile(n))
-            self._tabs_lo.insertWidget(self._tabs_lo.count() - 1, btn)
-        self._refresh_profile_btn()
+    def _save_window_geometry(self):
+        """Persist window geometry GLOBALLY (independent of profile)."""
+        try:
+            self.settings_manager.set(
+                "window_geometry", self.saveGeometry().toHex().data().decode()
+            )
+        except Exception:
+            pass
+
+    def _restore_window_geometry(self):
+        """Restore the last global window geometry, if any."""
+        try:
+            geo = self.settings_manager.get("window_geometry", "")
+            if geo:
+                self.restoreGeometry(bytes.fromhex(geo))
+        except Exception:
+            pass
 
     def _refresh_profile_btn(self):
         if hasattr(self, "profile_btn"):
@@ -986,6 +1013,9 @@ class MainWindow(QMainWindow):
             pass
 
     def start(self):
+        if self.engine.running:
+            self.status("Already running")
+            return
         if not self.engine.actions:
             self.status("No actions to play")
             return
@@ -999,9 +1029,8 @@ class MainWindow(QMainWindow):
         self.status_text.setText("Playing")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.engine.actions = self.engine.actions
-        self.engine.infinite = self.inf_check.isChecked()
-        self.engine.simulation = self.sim_check.isChecked()
+        self.engine.infinite_loop = self.inf_check.isChecked()
+        self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
         self.engine.focus_lock = self.focus_check.isChecked()
         self.engine.loops = self.loops_spin.value()
@@ -1366,11 +1395,11 @@ class MainWindow(QMainWindow):
         if rec.get("scroll_thread") and rec["scroll_thread"].is_alive():
             rec["scroll_thread"].join(timeout=0.2)
         self._show_rec_badge(False)
-        self.rec_btn.setText(" Record")
-        self.rec_btn.setStyleSheet(f"background-color: {COLORS['error']}; color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600;")
-        self.rec_pause_btn.setText(" Pause")
+        self.rec_btn.setText("")
+        self.rec_btn.setStyleSheet("")
+        self.rec_pause_btn.setText("")
         self.rec_pause_btn.setEnabled(False)
-        self.rec_pause_btn.setStyleSheet(f"background: {COLORS['bg_tertiary']}; color: #fff; border-radius: 8px;")
+        self.rec_pause_btn.setStyleSheet("")
         self.rec_dot.set_color(COLORS["text_dark"])
         self.rec_status.setText("IDLE")
         self.rec_status.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px; font-weight: 600;")

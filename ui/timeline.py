@@ -52,11 +52,11 @@ class TimelineRow:
 
         self.left = scene.addRect(0, 0, 4, 30, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["accent"])))
 
-        self.bar_bg = scene.addRect(0, 0, 100, 3, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["border"])))
+        self.bar_bg = scene.addRect(0, 0, 100, 5, QPen(Qt.PenStyle.NoPen), QBrush(QColor(C["border"])))
         grad = QLinearGradient(0, 0, 100, 0)
         grad.setColorAt(0, QColor(C["accent_secondary"]))
         grad.setColorAt(1, QColor(C["accent"]))
-        self.bar_fill = scene.addRect(0, 0, 50, 3, QPen(Qt.PenStyle.NoPen), QBrush(grad))
+        self.bar_fill = scene.addRect(0, 0, 50, 5, QPen(Qt.PenStyle.NoPen), QBrush(grad))
 
         self.t_index = scene.addText("", QFont("Segoe UI", 8, QFont.Weight.Bold))
         self.t_index.setDefaultTextColor(QColor(C["text_dim"]))
@@ -100,11 +100,11 @@ class TimelineRow:
         self.left.setRect(int(x + pad), int(y), 4, int(row_h - 2))
 
         ci, ck, bs, bw, cl, cf = self._calc_cols(w)
-        bar_y = int(y + row_h - 8)
+        bar_y = int(y + row_h - 10)
         cy = int(y + row_h // 2)
 
-        self.bar_bg.setRect(int(bs), int(bar_y), int(bw), 3)
-        self.bar_fill.setRect(int(bs), int(bar_y), int(bw), 3)
+        self.bar_bg.setRect(int(bs), int(bar_y), int(bw), 5)
+        self.bar_fill.setRect(int(bs), int(bar_y), int(bw), 5)
 
         fm = QFontMetrics(self.t_index.font())
         ih = fm.height()
@@ -173,12 +173,16 @@ class TimelineRow:
         C = QColor(color)
 
         if action_type == "key":
-            # Small rounded keycap
-            r = self.scene.addRect(ix, iy + 1, size, size - 2, QPen(C, 1.5), QBrush(Qt.BrushStyle.NoBrush))
+            # Keyboard (matches panel icon)
+            r = self.scene.addRect(ix - 1, iy - 1, size + 2, size + 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
+            self.scene.addRect(int(ix + 1), int(iy + 1), 2, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush))
+            self.scene.addRect(int(ix + 5), int(iy + 1), 2, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush))
+            self.scene.addRect(int(ix + 3), int(iy + 5), 4, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush))
         elif action_type == "click":
-            # Target dot
-            self.scene.addEllipse(ix + 2, iy + 2, size - 4, size - 4, pen, brush)
-            r = self.scene.addEllipse(ix, iy, size, size, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
+            # Mouse (matches panel icon)
+            r = self.scene.addEllipse(ix, iy, size, size + 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
+            self.scene.addLine(int(ix + size // 2), int(iy), int(ix + size // 2), int(iy + size - 2), QPen(C, 1))
+            self.scene.addLine(int(ix), int(iy + size // 2), int(ix + size), int(iy + size // 2), QPen(C, 1))
         elif action_type == "image":
             # Picture frame
             r = self.scene.addRect(ix, iy + 1, size, size - 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
@@ -287,7 +291,9 @@ class TimelineRow:
             bg = QColor(C["bg_card"])
             glow_visible = True
         if is_playing:
-            bg = QColor(C["playing_glow"].replace("20", "35"))
+            glow = C["playing_glow"]
+            base = glow[:-2] if len(glow) >= 8 else glow
+            bg = QColor(f"{base}55")
             glow_visible = True
 
         self.bg.setBrush(QBrush(bg))
@@ -305,13 +311,16 @@ class TimelineRow:
             self.t_dur.setPlainText(f"{remaining:.1f}s")
             self.t_dur.setDefaultTextColor(QColor(C["text"]))
         elif not is_playing and self._was_playing:
-            # Reset duration text
-            pass  # caller handles
+            # Reset duration text back to the action's base duration
+            if self.cache_key and len(self.cache_key) > 1:
+                dur = self.cache_key[1]
+                self.t_dur.setPlainText(f"{dur:.2f}s")
+            self.t_dur.setDefaultTextColor(QColor(COLORS["text_dim"]))
 
         self._was_playing = is_playing
 
-        bar_y = int(self.y + row_h - 8)
-        self.bar_fill.setRect(int(bs), int(bar_y), int(progress), 3)
+        bar_y = int(self.y + row_h - 10)
+        self.bar_fill.setRect(int(bs), int(bar_y), int(progress), 5)
 
 
 class TimelineView(QGraphicsView):
@@ -449,8 +458,9 @@ class TimelineView(QGraphicsView):
         key = max(40, int(w * 0.12))
         bar_w = max(80, int(w * 0.22))
         bar_s = int((w - bar_w) / 2)
-        lane = max(280, int(w * 0.72))
-        flags = max(360, int(w * 0.88))
+        # Keep rightmost columns inside viewport so labels aren't clipped
+        lane = min(max(200, int(w * 0.68)), w - 90)
+        flags = min(max(260, int(w * 0.82)), w - 30)
         return idx, key, bar_s, bar_w, lane, flags
 
     def _init_pool(self):
