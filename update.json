@@ -1,6 +1,6 @@
 {
-  "version": "1.2.20",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.20/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.20/MacroForge-v1.2.20.zip",
-  "notes": "v1.2.20: Fixed updater not applying update after download. Rewrote batch updater with: delay after process exit for file locks, retry logic for _internal folder rename, robocopy with xcopy fallback, post-update exe verification."
+  "version": "1.2.21",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.21/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.21/MacroForge-v1.2.21.zip",
+  "notes": "v1.2.21: Redesigned add-action buttons to match reference style \u2014 flat solid full-color backgrounds, minimal border-radius, taller (40px), tight 2px spacing. Added Capture button with camera icon. Correct icon colors per button background."
 }
