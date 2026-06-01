@@ -1,6 +1,6 @@
 {
-  "version": "1.2.16",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.16/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.16/MacroForge-v1.2.16.zip",
-  "notes": "v1.2.16: Code cleanup and bug fixes. Removed dead Config class, duplicate QSS blocks, and unused imports. Fixed Qt.Key.Key_Down typo, debugger log rotation, dynamic app version, and PyInstaller missing module reference. Deferred pynput warning to runtime."
+  "version": "1.2.17",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.17/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.17/MacroForge-v1.2.17.zip",
+  "notes": "v1.2.17: Fixed updater batch window showing no output (echo now visible in console). Fixed update progress bar stuck on 'Starting...' by replacing QTimer.singleShot with pyqtSignal for thread-safe cross-thread progress updates."
 }
