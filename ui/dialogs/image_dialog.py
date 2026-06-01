@@ -1,4 +1,4 @@
-"""Image search action dialog — comprehensive PyQt6 rebuild with all v1.1.0 fields."""
+"""Image search action dialog — modernised layout matching reference while preserving all fields."""
 import base64
 import io
 from PyQt6.QtWidgets import (
@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
     QFrame, QSpinBox, QWidget, QApplication, QGridLayout,
     QScrollArea, QRadioButton, QButtonGroup
 )
-from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QCursor
 from models import Action
@@ -19,27 +18,6 @@ def _hsep(color):
     f.setFixedHeight(1)
     f.setStyleSheet(f"background-color: {color};")
     return f
-
-
-def _section(title, color, layout):
-    lbl = QLabel(title)
-    lbl.setStyleSheet(f"color: {color}; font-size: 9px; font-weight: bold; letter-spacing: 1.5px;")
-    layout.addWidget(lbl)
-
-
-def _field_row(label, widget, lo, hint=None):
-    row = QHBoxLayout()
-    row.setSpacing(6)
-    lbl = QLabel(label)
-    lbl.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px; min-width: 90px;")
-    row.addWidget(lbl)
-    row.addWidget(widget)
-    if hint:
-        h = QLabel(hint)
-        h.setStyleSheet(f"color: {COLORS['text_dark']}; font-size: 10px;")
-        row.addWidget(h)
-    row.addStretch()
-    lo.addLayout(row)
 
 
 class CaptureOverlay(QWidget):
@@ -54,7 +32,6 @@ class CaptureOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
-        # Use primary screen for capture
         screen = QApplication.primaryScreen()
         self.setGeometry(screen.geometry())
         self._start = None
@@ -72,7 +49,6 @@ class CaptureOverlay(QWidget):
             painter.setPen(QPen(QColor(COLORS["accent"]), 2))
             painter.setBrush(QColor(56, 180, 255, 40))
             painter.drawRect(r)
-            # Draw size label
             painter.setPen(QColor("white"))
             br = r.bottomRight()
             painter.drawText(br.x() + 4, br.y() + 14, f"{r.width()}x{r.height()}")
@@ -115,54 +91,86 @@ class ImageDialog(QDialog):
     def __init__(self, parent=None, existing=None):
         super().__init__(parent)
         self.setWindowTitle("Image Search Action")
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(520)
+        self.setMinimumHeight(640)
         C = COLORS
         self._accent = C['image']
-        from ui.dialogs._common import dialog_stylesheet, make_header
-        self.setStyleSheet(dialog_stylesheet(self._accent))
+        self.setStyleSheet(f"QDialog {{ background-color: {C['bg']}; }}")
 
         lo = QVBoxLayout(self)
-        lo.setSpacing(8)
-        lo.setContentsMargins(14, 14, 14, 14)
+        lo.setSpacing(10)
+        lo.setContentsMargins(18, 18, 18, 18)
 
-        lo.addWidget(make_header("Image Search", self._accent, "image", "Find an image on screen and react"))
+        # -- Top description --
+        desc = QLabel("This command searches for an image on your screen (pixel by pixel).")
+        desc.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        desc.setWordWrap(True)
+        lo.addWidget(desc)
+        lo.addWidget(_hsep(C['border']))
 
-        # ── IMAGE ──
-        _section("IMAGE", self._accent, lo)
-        img_row = QHBoxLayout()
+        # -- Image to search for --
+        img_lbl = QLabel("Image to search for:")
+        img_lbl.setStyleSheet(f"color: {C['text']}; font-size: 12px; font-weight: bold;")
+        lo.addWidget(img_lbl)
+
+        img_area = QHBoxLayout()
+        img_area.setSpacing(12)
+
+        # Preview box
+        preview_card = QFrame()
+        preview_card.setFixedSize(120, 120)
+        preview_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border: 1px solid {C['border']}; border-radius: 6px;")
+        pv_lo = QVBoxLayout(preview_card)
+        pv_lo.setContentsMargins(4, 4, 4, 4)
+        self._preview = QLabel("No image")
+        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview.setStyleSheet(f"color: {C['text_dark']}; font-size: 11px; background: transparent;")
+        self._preview.setFixedSize(112, 112)
+        pv_lo.addWidget(self._preview)
+        img_area.addWidget(preview_card)
+
+        # Right side: capture + browse + hint
+        img_right = QVBoxLayout()
+        img_right.setSpacing(6)
+        img_right.setAlignment(Qt.AlignmentFlag.AlignTop)
+        cap_row = QHBoxLayout()
+        capture_btn = QPushButton("Capture...")
+        capture_btn.setObjectName("compact")
+        capture_btn.clicked.connect(self._capture_image)
+        cap_row.addWidget(capture_btn)
+        browse_btn = QPushButton("Browse")
+        browse_btn.setObjectName("compact")
+        browse_btn.clicked.connect(self._browse_image)
+        cap_row.addWidget(browse_btn)
+        cap_row.addStretch()
+        img_right.addLayout(cap_row)
+        hint = QLabel('Click "Capture" then drag to select an area on screen.\nRecommended size: 50x50px or less for best performance.')
+        hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        hint.setWordWrap(True)
+        img_right.addWidget(hint)
+        img_area.addLayout(img_right, stretch=1)
+        lo.addLayout(img_area)
+
+        # Hidden path field (preserves data flow)
         self.img_path = QLineEdit()
-        self.img_path.setPlaceholderText("Select image file...")
-        self.img_path.setReadOnly(True)
+        self.img_path.setVisible(False)
         if existing and existing.image_data:
             self.img_path.setText("<loaded>")
             self._img_data = existing.image_data
+            self._show_preview(existing.image_data)
         else:
             self._img_data = ""
-        browse = QPushButton("Browse")
-        browse.setObjectName("compact")
-        browse.clicked.connect(self._browse_image)
-        capture = QPushButton("Capture")
-        capture.setObjectName("compact")
-        capture.clicked.connect(self._capture_image)
-        img_row.addWidget(self.img_path, stretch=1)
-        img_row.addWidget(browse)
-        img_row.addWidget(capture)
-        lo.addLayout(img_row)
 
-        # Preview
-        self._preview = QLabel()
-        self._preview.setFixedHeight(120)
-        self._preview.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 6px;")
-        self._preview.setScaledContents(True)
-        lo.addWidget(self._preview)
+        # -- Extra templates --
+        extra_lbl = QLabel("Additional templates (OR match - any will trigger):")
+        extra_lbl.setStyleSheet(f"color: {C['text']}; font-size: 12px; font-weight: bold;")
+        lo.addWidget(extra_lbl)
 
-        # ── EXTRA TEMPLATES (OR match) ──
-        _section("ADDITIONAL TEMPLATES  (OR match)", "#a78bfa", lo)
         extra_card = QFrame()
         extra_card.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 6px;")
         extra_lo = QHBoxLayout(extra_card)
-        extra_lo.setContentsMargins(6, 6, 6, 6)
-        extra_lo.setSpacing(6)
+        extra_lo.setContentsMargins(8, 8, 8, 8)
+        extra_lo.setSpacing(8)
         self._extra_scroll = QScrollArea()
         self._extra_scroll.setWidgetResizable(True)
         self._extra_scroll.setFixedHeight(66)
@@ -172,9 +180,12 @@ class ImageDialog(QDialog):
         self._extra_flow.setSpacing(6)
         self._extra_flow.setContentsMargins(4, 4, 4, 4)
         self._extra_flow.addStretch()
+        no_extra = QLabel("No extra templates")
+        no_extra.setStyleSheet(f"color: {C['text_dark']}; font-size: 11px; font-style: italic;")
+        self._extra_flow.insertWidget(0, no_extra)
         self._extra_scroll.setWidget(self._extra_container)
         extra_lo.addWidget(self._extra_scroll, stretch=1)
-        add_extra = QPushButton("+ Capture extra")
+        add_extra = QPushButton("+ Add extra template")
         add_extra.setObjectName("compact")
         add_extra.clicked.connect(self._capture_extra)
         extra_lo.addWidget(add_extra)
@@ -185,46 +196,46 @@ class ImageDialog(QDialog):
             for b64 in [x for x in existing.extra_images.split("|") if x]:
                 self._add_extra_thumb(b64)
 
-        # ── DETECTION ──
-        det_frame = QFrame()
-        det_lo = QHBoxLayout(det_frame)
-        det_lo.setSpacing(12)
-        det_lo.setContentsMargins(0, 0, 0, 0)
+        lo.addWidget(_hsep(C['border']))
 
-        # Left: Match Settings
-        lcard = QFrame()
-        lcard.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
-        llo = QVBoxLayout(lcard)
-        llo.setContentsMargins(10, 8, 10, 8)
-        llo.setSpacing(6)
-        _section("MATCH SETTINGS", "#f59e0b", llo)
-
-        # Similarity as percentage (v1.1.0 style)
-        sim_pct = int(round((1.0 - float(getattr(existing, 'similarity', 0.95))) * 100)) if existing else 5
+        # -- Similarity --
         sim_row = QHBoxLayout()
-        sim_row.addWidget(QLabel("Similarity"))
+        sim_row.setSpacing(8)
+        sim_lbl = QLabel("Similarity coefficient")
+        sim_lbl.setStyleSheet(f"color: {C['text']}; font-size: 12px; font-weight: bold;")
+        sim_row.addWidget(sim_lbl)
         self.sim_pct = QSpinBox()
         self.sim_pct.setRange(0, 100)
-        self.sim_pct.setValue(sim_pct)
+        sim_pct_val = int(round((1.0 - float(getattr(existing, 'similarity', 0.95))) * 100)) if existing else 5
+        self.sim_pct.setValue(sim_pct_val)
         self.sim_pct.setFixedWidth(55)
         sim_row.addWidget(self.sim_pct)
-        sim_row.addWidget(QLabel("%  (5 = recommended)"))
+        sim_note = QLabel('("0" means "identical", and is recommended)')
+        sim_note.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        sim_row.addWidget(sim_note)
         sim_row.addStretch()
-        llo.addLayout(sim_row)
+        lo.addLayout(sim_row)
 
-        llo.addWidget(_hsep(C['border']))
+        # -- Position mouse --
+        self.pos_mouse = QCheckBox("Position mouse on image if found (moves to match before any action)")
+        self.pos_mouse.setChecked(getattr(existing, 'position_mouse', False) if existing else False)
+        self.pos_mouse.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        lo.addWidget(self.pos_mouse)
 
-        # Search region radios
-        reg_lbl = QLabel("Search Region:")
-        reg_lbl.setStyleSheet(f"color: {C['text']}; font-size: 11px; font-weight: bold;")
-        llo.addWidget(reg_lbl)
+        # -- Search region --
+        reg_lbl = QLabel("Search region:")
+        reg_lbl.setStyleSheet(f"color: {C['text']}; font-size: 12px; font-weight: bold;")
+        lo.addWidget(reg_lbl)
+
         self._reg_group = QButtonGroup(self)
-        self.reg_whole = QRadioButton("Whole screen")
-        self.reg_fg = QRadioButton("Foreground window only")
-        self.reg_region = QRadioButton("Specific region:")
+        self.reg_whole = QRadioButton("Search the whole screen")
+        self.reg_fg = QRadioButton("Search in foreground window only")
+        self.reg_region = QRadioButton("Search specific region:")
         for rb in (self.reg_whole, self.reg_fg, self.reg_region):
             self._reg_group.addButton(rb)
-            llo.addWidget(rb)
+            rb.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+            lo.addWidget(rb)
+
         _rinit = getattr(existing, 'search_region', '') if existing else ''
         if _rinit == 'foreground':
             self.reg_fg.setChecked(True)
@@ -232,123 +243,177 @@ class ImageDialog(QDialog):
             self.reg_region.setChecked(True)
         else:
             self.reg_whole.setChecked(True)
+
         _parts = _rinit.split(",") if _rinit and ',' in _rinit else ["0","0","0","0"]
         _parts += ["0"] * (4 - len(_parts))
-        reg_f = QHBoxLayout()
-        self.reg_x = QLineEdit(_parts[0]); self.reg_x.setFixedWidth(45)
-        self.reg_y = QLineEdit(_parts[1]); self.reg_y.setFixedWidth(45)
-        self.reg_w = QLineEdit(_parts[2]); self.reg_w.setFixedWidth(45)
-        self.reg_h = QLineEdit(_parts[3]); self.reg_h.setFixedWidth(45)
-        for lbl, w in [("L:", self.reg_x), ("T:", self.reg_y), ("W:", self.reg_w), ("H:", self.reg_h)]:
-            reg_f.addWidget(QLabel(lbl))
-            reg_f.addWidget(w)
-        rcap = QPushButton("Capture")
+        reg_grid = QGridLayout()
+        reg_grid.setSpacing(6)
+        reg_grid.setContentsMargins(24, 0, 0, 0)
+        self.reg_x = QLineEdit(_parts[0]); self.reg_x.setFixedWidth(50)
+        self.reg_y = QLineEdit(_parts[1]); self.reg_y.setFixedWidth(50)
+        self.reg_w = QLineEdit(_parts[2]); self.reg_w.setFixedWidth(50)
+        self.reg_h = QLineEdit(_parts[3]); self.reg_h.setFixedWidth(50)
+        for le in (self.reg_x, self.reg_y, self.reg_w, self.reg_h):
+            le.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        reg_grid.addWidget(QLabel("Left:"), 0, 0)
+        reg_grid.addWidget(self.reg_x, 0, 1)
+        reg_grid.addWidget(QLabel("Top:"), 0, 2)
+        reg_grid.addWidget(self.reg_y, 0, 3)
+        reg_grid.addWidget(QLabel("Width:"), 0, 4)
+        reg_grid.addWidget(self.reg_w, 0, 5)
+        reg_grid.addWidget(QLabel("Height:"), 0, 6)
+        reg_grid.addWidget(self.reg_h, 0, 7)
+        rcap = QPushButton("Capture region")
         rcap.setObjectName("compact")
         rcap.clicked.connect(self._capture_region)
-        reg_f.addWidget(rcap)
-        reg_f.addStretch()
-        llo.addLayout(reg_f)
-        llo.addStretch()
+        reg_grid.addWidget(rcap, 0, 8)
+        lo.addLayout(reg_grid)
 
-        # Right: Behaviour
-        rcard = QFrame()
-        rcard.setStyleSheet(f"background-color: {C['bg_tertiary']}; border-radius: 8px;")
-        rlo = QVBoxLayout(rcard)
-        rlo.setContentsMargins(10, 8, 10, 8)
-        rlo.setSpacing(6)
-        _section("BEHAVIOUR", C['accent'], rlo)
+        lo.addWidget(_hsep(C['border']))
 
+        # -- When found / When not found --
+        when_row = QHBoxLayout()
+        when_row.setSpacing(12)
+        wf_col = QVBoxLayout()
+        wf_col.setSpacing(4)
+        wf_lbl = QLabel("When found:")
+        wf_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        wf_col.addWidget(wf_lbl)
         self.on_found = QComboBox()
         self.on_found.addItems(["continue", "click", "double_click", "move_to", "press_key"])
         self.on_found.setCurrentText(getattr(existing, 'on_found_action', 'continue') if existing else 'continue')
-        _field_row("When found", self.on_found, rlo)
+        wf_col.addWidget(self.on_found)
+        when_row.addLayout(wf_col)
 
-        fk_row = QHBoxLayout()
-        self.found_key = QLineEdit(getattr(existing, 'on_found_key', '') if existing else '')
-        self.found_key.setPlaceholderText("click then press key")
-        self.found_key.setReadOnly(True)
-        self.found_key.setFixedWidth(120)
-        fk_row.addWidget(QLabel("  Key to press"))
-        fk_row.addWidget(self.found_key)
-        fk_clr = QPushButton("Clear")
-        fk_clr.setObjectName("compact")
-        fk_clr.clicked.connect(lambda: self.found_key.setText(""))
-        fk_row.addWidget(fk_clr)
-        fk_row.addStretch()
-        rlo.addLayout(fk_row)
-        self.found_key.mousePressEvent = lambda e: self._listen_key() if self.on_found.currentText() == "press_key" else None
-        self.on_found.currentTextChanged.connect(self._update_key_state)
-
-        rlo.addWidget(_hsep(C['border']))
-
+        wnf_col = QVBoxLayout()
+        wnf_col.setSpacing(4)
+        wnf_lbl = QLabel("When not found:")
+        wnf_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        wnf_col.addWidget(wnf_lbl)
         self.on_miss = QComboBox()
         self.on_miss.addItems(["skip", "stop", "warn"])
         self.on_miss.setCurrentText(getattr(existing, 'on_not_found', 'skip') if existing else 'skip')
-        _field_row("When not found", self.on_miss, rlo)
+        wnf_col.addWidget(self.on_miss)
+        when_row.addLayout(wnf_col)
+        when_row.addStretch()
+        lo.addLayout(when_row)
 
+        # -- Key to press --
+        key_row = QHBoxLayout()
+        key_row.setSpacing(8)
+        key_lbl = QLabel("Key to press:")
+        key_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        key_row.addWidget(key_lbl)
+        self.found_key = QLineEdit(getattr(existing, 'on_found_key', '') if existing else '')
+        self.found_key.setPlaceholderText("click field then press any key")
+        self.found_key.setReadOnly(True)
+        self.found_key.setFixedWidth(140)
+        self.found_key.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        self.found_key.mousePressEvent = lambda e: self._listen_key() if self.on_found.currentText() == "press_key" else None
+        self.on_found.currentTextChanged.connect(self._update_key_state)
+        key_row.addWidget(self.found_key)
+        key_clr = QPushButton("x")
+        key_clr.setObjectName("compact")
+        key_clr.setFixedSize(24, 24)
+        key_clr.clicked.connect(lambda: self.found_key.setText(""))
+        key_row.addWidget(key_clr)
+        key_hint = QLabel("click field then press any key")
+        key_hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        key_row.addWidget(key_hint)
+        key_row.addStretch()
+        lo.addLayout(key_row)
+
+        # -- Wait for image --
+        wait_row = QHBoxLayout()
+        wait_row.setSpacing(8)
+        wait_lbl = QLabel("Wait for image:")
+        wait_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        wait_row.addWidget(wait_lbl)
         self.wait = QLineEdit(str(getattr(existing, 'wait_timeout', 10)) if existing else "10")
         self.wait.setFixedWidth(50)
-        _field_row("Wait timeout (s)", self.wait, rlo, "0 = single shot")
+        self.wait.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        wait_row.addWidget(self.wait)
+        wait_unit = QLabel("seconds (0 = single shot, up to 60s polling)")
+        wait_unit.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        wait_row.addWidget(wait_unit)
+        wait_row.addStretch()
+        lo.addLayout(wait_row)
 
-        off = QHBoxLayout()
+        # -- Click offset --
+        off_row = QHBoxLayout()
+        off_row.setSpacing(8)
+        off_lbl = QLabel("Click offset:")
+        off_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        off_row.addWidget(off_lbl)
         self.off_x = QLineEdit(str(getattr(existing, 'click_offset_x', 0)) if existing else "0")
-        self.off_x.setFixedWidth(50)
+        self.off_x.setFixedWidth(45)
+        self.off_x.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        off_row.addWidget(QLabel("X:"))
+        off_row.addWidget(self.off_x)
         self.off_y = QLineEdit(str(getattr(existing, 'click_offset_y', 0)) if existing else "0")
-        self.off_y.setFixedWidth(50)
-        off.addWidget(QLabel("Click offset"))
-        off.addWidget(QLabel("X:")); off.addWidget(self.off_x)
-        off.addWidget(QLabel("Y:")); off.addWidget(self.off_y)
-        off.addStretch()
-        rlo.addLayout(off)
+        self.off_y.setFixedWidth(45)
+        self.off_y.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        off_row.addWidget(QLabel("Y:"))
+        off_row.addWidget(self.off_y)
+        off_hint = QLabel("px offset from match centre")
+        off_hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
+        off_row.addWidget(off_hint)
+        off_row.addStretch()
+        lo.addLayout(off_row)
 
-        rlo.addWidget(_hsep(C['border']))
-
-        self.rand_click = QCheckBox("Random click within match")
+        # -- Checkboxes row --
+        chk_row = QHBoxLayout()
+        chk_row.setSpacing(16)
+        self.rand_click = QCheckBox("Random click within match (human-like)")
         self.rand_click.setChecked(getattr(existing, 'random_click', False) if existing else False)
-        self.pos_mouse = QCheckBox("Position mouse on match")
-        self.pos_mouse.setChecked(getattr(existing, 'position_mouse', False) if existing else False)
+        self.rand_click.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        chk_row.addWidget(self.rand_click)
         self.loop_found = QCheckBox("Loop sequence until found")
         self.loop_found.setChecked(getattr(existing, 'loop_until_found', False) if existing else False)
-        rlo.addWidget(self.rand_click)
-        rlo.addWidget(self.pos_mouse)
-        rlo.addWidget(self.loop_found)
-        rlo.addStretch()
+        self.loop_found.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        chk_row.addWidget(self.loop_found)
+        chk_row.addStretch()
+        lo.addLayout(chk_row)
 
-        det_lo.addWidget(lcard, stretch=1)
-        det_lo.addWidget(rcard, stretch=1)
-        lo.addWidget(det_frame)
+        lo.addWidget(_hsep(C['border']))
 
-        # ── META ──
-        _section("LABEL, REPEAT & JUMP", "#94a3b8", lo)
+        # -- Bottom meta row --
         meta = QHBoxLayout()
+        meta.setSpacing(12)
         self.lbl = QLineEdit(getattr(existing, 'label', '') if existing else '')
         self.lbl.setPlaceholderText("Label")
-        meta.addWidget(QLabel("Label")); meta.addWidget(self.lbl)
+        self.lbl.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        meta.addWidget(QLabel("Label"))
+        meta.addWidget(self.lbl)
         self.repeat = QLineEdit(str(getattr(existing, 'repeat_count', 1)) if existing else "1")
         self.repeat.setFixedWidth(40)
-        meta.addWidget(QLabel("Repeat")); meta.addWidget(self.repeat)
+        self.repeat.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        meta.addWidget(QLabel("Repeat"))
+        meta.addWidget(self.repeat)
         self.jump_found = QSpinBox()
         self.jump_found.setRange(-1, 999)
         self.jump_found.setValue(getattr(existing, 'jump_to_on_found', -1) if existing else -1)
         self.jump_found.setSpecialValueText("None")
-        meta.addWidget(QLabel("Jump found")); meta.addWidget(self.jump_found)
+        meta.addWidget(QLabel("Jump if found ->"))
+        meta.addWidget(self.jump_found)
         self.jump_miss = QSpinBox()
         self.jump_miss.setRange(-1, 999)
         self.jump_miss.setValue(getattr(existing, 'jump_to_on_not_found', -1) if existing else -1)
         self.jump_miss.setSpecialValueText("None")
-        meta.addWidget(QLabel("Jump miss")); meta.addWidget(self.jump_miss)
+        meta.addWidget(QLabel("Jump if NOT found ->"))
+        meta.addWidget(self.jump_miss)
         meta.addStretch()
         lo.addLayout(meta)
 
         lo.addStretch()
+
+        # -- Footer buttons --
         foot = QHBoxLayout()
-        foot.addWidget(QLabel("Changes are saved when you click OK"))
-        foot.itemAt(0).widget().setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; font-style: italic;")
         foot.addStretch()
         cancel = QPushButton("Cancel")
         cancel.setObjectName("compact")
         cancel.clicked.connect(self.reject)
-        ok = QPushButton("Save & Close")
+        ok = QPushButton("OK")
         ok.setObjectName("accent")
         ok.clicked.connect(self.accept)
         foot.addWidget(cancel)
@@ -357,10 +422,22 @@ class ImageDialog(QDialog):
 
         self._update_key_state()
 
+    # -- Helpers --
+    def _show_preview(self, b64):
+        try:
+            raw = base64.b64decode(b64)
+            pm = QPixmap()
+            pm.loadFromData(raw)
+            if not pm.isNull():
+                self._preview.setText("")
+                self._preview.setPixmap(pm.scaled(112, 112, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        except Exception:
+            pass
+
     def _update_key_state(self):
         enabled = self.on_found.currentText() == "press_key"
         self.found_key.setEnabled(enabled)
-        self.found_key.setPlaceholderText("click then press key" if enabled else "select 'press_key' first")
+        self.found_key.setPlaceholderText("click field then press any key" if enabled else "select 'press_key' first")
 
     def _listen_key(self):
         self.found_key.setText("press a key...")
@@ -377,7 +454,7 @@ class ImageDialog(QDialog):
                     Qt.Key.Key_Escape: "esc", Qt.Key.Key_Space: "space",
                     Qt.Key.Key_Backspace: "backspace", Qt.Key.Key_Tab: "tab",
                     Qt.Key.Key_Left: "left", Qt.Key.Key_Right: "right",
-                    Qt.Key.Key_Up: "up", Qt.Key.Key.Key_Down: "down",
+                    Qt.Key.Key_Up: "up", Qt.Key.Key_Down: "down",
                     Qt.Key.Key_PageUp: "pageup", Qt.Key.Key_PageDown: "pagedown",
                     Qt.Key.Key_Home: "home", Qt.Key.Key_End: "end",
                     Qt.Key.Key_Insert: "insert", Qt.Key.Key_Delete: "delete",
@@ -417,7 +494,13 @@ class ImageDialog(QDialog):
         wl.setSpacing(2)
         wl.addWidget(thumb, alignment=Qt.AlignmentFlag.AlignCenter)
         wl.addWidget(rem, alignment=Qt.AlignmentFlag.AlignCenter)
-        # Insert before the stretch
+        # Remove "No extra templates" label if present
+        for i in range(self._extra_flow.count()):
+            item = self._extra_flow.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), QLabel):
+                item.widget().deleteLater()
+                self._extra_flow.removeItem(item)
+                break
         self._extra_flow.insertWidget(self._extra_flow.count() - 1, w)
 
     def _remove_extra(self, index):
@@ -426,12 +509,18 @@ class ImageDialog(QDialog):
         self._rebuild_extra_flow()
 
     def _rebuild_extra_flow(self):
-        while self._extra_flow.count() > 1:
+        while self._extra_flow.count() > 0:
             item = self._extra_flow.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        for b64 in self._extra_list:
-            self._add_extra_thumb(b64)
+        if not self._extra_list:
+            no_extra = QLabel("No extra templates")
+            no_extra.setStyleSheet(f"color: {COLORS['text_dark']}; font-size: 11px; font-style: italic;")
+            self._extra_flow.addWidget(no_extra)
+        else:
+            for b64 in self._extra_list:
+                self._add_extra_thumb(b64)
+        self._extra_flow.addStretch()
 
     def _capture_extra(self):
         def _after(b64):
@@ -454,10 +543,7 @@ class ImageDialog(QDialog):
                     data = f.read()
                 self._img_data = base64.b64encode(data).decode()
                 self.img_path.setText(path)
-                pm = QPixmap()
-                pm.loadFromData(data)
-                if not pm.isNull():
-                    self._preview.setPixmap(pm.scaledToHeight(120, Qt.TransformationMode.SmoothTransformation))
+                self._show_preview(self._img_data)
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -465,14 +551,7 @@ class ImageDialog(QDialog):
         def _after(b64):
             self._img_data = b64
             self.img_path.setText("Captured")
-            try:
-                raw = base64.b64decode(b64)
-                pm = QPixmap()
-                pm.loadFromData(raw)
-                if not pm.isNull():
-                    self._preview.setPixmap(pm.scaledToHeight(120, Qt.TransformationMode.SmoothTransformation))
-            except Exception:
-                pass
+            self._show_preview(b64)
         self._do_capture(_after, "Capture screen region")
 
     def _do_capture(self, callback, title_text, return_region=False):
@@ -514,20 +593,23 @@ class ImageDialog(QDialog):
         try:
             sim_pct = max(0, min(100, int(self.sim_pct.value())))
             sim = round(1.0 - sim_pct / 100.0, 4)
-            wait = float(self.wait.text())
-            off_x = int(self.off_x.text())
-            off_y = int(self.off_y.text())
-            repeat = int(self.repeat.text())
+            wait = float(self.wait.text() or "0")
+            off_x = int(self.off_x.text() or "0")
+            off_y = int(self.off_y.text() or "0")
+            repeat = int(self.repeat.text() or "1")
         except ValueError:
             return None
         if not self._img_data:
             QMessageBox.warning(self, "No Image", "Please select or capture an image.")
             return None
-        # Resolve region
         if self.reg_fg.isChecked():
             region = "foreground"
         elif self.reg_region.isChecked():
-            region = f"{self.reg_x.text()},{self.reg_y.text()},{self.reg_w.text()},{self.reg_h.text()}"
+            rx = self.reg_x.text() or "0"
+            ry = self.reg_y.text() or "0"
+            rw = self.reg_w.text() or "0"
+            rh = self.reg_h.text() or "0"
+            region = f"{rx},{ry},{rw},{rh}"
         else:
             region = ""
         return Action(

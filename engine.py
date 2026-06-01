@@ -3,7 +3,6 @@ import threading
 import random
 import base64
 import io
-import os
 import ctypes
 from copy import deepcopy
 
@@ -59,7 +58,6 @@ class ExecutionEngine:
         self.loops = 1
 
     def start(self):
-        import threading
         t = threading.Thread(target=self.run, args=(self.loops,), daemon=True)
         t.start()
 
@@ -330,6 +328,7 @@ class ExecutionEngine:
                     self.status(f"Loop {loop_num + 1}/{loops}")
  
                 loop_actions_executed = 0
+                self.progress_cb(0)
                 _restart_loop = False
                 i = 0
                 while i < len(self.actions):

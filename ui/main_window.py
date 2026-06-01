@@ -1919,9 +1919,12 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def refresh(self):
-        self._invalidate_seq_dur()
-        self.timeline.set_actions(self.engine.actions)
-        self.update_statistics()
+        try:
+            self._invalidate_seq_dur()
+            self.timeline.set_actions(self.engine.actions)
+            self.update_statistics()
+        except Exception:
+            logger.exception("refresh() crashed")
 
     def open_debug_viewer(self):
         try:
@@ -2008,9 +2011,8 @@ class MainWindow(QMainWindow):
                     self.timeline.ensure_visible(self.active_index)
                     self.save_session()
                     self.status("Added image search")
-        except Exception as e:
-            logger.error(f"_open_image_dialog: {e}")
-            raise
+        except Exception:
+            logger.exception("_open_image_dialog crashed")
 
     def _open_capture_dialog(self):
         try:
@@ -2026,9 +2028,8 @@ class MainWindow(QMainWindow):
                     self.timeline.ensure_visible(self.active_index)
                     self.save_session()
                     self.status("Added captured image search")
-        except Exception as e:
-            logger.error(f"_open_capture_dialog: {e}")
-            raise
+        except Exception:
+            logger.exception("_open_capture_dialog crashed")
 
     def _open_key_editor(self, index):
         from ui.dialogs.key_dialog import KeyDialog

@@ -76,10 +76,12 @@ class _PoolRow(QGraphicsItemGroup):
         self._idx_txt.setPos(int(ci), text_y)
 
         for child in list(self._icon_grp.childItems()):
+            self._icon_grp.removeFromGroup(child)
             if child.scene():
                 self._scene.removeItem(child)
-        if self._img_item and self._img_item.scene():
-            self._scene.removeItem(self._img_item)
+        if self._img_item:
+            if self._img_item.scene():
+                self._scene.removeItem(self._img_item)
             self._img_item = None
 
         has_image = t == "image" and getattr(action, "image_data", "")
@@ -159,14 +161,21 @@ class _PoolRow(QGraphicsItemGroup):
         if not data: return
         try:
             img_bytes = base64.b64decode(data)
-            pixmap = QPixmap(); pixmap.loadFromData(img_bytes)
-            if pixmap.isNull(): return
+            if not img_bytes: return
+            pixmap = QPixmap()
+            if not pixmap.loadFromData(img_bytes):
+                return
+            if pixmap.isNull() or pixmap.width() == 0 or pixmap.height() == 0:
+                return
             scaled = pixmap.scaled(34, 22, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            if scaled.isNull() or scaled.width() == 0 or scaled.height() == 0:
+                return
             self._img_item = QGraphicsPixmapItem(scaled)
             self._img_item.setPos(int(thumb_x), int(cy - scaled.height() // 2))
             self._img_item.setZValue(2)
             self._icon_grp.addToGroup(self._img_item)
-        except Exception: pass
+        except Exception:
+            pass
 
     def animate(self, is_playing, is_active, is_hover, is_multi, action_dur, action_start, paused, paused_at, pause_offset, w, row_h):
         C = COLORS
@@ -237,8 +246,13 @@ class _PoolRow(QGraphicsItemGroup):
         self.hide()
         self._bound_idx = -1
         self._cache_key = None
-        if self._img_item and self._img_item.scene():
-            self._scene.removeItem(self._img_item)
+        for child in list(self._icon_grp.childItems()):
+            self._icon_grp.removeFromGroup(child)
+            if child.scene():
+                self._scene.removeItem(child)
+        if self._img_item:
+            if self._img_item.scene():
+                self._scene.removeItem(self._img_item)
             self._img_item = None
 
 

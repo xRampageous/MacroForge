@@ -1,6 +1,6 @@
 {
-  "version": "1.2.32",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.32/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.32/MacroForge-v1.2.32.zip",
-  "notes": "v1.2.32: Fixed crash when adding image actions to timeline \u2014 removed duplicate scene.addItem in _draw_image and added scene() guards before removeItem. v1.2.31: Fixed cv2 startup crash with noarchive=True. v1.2.30: Fixed timeline playback with pyqtSignal. v1.2.29: cv2 collect_all fix. v1.2.28: Excluded tkinter."
+  "version": "1.2.33",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.33/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.33/MacroForge-v1.2.33.zip",
+  "notes": "v1.2.33: Fixed progress bar to reset to 0% at start of each loop. Hardened image action dialog and timeline rendering against crashes. v1.2.32: Fixed crash when adding image actions to timeline \u2014 removed duplicate scene.addItem in _draw_image and added scene() guards before removeItem. v1.2.31: Fixed cv2 startup crash with noarchive=True. v1.2.30: Fixed timeline playback with pyqtSignal. v1.2.29: cv2 collect_all fix. v1.2.28: Excluded tkinter."
 }
