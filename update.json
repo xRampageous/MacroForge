@@ -1,6 +1,6 @@
 {
-  "version": "1.2.45",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.45/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.45/MacroForge-v1.2.45.zip",
-  "notes": "v1.2.45: Using minimize() instead of hide() to clear dialog from screen - may prevent premature exec() return. v1.2.44: Removed hide/show cycle, fixed debug log truncation. v1.2.43: Fixed white capture issue."
+  "version": "1.2.46",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.46/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.46/MacroForge-v1.2.46.zip",
+  "notes": "v1.2.46: Removed WA_ShowWithoutActivating from CaptureOverlay to fix mouse event blocking, added logging to track dialog result. v1.2.45: Using minimize() instead of hide(). v1.2.44: Removed hide/show cycle, fixed debug log truncation."
 }

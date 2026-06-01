@@ -32,7 +32,7 @@ class CaptureOverlay(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        # Removed WA_ShowWithoutActivating - was blocking mouse events
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         screen = QApplication.primaryScreen()
         self.setGeometry(screen.geometry())
@@ -608,6 +608,7 @@ class ImageDialog(QDialog):
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
         # Minimize dialog instead of hiding to avoid triggering exec() return
+        logger.debug("image_dialog._do_capture: minimizing dialog")
         self.showMinimized()
         import time
         time.sleep(0.1)
@@ -640,9 +641,11 @@ class ImageDialog(QDialog):
         else:
             logger.debug("image_dialog._do_capture: no region selected")
         # Restore dialog after capture
+        logger.debug("image_dialog._do_capture: restoring dialog")
         self.showNormal()
         self.raise_()
         self.activateWindow()
+        logger.debug(f"image_dialog._do_capture: dialog result after restore={self.result()}")
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
