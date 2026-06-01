@@ -196,7 +196,7 @@ class ImageDialog(QDialog):
         extra_lo.addWidget(add_extra)
         lo.addWidget(extra_card)
         self._extra_list = []
-                if existing and existing.extra_images:
+        if existing and existing.extra_images:
             for b64 in [x for x in existing.extra_images.split("|") if x]:
                 self._add_extra_thumb(b64)
 
