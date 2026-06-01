@@ -21,15 +21,19 @@ def _hsep(color):
     return f
 
 
-class CaptureOverlay(QDialog):
+class CaptureOverlay(QWidget):
     """Fullscreen overlay for selecting a screen region to capture."""
-    def __init__(self):
+    closed = pyqtSignal()
+    def __init__(self, parent_dialog):
         super().__init__(None)
+        self.parent_dialog = parent_dialog
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         screen = QApplication.primaryScreen()
         self.setGeometry(screen.geometry())
@@ -37,6 +41,7 @@ class CaptureOverlay(QDialog):
         self._end = None
         self._dragging = False
         self.region = None
+        self._closed = False
         self.setMouseTracking(True)
         
         # Add instruction label
@@ -53,7 +58,7 @@ class CaptureOverlay(QDialog):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 120))
         if self._start and self._end:
             r = QRect(self._start, self._end).normalized()
             painter.setPen(QPen(QColor(COLORS["accent"]), 2))
@@ -84,12 +89,19 @@ class CaptureOverlay(QDialog):
             r = QRect(self._start, self._end).normalized()
             if r.width() > 2 and r.height() > 2:
                 self.region = (r.left(), r.top(), r.width(), r.height())
-            self.accept()
+            self._do_close()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.region = None
-            self.reject()
+            self._do_close()
+
+    def _do_close(self):
+        if not self._closed:
+            self._closed = True
+            self.closed.emit()
+            self.close()
+            self.deleteLater()
 
 
 class ImageDialog(QDialog):
@@ -609,18 +621,19 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
-        # Hide parent dialog completely (like tkinter withdraw)
-        logger.debug("image_dialog._do_capture: hiding dialog")
-        self.hide()
-        import time
-        time.sleep(0.1)
-        # Show overlay as modal dialog (like tkinter grab_set)
-        overlay = CaptureOverlay()
-        logger.debug("image_dialog._do_capture: showing overlay")
-        result = overlay.exec()
-        logger.debug(f"image_dialog._do_capture: overlay returned result={result}")
+        # Show non-modal overlay - covers screen including this dialog
+        logger.debug("image_dialog._do_capture: creating overlay")
+        overlay = CaptureOverlay(self)
+        loop = QEventLoop()
+        overlay.closed.connect(loop.quit)
+        overlay.show()
+        overlay.raise_()
+        overlay.activateWindow()
+        logger.debug("image_dialog._do_capture: waiting for overlay")
+        loop.exec()
+        logger.debug("image_dialog._do_capture: overlay closed")
         # Capture after overlay closes
-        if result == QDialog.DialogCode.Accepted and overlay.region:
+        if overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
             if return_region:
@@ -639,11 +652,6 @@ class ImageDialog(QDialog):
         else:
             logger.debug("image_dialog._do_capture: no region selected or cancelled")
             callback(None)
-        # Show parent dialog again (like tkinter deiconify)
-        logger.debug("image_dialog._do_capture: showing dialog")
-        self.show()
-        self.raise_()
-        self.activateWindow()
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
