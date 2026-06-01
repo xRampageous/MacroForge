@@ -178,6 +178,9 @@ class MainWindow(QMainWindow):
         self._check_update_silent()
         self.load_last_session()
         self._restore_window_geometry()
+        # Periodic update check every 5 minutes
+        QTimer.singleShot(5 * 60 * 1000, self._check_update_silent)
+        QTimer.singleShot(5 * 60 * 1000, lambda: QTimer.singleShot(5 * 60 * 1000, self._check_update_silent))
 
     # ═══════════════════════════════════════════════════════
     #  UI CONSTRUCTION

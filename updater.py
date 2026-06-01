@@ -317,8 +317,6 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
         subprocess.Popen(
             ["cmd", "/c", str(bat)],
             creationflags=subprocess.CREATE_NEW_CONSOLE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
         logger.info("Updater launched — exiting for replacement.")
         return True
