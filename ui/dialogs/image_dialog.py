@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QFrame, QSpinBox, QWidget, QApplication, QGridLayout,
     QScrollArea, QRadioButton, QButtonGroup
 )
-from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtCore import Qt, QRect, QEventLoop, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QCursor
 from models import Action
 from ui.theme import COLORS
@@ -23,6 +23,7 @@ def _hsep(color):
 
 class CaptureOverlay(QWidget):
     """Fullscreen overlay for selecting a screen region to capture."""
+    closed = pyqtSignal()
     def __init__(self):
         super().__init__(None)
         self.setWindowFlags(
@@ -84,6 +85,7 @@ class CaptureOverlay(QWidget):
     def _do_close(self):
         if not self._closed:
             self._closed = True
+            self.closed.emit()
             self.close()
             self.deleteLater()
 
@@ -427,13 +429,25 @@ class ImageDialog(QDialog):
     def _show_preview(self, b64):
         try:
             raw = base64.b64decode(b64)
+            if not raw:
+                logger.debug("_show_preview: empty raw data")
+                return
             pm = QPixmap()
-            pm.loadFromData(raw)
-            if not pm.isNull():
-                self._preview.setText("")
-                self._preview.setPixmap(pm.scaled(112, 112, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            if not pm.loadFromData(raw):
+                logger.debug("_show_preview: loadFromData failed")
+                return
+            if pm.isNull() or pm.width() == 0 or pm.height() == 0:
+                logger.debug(f"_show_preview: invalid pixmap {pm.width()}x{pm.height()}")
+                return
+            scaled = pm.scaled(112, 112, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            if scaled.isNull() or scaled.width() == 0 or scaled.height() == 0:
+                logger.debug("_show_preview: scaled pixmap invalid")
+                return
+            logger.debug(f"_show_preview: showing {scaled.width()}x{scaled.height()} pixmap")
+            self._preview.setText("")
+            self._preview.setPixmap(scaled)
         except Exception:
-            pass
+            logger.exception("_show_preview: exception")
 
     def _update_key_state(self):
         enabled = self.on_found.currentText() == "press_key"
@@ -570,12 +584,14 @@ class ImageDialog(QDialog):
         import time
         time.sleep(0.15)
         overlay = CaptureOverlay()
+        loop = QEventLoop()
+        overlay.closed.connect(loop.quit)
         overlay.show()
         overlay.raise_()
         overlay.activateWindow()
-        while not overlay._closed:
-            QApplication.processEvents()
-            time.sleep(0.016)
+        logger.debug("image_dialog._do_capture: starting event loop")
+        loop.exec()
+        logger.debug("image_dialog._do_capture: event loop finished")
         time.sleep(0.05)
         self.show()
         self.raise_()

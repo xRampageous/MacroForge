@@ -39,6 +39,7 @@ class _PoolRow(QGraphicsItemGroup):
         return max(8, int(w * 0.03)), max(40, int(w * 0.12)), max(80, int(w * 0.22)), int((w - max(80, int(w * 0.22))) / 2), min(max(200, int(w * 0.68)), w - 90), min(max(260, int(w * 0.82)), w - 30)
 
     def update_content(self, action, index, zoom, w, row_h):
+        logger.debug(f"timeline.update_content: idx={index} type={getattr(action, 'action_type', 'key')}")
         t = getattr(action, "action_type", "key")
         color = TYPE_COLORS.get(t, COLORS["text_dim"])
         pad = 4
@@ -158,24 +159,33 @@ class _PoolRow(QGraphicsItemGroup):
 
     def _draw_image(self, action, thumb_x, cy):
         data = getattr(action, "image_data", "")
-        if not data: return
+        if not data:
+            logger.debug("timeline._draw_image: no data")
+            return
         try:
             img_bytes = base64.b64decode(data)
-            if not img_bytes: return
+            if not img_bytes:
+                logger.debug("timeline._draw_image: empty decoded bytes")
+                return
             pixmap = QPixmap()
             if not pixmap.loadFromData(img_bytes):
+                logger.debug("timeline._draw_image: loadFromData failed")
                 return
             if pixmap.isNull() or pixmap.width() == 0 or pixmap.height() == 0:
+                logger.debug(f"timeline._draw_image: invalid pixmap {pixmap.width()}x{pixmap.height()}")
                 return
             scaled = pixmap.scaled(34, 22, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             if scaled.isNull() or scaled.width() == 0 or scaled.height() == 0:
+                logger.debug("timeline._draw_image: scaled invalid")
                 return
+            logger.debug(f"timeline._draw_image: creating QGraphicsPixmapItem {scaled.width()}x{scaled.height()}")
             self._img_item = QGraphicsPixmapItem(scaled)
             self._img_item.setPos(int(thumb_x), int(cy - scaled.height() // 2))
             self._img_item.setZValue(2)
             self._icon_grp.addToGroup(self._img_item)
+            logger.debug("timeline._draw_image: added to icon group")
         except Exception:
-            pass
+            logger.exception("timeline._draw_image: exception")
 
     def animate(self, is_playing, is_active, is_hover, is_multi, action_dur, action_start, paused, paused_at, pause_offset, w, row_h):
         C = COLORS
