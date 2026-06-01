@@ -415,15 +415,43 @@ class ImageDialog(QDialog):
         foot.addStretch()
         cancel = QPushButton("Cancel")
         cancel.setObjectName("compact")
-        cancel.clicked.connect(self.reject)
+        cancel.clicked.connect(self._on_cancel_clicked)
         ok = QPushButton("OK")
         ok.setObjectName("accent")
-        ok.clicked.connect(self.accept)
+        ok.clicked.connect(self._on_ok_clicked)
         foot.addWidget(cancel)
         foot.addWidget(ok)
         lo.addLayout(foot)
 
         self._update_key_state()
+
+    def _on_ok_clicked(self):
+        logger.debug("ImageDialog._on_ok_clicked")
+        self.accept()
+
+    def _on_cancel_clicked(self):
+        logger.debug("ImageDialog._on_cancel_clicked")
+        self.reject()
+
+    def accept(self):
+        logger.debug("ImageDialog.accept: enter")
+        try:
+            super().accept()
+            logger.debug("ImageDialog.accept: super().accept() returned")
+        except Exception:
+            logger.exception("ImageDialog.accept: exception")
+
+    def reject(self):
+        logger.debug("ImageDialog.reject: enter")
+        try:
+            super().reject()
+            logger.debug("ImageDialog.reject: super().reject() returned")
+        except Exception:
+            logger.exception("ImageDialog.reject: exception")
+
+    def closeEvent(self, event):
+        logger.debug("ImageDialog.closeEvent")
+        super().closeEvent(event)
 
     # -- Helpers --
     def _show_preview(self, b64):

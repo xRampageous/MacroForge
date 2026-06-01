@@ -1999,61 +1999,65 @@ class MainWindow(QMainWindow):
 
     def _open_image_dialog(self):
         try:
-            logger.debug("_open_image_dialog: start")
+            logger.info("_open_image_dialog: START")
             from ui.dialogs.image_dialog import ImageDialog
-            logger.debug("_open_image_dialog: imported ImageDialog")
+            logger.info("_open_image_dialog: imported")
             dlg = ImageDialog(self)
-            logger.debug("_open_image_dialog: created dialog")
+            logger.info("_open_image_dialog: dialog created")
             rc = dlg.exec()
-            logger.debug(f"_open_image_dialog: dialog returned {rc}")
-            if rc == QDialog.DialogCode.Accepted:
-                logger.debug("_open_image_dialog: calling get_action()")
+            logger.info(f"_open_image_dialog: dialog returned rc={rc}")
+            if rc:
+                logger.info("_open_image_dialog: calling get_action")
                 act = dlg.get_action()
-                logger.debug(f"_open_image_dialog: get_action returned {act is not None}")
+                logger.info(f"_open_image_dialog: get_action done act={act is not None}")
                 if act:
-                    logger.debug("_open_image_dialog: pushing history")
+                    logger.info("_open_image_dialog: pushing history")
                     self.history.push(self.engine.actions)
-                    logger.debug("_open_image_dialog: appending action")
+                    logger.info("_open_image_dialog: appending action")
                     self.engine.actions.append(act)
                     self.active_index = len(self.engine.actions) - 1
-                    logger.debug("_open_image_dialog: calling refresh()")
+                    logger.info("_open_image_dialog: calling refresh")
                     self.refresh()
-                    logger.debug("_open_image_dialog: calling ensure_visible")
+                    logger.info("_open_image_dialog: calling ensure_visible")
                     self.timeline.ensure_visible(self.active_index)
-                    logger.debug("_open_image_dialog: calling save_session")
+                    logger.info("_open_image_dialog: calling save_session")
                     self.save_session()
                     self.status("Added image search")
-                    logger.debug("_open_image_dialog: done")
+                    logger.info("_open_image_dialog: DONE")
+            else:
+                logger.info("_open_image_dialog: dialog cancelled/rejected")
         except Exception:
             logger.exception("_open_image_dialog crashed")
 
     def _open_capture_dialog(self):
         try:
-            logger.debug("_open_capture_dialog: start")
+            logger.info("_open_capture_dialog: START")
             from ui.dialogs.image_dialog import ImageDialog
-            logger.debug("_open_capture_dialog: imported ImageDialog")
+            logger.info("_open_capture_dialog: imported")
             dlg = ImageDialog(self)
-            logger.debug("_open_capture_dialog: created dialog")
+            logger.info("_open_capture_dialog: dialog created")
             rc = dlg.exec()
-            logger.debug(f"_open_capture_dialog: dialog returned {rc}")
-            if rc == QDialog.DialogCode.Accepted:
-                logger.debug("_open_capture_dialog: calling get_action()")
+            logger.info(f"_open_capture_dialog: dialog returned rc={rc}")
+            if rc:
+                logger.info("_open_capture_dialog: calling get_action")
                 act = dlg.get_action()
-                logger.debug(f"_open_capture_dialog: get_action returned {act is not None}")
+                logger.info(f"_open_capture_dialog: get_action done act={act is not None}")
                 if act:
-                    logger.debug("_open_capture_dialog: pushing history")
+                    logger.info("_open_capture_dialog: pushing history")
                     self.history.push(self.engine.actions)
-                    logger.debug("_open_capture_dialog: appending action")
+                    logger.info("_open_capture_dialog: appending action")
                     self.engine.actions.append(act)
                     self.active_index = len(self.engine.actions) - 1
-                    logger.debug("_open_capture_dialog: calling refresh()")
+                    logger.info("_open_capture_dialog: calling refresh")
                     self.refresh()
-                    logger.debug("_open_capture_dialog: calling ensure_visible")
+                    logger.info("_open_capture_dialog: calling ensure_visible")
                     self.timeline.ensure_visible(self.active_index)
-                    logger.debug("_open_capture_dialog: calling save_session")
+                    logger.info("_open_capture_dialog: calling save_session")
                     self.save_session()
                     self.status("Added captured image search")
-                    logger.debug("_open_capture_dialog: done")
+                    logger.info("_open_capture_dialog: DONE")
+            else:
+                logger.info("_open_capture_dialog: dialog cancelled/rejected")
         except Exception:
             logger.exception("_open_capture_dialog crashed")
 

@@ -92,11 +92,23 @@ class DebugLogger:
             self._approx_size += len(line.encode("utf-8"))
             if self._approx_size > 5 * 1024 * 1024:
                 self._approx_size = len(line.encode("utf-8"))
+                old_path = self.log_path + ".old"
+                try:
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                    if os.path.exists(self.log_path):
+                        os.rename(self.log_path, old_path)
+                except Exception:
+                    pass
                 with open(self.log_path, "w", encoding="utf-8") as f:
                     f.write(line)
+                    f.flush()
+                    os.fsync(f.fileno())
             else:
                 with open(self.log_path, "a", encoding="utf-8") as f:
                     f.write(line)
+                    f.flush()
+                    os.fsync(f.fileno())
         except Exception:
             pass
 
