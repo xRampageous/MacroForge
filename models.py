@@ -1,51 +1,11 @@
 import sys
 import os
 import json
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
 from copy import deepcopy
 from datetime import datetime
 from collections import deque
-
-@dataclass(slots=True)
-class Config:
-    """Application configuration"""
-    colors: Dict[str, str] = None
-    session_file: str = "macroforge_session.json"
-    retry_count: int = 3
-    retry_delay: float = 0.1
-    history_max_size: int = 50
-    min_duration: float = 0.1
-
-    def __post_init__(self):
-        if self.colors is None:
-            self.colors = {
-                "bg":               "#0b0b11",
-                "bg_secondary":     "#111118",
-                "bg_tertiary":      "#181824",
-                "accent":           "#20b87e",  # Vivid emerald green
-                "accent_secondary": "#178a5e",  # Deeper green for hover
-                "accent_glow":      "#0d2a1e",
-                "text":             "#e8eaf0",
-                "text_dim":         "#55566a",
-                "border":           "#252535",
-                "highlight":        "#20b87e",
-                "lane":             "#2a3a4c",
-                "lane_glow":        "#1a2535",
-                "pause":            "#6b5740",
-                "pause_glow":       "#2e2418",
-                "error":            "#f05555",
-                "hover":            "#1e1e2e",
-                "playing":          "#38b4a8",  # Teal for playing row
-                "playing_glow":     "#0d2520",
-                "success":          "#44ee88",
-                "warning":          "#f0a844",
-                "neon_blue":        "#38b4ff",
-                "neon_purple":      "#d26bff",
-                "neon_gold":        "#f0a844",
-                "glass":            "#ffffff08",
-                "shadow":           "#00000040"
-            }
 
 # =========================================================
 # DATA MODEL
