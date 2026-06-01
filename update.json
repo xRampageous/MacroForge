@@ -1,6 +1,6 @@
 {
-  "version": "1.2.28",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.28/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.28/MacroForge-v1.2.28.zip",
-  "notes": "v1.2.28: Fixed startup crash caused by PyInstaller bundling tkinter (excluded from build). Timeline playback indicator visibility improved. CSV export/import now preserves action_type and label. v1.2.27: Timeline row pooling rewrite. v1.2.26: Updater dialog cleanup. v1.2.25: Timeline rebuild, updater auto-exit fix."
+  "version": "1.2.29",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.29/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.29/MacroForge-v1.2.29.zip",
+  "notes": "v1.2.29: Fixed cv2/OpenCV bundling error that caused startup crash after tkinter fix. Uses collect_all() for cv2 binaries, datas, and hiddenimports. v1.2.28: Excluded tkinter from build. v1.2.27: Timeline row pooling rewrite. v1.2.26: Updater dialog cleanup. v1.2.25: Timeline rebuild, updater auto-exit fix."
 }

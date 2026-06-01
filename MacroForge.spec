@@ -24,6 +24,8 @@ pyqt6_hiddenimports = [
 pyqt6_binaries = []
 pyqt6_datas = []
 
+cv2_binaries, cv2_datas, cv2_hidden = collect_all('cv2')
+
 # PyInstaller hooks for PyQt6 handle platform plugins automatically.
 # We only add extra dynamic libs if the hooks miss anything.
 for pkg in ('PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets'):
@@ -71,9 +73,9 @@ datas = [
 a = Analysis(
     ['MacroForge.py'],
     pathex=[SPEC_DIR],
-    binaries=pyqt6_binaries,
-    datas=datas + pyqt6_datas,
-    hiddenimports=pyqt6_hiddenimports + project_hiddenimports,
+    binaries=pyqt6_binaries + cv2_binaries,
+    datas=datas + pyqt6_datas + cv2_datas,
+    hiddenimports=pyqt6_hiddenimports + project_hiddenimports + cv2_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
