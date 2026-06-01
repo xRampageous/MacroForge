@@ -607,6 +607,9 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
+        self.hide()
+        import time
+        time.sleep(0.1)
         overlay = CaptureOverlay()
         loop = QEventLoop()
         overlay.closed.connect(loop.quit)
@@ -616,6 +619,10 @@ class ImageDialog(QDialog):
         logger.debug("image_dialog._do_capture: starting event loop")
         loop.exec()
         logger.debug("image_dialog._do_capture: event loop finished")
+        time.sleep(0.05)
+        self.show()
+        self.raise_()
+        self.activateWindow()
         if overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")

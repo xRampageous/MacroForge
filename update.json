@@ -1,6 +1,6 @@
 {
-  "version": "1.2.39",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.39/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.39/MacroForge-v1.2.39.zip",
-  "notes": "v1.2.39: Fixed updater console output (removed stdout/stderr redirection), added periodic update check every 5 minutes. v1.2.38: Removed QApplication.processEvents() and hide/show cycle from _do_capture \u2014 these were causing the dialog's exec() to return prematurely. v1.2.37: DISABLED global hotkeys (pynput) \u2014 they interfere with Qt modal dialogs. v1.2.36: Added logging to ImageDialog accept/reject/closeEvent."
+  "version": "1.2.40",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.40/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.40/MacroForge-v1.2.40.zip",
+  "notes": "v1.2.40: Restored hide/show cycle in _do_capture without processEvents() \u2014 dialog now hides before overlay appears so capture works, but no premature exec() return. v1.2.39: Fixed updater console output (removed stdout/stderr redirection), added periodic update check every 5 minutes. v1.2.38: Removed QApplication.processEvents() and hide/show cycle from _do_capture."
 }
