@@ -1,6 +1,6 @@
 {
-  "version": "1.2.9",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.9/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.9/MacroForge-v1.2.9.zip",
-  "notes": "v1.2.9: Fixed profile timeline overlay on switch, timeline playing animations (visible green highlight + progress bar), speed-adjusted duration countdown, loop stats display, and PyQt6 QColor alpha compatibility"
+  "version": "1.2.10",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.10/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.10/MacroForge-v1.2.10.zip",
+  "notes": "v1.2.10: Fixed update dialog not appearing \u2014 replaced fragile QTimer.singleShot lambdas with pyqtSignal-based cross-thread callbacks, wrapped prompt in try/except, reset prompt flag on fresh checks"
 }
