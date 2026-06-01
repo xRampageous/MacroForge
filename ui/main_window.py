@@ -33,7 +33,7 @@ from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager
 from updater import check_update, perform_update, get_last_update_error
 from version import VERSION
-from hotkeys import start_hotkeys, stop_hotkeys
+# from hotkeys import start_hotkeys, stop_hotkeys  # DISABLED — pynput causes Qt dialog crashes
 from debugger import logger, DebugViewer, get_log_path
 from ui.theme import build_stylesheet, COLORS
 from ui.timeline import TimelineView
@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._setup_shortcuts()
         self._setup_timeline_connections()
-        self._setup_hotkeys()
+        # self._setup_hotkeys()  # DISABLED — pynput global hooks interfere with Qt modal dialogs
         self._setup_tray()
 
         # Wire update-check signals for thread-safe UI callbacks
@@ -1878,13 +1878,9 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _setup_hotkeys(self):
-        try:
-            start_hotkeys({
-                "f9": self._hotkey_toggle_play,
-                "f7": self._hotkey_record,
-            })
-        except Exception as e:
-            logger.warning(f"Hotkeys not available: {e}")
+        # DISABLED — pynput global hooks interfere with Qt modal dialogs
+        logger.info("Hotkeys disabled (pynput causes Qt dialog crashes)")
+        pass
 
     def _hotkey_toggle_play(self):
         if self.engine.running:
@@ -2114,10 +2110,10 @@ class MainWindow(QMainWindow):
             self._do_save_session()
         except Exception:
             pass
-        try:
-            stop_hotkeys()
-        except Exception:
-            pass
+        # try:
+        #     stop_hotkeys()
+        # except Exception:
+        #     pass
         try:
             if self._tray_icon:
                 self._tray_icon.hide()
@@ -2137,10 +2133,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._do_save_session()
-        try:
-            stop_hotkeys()
-        except Exception:
-            pass
+        # try:
+        #     stop_hotkeys()
+        # except Exception:
+        #     pass
         event.accept()
 
     def undo(self):
