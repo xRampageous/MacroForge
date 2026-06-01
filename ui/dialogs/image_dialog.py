@@ -21,18 +21,15 @@ def _hsep(color):
     return f
 
 
-class CaptureOverlay(QWidget):
+class CaptureOverlay(QDialog):
     """Fullscreen overlay for selecting a screen region to capture."""
-    closed = pyqtSignal()
     def __init__(self):
         super().__init__(None)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        # Removed WA_ShowWithoutActivating - was blocking mouse events
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         screen = QApplication.primaryScreen()
         self.setGeometry(screen.geometry())
@@ -40,12 +37,23 @@ class CaptureOverlay(QWidget):
         self._end = None
         self._dragging = False
         self.region = None
-        self._closed = False
         self.setMouseTracking(True)
+        
+        # Add instruction label
+        layout = QVBoxLayout(self)
+        layout.addStretch()
+        h_layout = QHBoxLayout()
+        h_layout.addStretch()
+        self.instruction = QLabel("Hold left mouse button and drag to select an area\nPress Esc to cancel")
+        self.instruction.setStyleSheet("color: white; font-weight: bold; font-size: 14px; background: rgba(0,0,0,150); padding: 10px; border-radius: 5px;")
+        h_layout.addWidget(self.instruction)
+        h_layout.addStretch()
+        layout.addLayout(h_layout)
+        layout.addStretch()
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 120))
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
         if self._start and self._end:
             r = QRect(self._start, self._end).normalized()
             painter.setPen(QPen(QColor(COLORS["accent"]), 2))
@@ -61,6 +69,7 @@ class CaptureOverlay(QWidget):
             self._start = event.position().toPoint()
             self._end = self._start
             self._dragging = True
+            self.instruction.hide()
             self.update()
 
     def mouseMoveEvent(self, event):
@@ -75,19 +84,12 @@ class CaptureOverlay(QWidget):
             r = QRect(self._start, self._end).normalized()
             if r.width() > 2 and r.height() > 2:
                 self.region = (r.left(), r.top(), r.width(), r.height())
-            self._do_close()
+            self.accept()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.region = None
-            self._do_close()
-
-    def _do_close(self):
-        if not self._closed:
-            self._closed = True
-            self.closed.emit()
-            self.close()
-            self.deleteLater()
+            self.reject()
 
 
 class ImageDialog(QDialog):
@@ -607,20 +609,18 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
-        # Don't hide dialog - overlay covers screen including dialog
-        # This prevents dialog rejection while overlay is active
-        logger.debug("image_dialog._do_capture: showing overlay")
+        # Hide parent dialog completely (like tkinter withdraw)
+        logger.debug("image_dialog._do_capture: hiding dialog")
+        self.hide()
+        import time
+        time.sleep(0.1)
+        # Show overlay as modal dialog (like tkinter grab_set)
         overlay = CaptureOverlay()
-        loop = QEventLoop()
-        overlay.closed.connect(loop.quit)
-        overlay.show()
-        overlay.raise_()
-        overlay.activateWindow()
-        logger.debug("image_dialog._do_capture: starting event loop")
-        loop.exec()
-        logger.debug("image_dialog._do_capture: event loop finished")
+        logger.debug("image_dialog._do_capture: showing overlay")
+        result = overlay.exec()
+        logger.debug(f"image_dialog._do_capture: overlay returned result={result}")
         # Capture after overlay closes
-        if overlay.region:
+        if result == QDialog.DialogCode.Accepted and overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
             if return_region:
@@ -637,9 +637,13 @@ class ImageDialog(QDialog):
                     logger.exception("image_dialog._do_capture: capture failed")
                     QMessageBox.critical(self, "Capture Error", str(e))
         else:
-            logger.debug("image_dialog._do_capture: no region selected")
-        # Dialog is still visible, no need to restore
-        logger.debug("image_dialog._do_capture: done")
+            logger.debug("image_dialog._do_capture: no region selected or cancelled")
+            callback(None)
+        # Show parent dialog again (like tkinter deiconify)
+        logger.debug("image_dialog._do_capture: showing dialog")
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")

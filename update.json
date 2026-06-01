@@ -2,5 +2,5 @@
   "version": "1.2.47",
   "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.47/MacroForge.exe",
   "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.47/MacroForge-v1.2.47.zip",
-  "notes": "v1.2.47: Removed hide/minimize logic - overlay now covers screen including dialog to prevent rejection. v1.2.46: Removed WA_ShowWithoutActivating from CaptureOverlay to fix mouse event blocking, added logging to track dialog result."
+  "notes": "v1.2.47: Converted CaptureOverlay to QDialog with modal exec() to match v1.1.0 tkinter approach - should fix grey screen and crash issues. v1.2.46: Removed WA_ShowWithoutActivating from CaptureOverlay to fix mouse event blocking, added logging to track dialog result. v1.2.45: Using minimize() instead of hide(). v1.2.44: Removed hide/show cycle, fixed debug log truncation."
 }
