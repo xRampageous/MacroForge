@@ -1,6 +1,6 @@
 {
-  "version": "1.2.13",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.13/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.13/MacroForge-v1.2.13.zip",
-  "notes": "v1.2.13: Fixed auto-update not completing \u2014 app now properly exits so the updater batch can replace files. Progress dialog now raises to front. closeEvent now accepts the close."
+  "version": "1.2.14",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.14/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.14/MacroForge-v1.2.14.zip",
+  "notes": "v1.2.14: Fixed sidebar layout (wider, readable fonts). Bottom stats now use icons (bolt/loop/clock). Progress bar fills width. Stats logic matches v1.1.0 (actions played, loops completed, seq duration, total time)."
 }
