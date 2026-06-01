@@ -19,7 +19,7 @@ from pathlib import Path
 from version import VERSION, VERSION_TUPLE, UPDATE_URL
 from debugger import logger
 
-MANIFEST_TIMEOUT = 8  # seconds
+MANIFEST_TIMEOUT = 3  # seconds
 DOWNLOAD_TIMEOUT = 120  # seconds (ZIPs are larger)
 
 

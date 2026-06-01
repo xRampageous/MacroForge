@@ -89,19 +89,14 @@ class DebugLogger:
     def _write(self, text: str):
         try:
             line = text + "\n"
-            self._approx_size += len(line.encode("utf-8"))
-            if self._approx_size > 5 * 1024 * 1024:
-                self._approx_size = len(line.encode("utf-8"))
-                old_path = self.log_path + ".old"
-                try:
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                    if os.path.exists(self.log_path):
-                        os.rename(self.log_path, old_path)
-                except Exception:
-                    pass
+            self._entries.append((datetime.now().strftime("%H:%M:%S.%f")[:-3], "INFO", text))
+            # Keep only last 10k lines in memory and file
+            if len(self._entries) > 10000:
+                self._entries = self._entries[-10000:]
+                # Rewrite file with last 10k lines
                 with open(self.log_path, "w", encoding="utf-8") as f:
-                    f.write(line)
+                    for ts, level, msg in self._entries:
+                        f.write(f"[{ts}] {level:5s} | {msg}\n")
                     f.flush()
                     os.fsync(f.fileno())
             else:

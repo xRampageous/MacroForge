@@ -1,6 +1,6 @@
 {
-  "version": "1.2.40",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.40/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.40/MacroForge-v1.2.40.zip",
-  "notes": "v1.2.40: Restored hide/show cycle in _do_capture without processEvents() \u2014 dialog now hides before overlay appears so capture works, but no premature exec() return. v1.2.39: Fixed updater console output (removed stdout/stderr redirection), added periodic update check every 5 minutes. v1.2.38: Removed QApplication.processEvents() and hide/show cycle from _do_capture."
+  "version": "1.2.42",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.42/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.42/MacroForge-v1.2.42.zip",
+  "notes": "v1.2.42: Added diagnostic logging to ImageDialog.closeEvent to track dialog result() - investigating why captured images don't update to timeline. v1.2.41: Limited debug log to 10k lines, reduced update check timeout to 3s and polling to 1 minute."
 }

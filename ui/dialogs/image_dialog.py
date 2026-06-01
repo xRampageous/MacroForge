@@ -450,7 +450,7 @@ class ImageDialog(QDialog):
             logger.exception("ImageDialog.reject: exception")
 
     def closeEvent(self, event):
-        logger.debug("ImageDialog.closeEvent")
+        logger.debug(f"ImageDialog.closeEvent: result()={self.result()}")
         super().closeEvent(event)
 
     # -- Helpers --
