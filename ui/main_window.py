@@ -1610,9 +1610,9 @@ class MainWindow(QMainWindow):
             try:
                 with open(path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
-                    writer.writerow(["index", "key", "duration", "hold", "lane", "rand_delay", "rand_key"])
+                    writer.writerow(["index", "key", "duration", "hold", "lane", "rand_delay", "rand_key", "type", "label"])
                     for i, a in enumerate(self.engine.actions):
-                        writer.writerow([i+1, a.key, a.duration, a.hold_mode, a.lane, a.random_delay, a.random_key])
+                        writer.writerow([i+1, a.key, a.duration, a.hold_mode, a.lane, a.random_delay, a.random_key, a.action_type, a.label])
                 self.status(f"Exported {len(self.engine.actions)} actions to CSV")
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
@@ -1632,7 +1632,9 @@ class MainWindow(QMainWindow):
                             hold_mode=row.get("hold", "False") == "True",
                             lane=int(row.get("lane", 0)),
                             random_delay=float(row.get("rand_delay", 0)),
-                            random_key=row.get("rand_key", "False") == "True"
+                            random_key=row.get("rand_key", "False") == "True",
+                            action_type=row.get("type", "key"),
+                            label=row.get("label", "")
                         )
                         new_actions.append(a)
                 self.engine.actions = new_actions
