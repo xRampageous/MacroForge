@@ -1,6 +1,6 @@
 {
-  "version": "1.2.23",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.23/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.23/MacroForge-v1.2.23.zip",
-  "notes": "v1.2.23: Centered text and icons on add-action buttons. Redesigned Image Search dialog to a modern single-column layout matching reference: preview box + Capture/Browse side-by-side, similarity coefficient with note, position-mouse checkbox, search region radios with capture-region button, when-found/when-not-found dropdowns, key-to-press with clear button, wait timeout, click offset, random-click + loop checkboxes, and bottom meta row. All existing data fields preserved."
+  "version": "1.2.24",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.24/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.24/MacroForge-v1.2.24.zip",
+  "notes": "v1.2.24: Fixed image dialog preview blur by removing double-scaling (setScaledContents) and setting fixed preview size. Fixed timeline _init_pool to nullify img_item after removal to prevent stale references. Removed hidden img_path from layout to avoid invisible space."
 }
