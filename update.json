@@ -1,6 +1,6 @@
 {
-  "version": "1.2.12",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.12/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.12/MacroForge-v1.2.12.zip",
-  "notes": "v1.2.12: Added version label in sidebar + window/taskbar icon. Upgraded build system with --fast/--no-zip/--no-smoke flags and unified release.bat pipeline"
+  "version": "1.2.13",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.13/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.13/MacroForge-v1.2.13.zip",
+  "notes": "v1.2.13: Fixed auto-update not completing \u2014 app now properly exits so the updater batch can replace files. Progress dialog now raises to front. closeEvent now accepts the close."
 }
