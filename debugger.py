@@ -40,7 +40,16 @@ class DebugLogger:
         self.log_path = os.path.join(log_dir, "debug.log")
         self._entries = []          # [(ts, level, msg), ...]
         self._listeners = []        # callables(msg)
-        self._approx_size = 0       # approximate bytes written since last rotation
+        # Truncate existing log file if too large
+        if os.path.exists(self.log_path):
+            try:
+                with open(self.log_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                if len(lines) > 10000:
+                    with open(self.log_path, "w", encoding="utf-8") as f:
+                        f.writelines(lines[-10000:])
+            except Exception:
+                pass
         self._write("=" * 60)
         self._write(f"MacroForge Debug Log – {datetime.now().isoformat()}")
         self._write("=" * 60)

@@ -607,9 +607,7 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return
-        self.hide()
-        import time
-        time.sleep(0.1)
+        # Don't hide dialog - overlay has WindowStaysOnTopHint so it covers everything
         overlay = CaptureOverlay()
         loop = QEventLoop()
         overlay.closed.connect(loop.quit)
@@ -619,8 +617,7 @@ class ImageDialog(QDialog):
         logger.debug("image_dialog._do_capture: starting event loop")
         loop.exec()
         logger.debug("image_dialog._do_capture: event loop finished")
-        time.sleep(0.05)
-        # Capture BEFORE showing dialog again to avoid interference
+        # Capture immediately after overlay closes
         if overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
@@ -639,10 +636,6 @@ class ImageDialog(QDialog):
                     QMessageBox.critical(self, "Capture Error", str(e))
         else:
             logger.debug("image_dialog._do_capture: no region selected")
-        # Show dialog again after capture is complete
-        self.show()
-        self.raise_()
-        self.activateWindow()
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")

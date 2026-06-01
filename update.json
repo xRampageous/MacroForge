@@ -1,6 +1,6 @@
 {
-  "version": "1.2.43",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.43/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.43/MacroForge-v1.2.43.zip",
-  "notes": "v1.2.43: Fixed white capture issue - moved screen capture BEFORE showing dialog again to prevent interference. v1.2.42: Added diagnostic logging to ImageDialog.closeEvent. v1.2.41: Limited debug log to 10k lines, reduced update check timeout to 3s and polling to 1 minute."
+  "version": "1.2.44",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.44/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.44/MacroForge-v1.2.44.zip",
+  "notes": "v1.2.44: Removed hide/show cycle - overlay now covers dialog without hiding it, preventing premature rejection. Fixed debug log truncation to handle existing large files. v1.2.43: Fixed white capture issue."
 }
