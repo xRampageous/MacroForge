@@ -1613,9 +1613,14 @@ class MainWindow(QMainWindow):
         self._update_checking = False
         self.status("No updates found")
 
+    def _update_check_failed(self, error_msg):
+        self._update_checking = False
+        QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error_msg}")
+
     def _check_update_manual(self):
         # Prevent overlapping checks
         if getattr(self, "_update_checking", False):
+            self.status("Already checking for updates")
             return
         self._update_checking = True
         self.status("Checking for updates…")
@@ -1624,11 +1629,16 @@ class MainWindow(QMainWindow):
             try:
                 manifest = check_update(silent=False)
             except Exception as e:
-                QTimer.singleShot(0, lambda: (self._set_update_done(),
-                    QMessageBox.critical(self, "Update Error", f"Update check failed:\n\n{e}")))
+                QTimer.singleShot(0, lambda: (
+                    self._set_update_done(),
+                    QMessageBox.critical(self, "Update Error", f"Update check failed:\n\n{e}")
+                ))
                 return
             if manifest:
-                QTimer.singleShot(0, lambda: (self._set_update_done(), self._prompt_update(manifest)))
+                QTimer.singleShot(0, lambda: (
+                    self._set_update_done(),
+                    self._prompt_update(manifest)
+                ))
             else:
                 error = get_last_update_error()
                 if error:
@@ -1638,23 +1648,46 @@ class MainWindow(QMainWindow):
                     QTimer.singleShot(0, self._update_no_results)
 
         threading.Thread(target=_bg, daemon=True).start()
-        # Safety net: never leave the UI stuck on "Checking…"
-        QTimer.singleShot(20000, lambda: self._update_no_results() if getattr(self, "_update_checking", False) else None)
+        # Safety net: reset flag after 30s so UI isn't stuck, but DON'T show "no updates"
+        # if a manifest was already found (the prompt might just be delayed)
+        QTimer.singleShot(30000, lambda: self._set_update_done() if getattr(self, "_update_checking", False) else None)
 
     def _prompt_update(self, manifest):
+        # Prevent duplicate prompts (silent + manual can race)
+        if getattr(self, "_update_prompt_shown", False):
+            logger.info("Update prompt already shown, skipping duplicate")
+            return
+        self._update_prompt_shown = True
+        logger.info("Showing update prompt")
+
         remote_ver = manifest.get("version", "unknown")
         notes = manifest.get("notes", "")
         msg = f"A new version of MacroForge is available.\n\nCurrent: {VERSION}\nLatest: {remote_ver}"
         if notes:
             msg += f"\n\nRelease notes:\n{notes}"
-        reply = QMessageBox.question(self, "Update Available", msg + "\n\nDownload and install now?")
+        msg += "\n\nDownload and install now?"
+
+        # Use explicit QMessageBox for PyQt6 compatibility + stay-on-top
+        box = QMessageBox(self)
+        box.setWindowTitle("Update Available")
+        box.setText(msg)
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.setDefaultButton(QMessageBox.StandardButton.Yes)
+        box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        reply = box.exec()
+        logger.info(f"Update prompt result: {reply}")
+
         if reply != QMessageBox.StandardButton.Yes:
             return
-        # Simple dialog with progress
-        dlg = QFrame(self, Qt.WindowType.Dialog)
+
+        # Progress dialog
+        dlg = QDialog(self)
         dlg.setWindowTitle("Updating MacroForge")
-        dlg.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; border-radius: 10px; padding: 20px;")
+        dlg.setFixedSize(320, 120)
+        dlg.setStyleSheet(f"background-color: {COLORS['bg_secondary']};")
+        dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(16, 16, 16, 16)
         lo.addWidget(QLabel(f"Downloading MacroForge {remote_ver}…"))
         bar = QProgressBar()
         bar.setRange(0, 100)
@@ -1668,7 +1701,6 @@ class MainWindow(QMainWindow):
             pct = downloaded / total * 100 if total else 0
             mb_down = downloaded / (1024 * 1024)
             mb_total = total / (1024 * 1024)
-            # Marshal to main thread
             QTimer.singleShot(0, lambda: (
                 bar.setValue(int(pct)),
                 info.setText(f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)")
@@ -1679,9 +1711,16 @@ class MainWindow(QMainWindow):
                 if perform_update(manifest, progress_cb=_on_progress):
                     QTimer.singleShot(0, lambda: (dlg.close(), self._real_exit()))
                 else:
-                    QTimer.singleShot(0, lambda: (dlg.close(), QMessageBox.critical(self, "Update Failed", "Download failed.")))
+                    QTimer.singleShot(0, lambda: (
+                        dlg.close(),
+                        QMessageBox.critical(self, "Update Failed", "Download or installation failed.\n\nSee debug log for details.")
+                    ))
             except Exception as e:
-                QTimer.singleShot(0, lambda: (dlg.close(), QMessageBox.critical(self, "Update Error", str(e))))
+                logger.error(f"perform_update failed: {e}")
+                QTimer.singleShot(0, lambda: (
+                    dlg.close(),
+                    QMessageBox.critical(self, "Update Error", f"Update failed:\n\n{e}")
+                ))
         threading.Thread(target=_download, daemon=True).start()
 
     # ═══════════════════════════════════════════════════════
