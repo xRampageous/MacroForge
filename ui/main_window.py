@@ -2009,7 +2009,7 @@ class MainWindow(QMainWindow):
                 logger.info("_open_image_dialog: calling get_action")
                 act = dlg.get_action()
                 logger.info(f"_open_image_dialog: get_action done act={act is not None}")
-                if act:
+                if act is not None:
                     logger.info("_open_image_dialog: pushing history")
                     self.history.push(self.engine.actions)
                     logger.info("_open_image_dialog: appending action")

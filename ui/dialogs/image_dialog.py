@@ -674,6 +674,10 @@ class ImageDialog(QDialog):
             QMessageBox.warning(self, "No Image", "Please select or capture an image.")
             return None
         assert self._img_data is not None, "Captured image is None"
+        assert isinstance(self._img_data, str), "image_data must be base64 string"
+        assert len(self._img_data) > 100, "image_data too small"
+        print(f"DEBUG image_data length: {len(self._img_data)}")
+        print(f"DEBUG image_data prefix: {str(self._img_data)[:50]}")
         try:
             sim_pct = max(0, min(100, int(self.sim_pct.value())))
             sim = round(1.0 - sim_pct / 100.0, 4)
@@ -700,7 +704,7 @@ class ImageDialog(QDialog):
             duration=0.05,
             action_type="image",
             image_data=self._img_data,
-            extra_images="|".join(self._extra_list),
+            extra_images="|".join(str(x) for x in self._extra_list if x),
             similarity=sim,
             wait_timeout=wait,
             search_region=region,
