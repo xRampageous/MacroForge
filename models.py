@@ -220,8 +220,16 @@ class ProfileManager:
 
     def _persist_active(self):
         try:
+            data = {}
+            if os.path.exists(self.settings_file):
+                try:
+                    with open(self.settings_file, "r", encoding="utf-8") as f:
+                        data = json.load(f) or {}
+                except Exception:
+                    data = {}
+            data["active_profile"] = self._active
             with open(self.settings_file, "w", encoding="utf-8") as f:
-                json.dump({"active_profile": self._active}, f)
+                json.dump(data, f, indent=2)
         except Exception:
             pass
 
@@ -373,8 +381,18 @@ class SettingsManager:
 
     def _save(self):
         try:
+            # Preserve externally-managed keys (e.g. active_profile from ProfileManager)
+            out = dict(self._data)
+            if os.path.exists(self._file):
+                try:
+                    with open(self._file, "r", encoding="utf-8") as f:
+                        existing = json.load(f) or {}
+                    if "active_profile" in existing:
+                        out["active_profile"] = existing["active_profile"]
+                except Exception:
+                    pass
             with open(self._file, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, indent=2)
+                json.dump(out, f, indent=2)
         except Exception:
             pass
 

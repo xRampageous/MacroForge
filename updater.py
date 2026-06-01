@@ -243,11 +243,26 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
         logger.error(f"ZIP extraction failed: {e}")
         return False
 
-    # Verify extracted exe exists
+    # Verify extracted exe exists (handle both flat and subfolder layouts)
     extracted_exe = extract_dir / "MacroForge.exe"
     if not extracted_exe.exists():
-        logger.error(f"Extracted MacroForge.exe not found in {extract_dir}")
-        return False
+        # PyInstaller onedir builds zip the MacroForge/ folder
+        extracted_exe = extract_dir / "MacroForge" / "MacroForge.exe"
+        if not extracted_exe.exists():
+            logger.error(f"Extracted MacroForge.exe not found in {extract_dir}")
+            return False
+        # Flatten: move contents of subfolder up to extract_dir root
+        subdir = extract_dir / "MacroForge"
+        for item in subdir.iterdir():
+            dest = extract_dir / item.name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            shutil.move(str(item), str(dest))
+        shutil.rmtree(subdir)
+        extracted_exe = extract_dir / "MacroForge.exe"
 
     # Write updater batch
     bat = _write_batch_updater(work, current, extract_dir, zip_file)

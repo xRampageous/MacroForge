@@ -44,14 +44,26 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QPixmap:
         p.drawEllipse(int(s * 0.25), int(s * 0.25), int(s * 0.5), int(s * 0.5))
 
     def _draw_key(p, s):
+        # Keyboard silhouette with a few key rows
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(QRectF(s * 0.18, s * 0.28, s * 0.64, s * 0.44), 3, 3)
+        p.drawRoundedRect(QRectF(s * 0.12, s * 0.22, s * 0.76, s * 0.56), 2, 2)
+        # top row keys
+        for x in (0.22, 0.42, 0.62):
+            p.drawRect(int(s * x), int(s * 0.30), int(s * 0.14), int(s * 0.14))
+        # bottom row (spacebar-ish)
+        p.drawRect(int(s * 0.30), int(s * 0.50), int(s * 0.40), int(s * 0.14))
 
     def _draw_click(p, s):
+        # Mouse silhouette
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(QRectF(s * 0.18, s * 0.18, s * 0.64, s * 0.64))
+        # body
+        p.drawEllipse(QRectF(s * 0.22, s * 0.18, s * 0.56, s * 0.70))
+        # scroll wheel / button split
+        p.drawLine(int(s * 0.50), int(s * 0.18), int(s * 0.50), int(s * 0.42))
+        # horizontal split for left/right buttons
+        p.drawLine(int(s * 0.22), int(s * 0.42), int(s * 0.78), int(s * 0.42))
 
     def _draw_image(p, s):
         p.setPen(pen)

@@ -1,6 +1,6 @@
 {
-  "version": "1.2.8",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.8/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.8/MacroForge-v1.2.8.zip",
-  "notes": "Release v1.2.8"
+  "version": "1.2.9",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.9/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.9/MacroForge-v1.2.9.zip",
+  "notes": "v1.2.9: Fixed profile timeline overlay on switch, timeline playing animations (visible green highlight + progress bar), speed-adjusted duration countdown, loop stats display, and PyQt6 QColor alpha compatibility"
 }

@@ -15,11 +15,20 @@ def get_version() -> str:
 
 
 def write_update_json(version: str) -> None:
+    # Preserve existing notes if present
+    existing_notes = f"Release v{version}"
+    try:
+        with open("update.json", "r", encoding="utf-8") as f:
+            old = json.load(f)
+            if old.get("version") == version and old.get("notes"):
+                existing_notes = old["notes"]
+    except Exception:
+        pass
     data = {
         "version": version,
         "url": f"https://github.com/xRampageous/MacroForge/releases/download/v{version}/MacroForge.exe",
         "zip_url": f"https://github.com/xRampageous/MacroForge/releases/download/v{version}/MacroForge-v{version}.zip",
-        "notes": f"Release v{version}",
+        "notes": existing_notes,
     }
     with open("update.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

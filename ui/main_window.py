@@ -712,6 +712,8 @@ class MainWindow(QMainWindow):
                     self.status("Profile partially loaded")
         else:
             self.engine.actions = []
+            self.timeline.set_actions(self.engine.actions)
+            self.timeline.refresh()
             self.update_statistics(immediate=True)
             self.status("Ready")
         self._refresh_profile_btn()
@@ -1063,7 +1065,9 @@ class MainWindow(QMainWindow):
     def _do_play_cb(self, idx, dur):
         self.playing_index = idx
         self.actions_played += 1
-        self.timeline.set_playing(idx, dur)
+        speed = max(self.engine.speed_multiplier, 0.01)
+        adjusted_dur = dur / speed
+        self.timeline.set_playing(idx, adjusted_dur)
         self.update_statistics()
 
     def _pause_cb(self, paused):
@@ -1087,6 +1091,7 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
+        self.playing_index = -1
         self.timeline.clear_playing()
         self.status_dot.set_color(COLORS["text_dark"])
         self.status_text.setText("Finished")
@@ -1526,6 +1531,8 @@ class MainWindow(QMainWindow):
                 self.history.push(self.engine.actions)
                 self.engine.actions = [Action.from_dict(x) for x in data]
                 self.active_index = -1
+                self.timeline.set_actions(self.engine.actions)
+                self.timeline.refresh()
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
@@ -1569,6 +1576,8 @@ class MainWindow(QMainWindow):
                         new_actions.append(a)
                 self.engine.actions = new_actions
                 self.active_index = -1
+                self.timeline.set_actions(self.engine.actions)
+                self.timeline.refresh()
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
@@ -1739,7 +1748,15 @@ class MainWindow(QMainWindow):
         total = len(self.engine.actions)
         loops = self.loops_spin.value()
         self._stat_actions.setText(f"{total} actions")
-        self._stat_loops.setText(f"{self.actions_played}/{loops}")
+        # Show loop progress during playback, not raw action count
+        if self.engine.running:
+            current = getattr(self.engine, 'loops_completed_count', 0) + 1
+            if self.engine.infinite_loop:
+                self._stat_loops.setText(f"{current}/∞")
+            else:
+                self._stat_loops.setText(f"{current}/{loops}")
+        else:
+            self._stat_loops.setText(f"0/{loops}")
         seq_dur = sum(a.duration for a in self.engine.actions)
         self._stat_seq.setText(f"{seq_dur:.2f}s")
         elapsed = self.session_elapsed_time

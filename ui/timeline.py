@@ -171,31 +171,32 @@ class TimelineRow:
         pen = QPen(Qt.PenStyle.NoPen)
         brush = QBrush(QColor(color))
         C = QColor(color)
+        items = []
 
         if action_type == "key":
             # Keyboard (matches panel icon)
-            r = self.scene.addRect(ix - 1, iy - 1, size + 2, size + 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
-            self.scene.addRect(int(ix + 1), int(iy + 1), 2, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush))
-            self.scene.addRect(int(ix + 5), int(iy + 1), 2, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush))
-            self.scene.addRect(int(ix + 3), int(iy + 5), 4, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush))
+            items.append(self.scene.addRect(ix - 1, iy - 1, size + 2, size + 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush)))
+            items.append(self.scene.addRect(int(ix + 1), int(iy + 1), 2, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush)))
+            items.append(self.scene.addRect(int(ix + 5), int(iy + 1), 2, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush)))
+            items.append(self.scene.addRect(int(ix + 3), int(iy + 5), 4, 2, QPen(C, 0.8), QBrush(Qt.BrushStyle.NoBrush)))
         elif action_type == "click":
             # Mouse (matches panel icon)
-            r = self.scene.addEllipse(ix, iy, size, size + 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
-            self.scene.addLine(int(ix + size // 2), int(iy), int(ix + size // 2), int(iy + size - 2), QPen(C, 1))
-            self.scene.addLine(int(ix), int(iy + size // 2), int(ix + size), int(iy + size // 2), QPen(C, 1))
+            items.append(self.scene.addEllipse(ix, iy, size, size + 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush)))
+            items.append(self.scene.addLine(int(ix + size // 2), int(iy), int(ix + size // 2), int(iy + size - 2), QPen(C, 1)))
+            items.append(self.scene.addLine(int(ix), int(iy + size // 2), int(ix + size), int(iy + size // 2), QPen(C, 1)))
         elif action_type == "image":
             # Picture frame
-            r = self.scene.addRect(ix, iy + 1, size, size - 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush))
-            self.scene.addLine(ix + 2, int(iy + size - 3), int(ix + size // 2), iy + 3, QPen(C, 1))
-            self.scene.addLine(int(ix + size // 2), iy + 3, int(ix + size - 2), int(iy + size - 4), QPen(C, 1))
+            items.append(self.scene.addRect(ix, iy + 1, size, size - 2, QPen(C, 1.2), QBrush(Qt.BrushStyle.NoBrush)))
+            items.append(self.scene.addLine(ix + 2, int(iy + size - 3), int(ix + size // 2), iy + 3, QPen(C, 1)))
+            items.append(self.scene.addLine(int(ix + size // 2), iy + 3, int(ix + size - 2), int(iy + size - 4), QPen(C, 1)))
         elif action_type == "pause":
-            r = self.scene.addRect(int(ix + 2), iy + 1, 2, size - 2, pen, brush)
-            r2 = self.scene.addRect(int(ix + 6), iy + 1, 2, size - 2, pen, brush)
-            self.icon_group.addToGroup(r2)
+            items.append(self.scene.addRect(int(ix + 2), iy + 1, 2, size - 2, pen, brush))
+            items.append(self.scene.addRect(int(ix + 6), iy + 1, 2, size - 2, pen, brush))
         else:
-            r = self.scene.addEllipse(ix + 1, iy + 1, size - 2, size - 2, pen, brush)
+            items.append(self.scene.addEllipse(ix + 1, iy + 1, size - 2, size - 2, pen, brush))
 
-        self.icon_group.addToGroup(r)
+        for item in items:
+            self.icon_group.addToGroup(item)
         self.icon_group.setVisible(True)
 
     def set_image_preview(self, action, scene):
@@ -257,6 +258,7 @@ class TimelineRow:
         self.t_flags.setPlainText("  " + "  ".join(flags))
 
         self.left.setBrush(QBrush(QColor(color)))
+        self.left_color = color
 
         # Update icon
         self.draw_icon(t, color)
@@ -277,10 +279,11 @@ class TimelineRow:
     def animate(self, index, is_playing, is_active, is_hover, is_multi, action_dur,
                 action_start, paused, paused_at, pause_offset, cols, row_h):
         C = COLORS
-        t = "key"  # default, will be set by caller
 
         bg = QColor(C["bg_secondary"])
         glow_visible = False
+        glow_color = C["accent"]
+        left_color = getattr(self, 'left_color', C["accent"])
 
         if is_hover:
             bg = QColor(C["bg_hover"])
@@ -291,14 +294,15 @@ class TimelineRow:
             bg = QColor(C["bg_card"])
             glow_visible = True
         if is_playing:
-            glow = C["playing_glow"]
-            base = glow[:-2] if len(glow) >= 8 else glow
-            bg = QColor(f"{base}55")
+            glow_color = C["playing"]
+            bg = QColor(63, 224, 138, 70)
             glow_visible = True
+            left_color = C["playing"]
 
         self.bg.setBrush(QBrush(bg))
-        self.glow.setPen(QPen(QColor(C["accent"]), 1 if is_active else 2))
+        self.glow.setPen(QPen(QColor(glow_color), 1 if is_active else 2))
         self.glow.setVisible(glow_visible)
+        self.left.setBrush(QBrush(QColor(left_color)))
 
         # Progress bar
         _, _, bs, bw, _, _ = cols
@@ -311,7 +315,6 @@ class TimelineRow:
             self.t_dur.setPlainText(f"{remaining:.1f}s")
             self.t_dur.setDefaultTextColor(QColor(C["text"]))
         elif not is_playing and self._was_playing:
-            # Reset duration text back to the action's base duration
             if self.cache_key and len(self.cache_key) > 1:
                 dur = self.cache_key[1]
                 self.t_dur.setPlainText(f"{dur:.2f}s")
@@ -623,11 +626,6 @@ class TimelineView(QGraphicsView):
                 is_active = action_index == self.active_index
                 is_hover = action_index == self.hover_index
                 is_multi = action_index in self.selected_indices
-
-                # Update duration text when not playing
-                if not is_playing and row._was_playing:
-                    row.t_dur.setPlainText(f"{action.duration:.2f}s")
-                    row.t_dur.setDefaultTextColor(QColor(COLORS["text_dim"]))
 
                 row.animate(action_index, is_playing, is_active, is_hover, is_multi,
                             self._action_dur, self._action_start, self._paused,
