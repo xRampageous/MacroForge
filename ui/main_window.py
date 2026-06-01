@@ -734,7 +734,7 @@ class MainWindow(QMainWindow):
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
 
     def _timeline_context_menu(self, index, pos):
-        if index < 0 or index >= len(self.engine.actions):
+        if index < 0 or index >= self.action_model.rowCount():
             return
         self.select(index)
         m = QMenu(self)
@@ -761,7 +761,9 @@ class MainWindow(QMainWindow):
         session = self.session_manager.load_profile()
         if session:
             try:
-                self.engine.actions = [Action.from_dict(x) for x in session.get("actions", [])]
+                self.action_model.clear()
+                for action_data in session.get("actions", []):
+                    self.action_model.add_action(Action.from_dict(action_data))
                 settings = session.get("settings", {})
                 self.loops_spin.setValue(int(settings.get("loops", 1)))
                 self.speed_combo.setCurrentText(f"{float(settings.get('speed', 1.0)):.1f}x")
@@ -775,7 +777,6 @@ class MainWindow(QMainWindow):
                 self.timeline.selected_indices.clear()
                 self.timeline.set_active(-1)
                 self.timeline.clear_playing()
-                self.timeline.set_actions(self.engine.actions)  # sync new list reference
                 self.timeline.refresh()
                 self.refresh()
                 self.actions_played = 0
@@ -784,13 +785,12 @@ class MainWindow(QMainWindow):
                 self.update_statistics(immediate=True)
                 self.status(f"Profile '{self.session_manager.active}' loaded")
             except Exception:
-                if not self.engine.actions:
+                if not self.action_model.rowCount():
                     self.status("Failed to load profile")
                 else:
                     self.status("Profile partially loaded")
         else:
-            self.engine.actions = []
-            self.timeline.set_actions(self.engine.actions)
+            self.action_model.clear()
             self.timeline.refresh()
             self.update_statistics(immediate=True)
             self.status("Ready")
@@ -811,7 +811,7 @@ class MainWindow(QMainWindow):
             "human_curve": self.human_check.isChecked(),
             "zoom": self.timeline.zoom,
         }
-        self.session_manager.save_profile(self.engine.actions, settings)
+        self.session_manager.save_profile(self.action_model.actions(), settings)
         self._save_window_geometry()
         self._save_session_after = None
 
@@ -891,7 +891,7 @@ class MainWindow(QMainWindow):
                 self._switch_profile(profiles[0])
             else:
                 self.session_manager.active = "Default"
-                self.engine.actions = []
+                self.action_model.clear()
                 self.refresh()
 
     # ═══════════════════════════════════════════════════════
@@ -899,7 +899,7 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def select(self, index):
-        if index is None or index < 0 or index >= len(self.engine.actions):
+        if index is None or index < 0 or index >= self.action_model.rowCount():
             self.active_index = -1
             self.timeline.set_active(-1)
             self.timeline.selected_indices.clear()
@@ -908,7 +908,7 @@ class MainWindow(QMainWindow):
         self.active_index = index
         self.timeline.selected_indices.clear()
         self.timeline.set_active(index)
-        action = self.engine.actions[index]
+        action = self.action_model.get(index)
         self._show_inspector(True, action.action_type)
         if action.action_type == "key":
             self.ik_key.setText(action.key)
@@ -931,12 +931,12 @@ class MainWindow(QMainWindow):
             self.ii_wait.setText(str(getattr(action, 'wait_timeout', 10.0)))
 
     def _apply_inspector(self):
-        if self.active_index < 0 or self.active_index >= len(self.engine.actions):
+        if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
             QMessageBox.warning(self, "No Selection", "Please select an action first")
             return
         try:
-            action = self.engine.actions[self.active_index]
-            self.history.push(self.engine.actions)
+            action = self.action_model.get(self.active_index)
+            self.history.push(self.action_model.actions())
             if action.action_type == "key":
                 action.key = self.ik_key.text().strip()
                 action.duration = float(self.ik_dur.text())
@@ -970,9 +970,9 @@ class MainWindow(QMainWindow):
 
     def _open_active_dialog(self, index=None):
         idx = index if index is not None else self.active_index
-        if idx < 0 or idx >= len(self.engine.actions):
+        if idx < 0 or idx >= self.action_model.rowCount():
             return
-        action = self.engine.actions[idx]
+        action = self.action_model.get(idx)
         if action.action_type == "image":
             self._open_image_editor(idx)
         elif action.action_type == "click":
@@ -993,13 +993,13 @@ class MainWindow(QMainWindow):
         selected = self.timeline.selected_indices
         if selected:
             indices = sorted(selected, reverse=True)
-            if not indices or indices[0] >= len(self.engine.actions):
+            if not indices or indices[0] >= self.action_model.rowCount():
                 self.timeline.selected_indices.clear()
                 return
-            self.history.push(self.engine.actions)
+            self.history.push(self.action_model.actions())
             for idx in indices:
-                if 0 <= idx < len(self.engine.actions):
-                    self.engine.actions.pop(idx)
+                if 0 <= idx < self.action_model.rowCount():
+                    self.action_model.remove_action(idx)
             self.active_index = -1
             self.timeline.selected_indices.clear()
             self.refresh()
@@ -1007,10 +1007,10 @@ class MainWindow(QMainWindow):
             self.save_session()
             self.status(f"Deleted {len(indices)} actions")
             return
-        if index < 0 or index >= len(self.engine.actions):
+        if index < 0 or index >= self.action_model.rowCount():
             return
-        self.history.push(self.engine.actions)
-        self.engine.actions.pop(index)
+        self.history.push(self.action_model.actions())
+        self.action_model.remove_action(index)
         self.active_index = -1
         self.timeline.selected_indices.clear()
         self.refresh()
@@ -1019,11 +1019,14 @@ class MainWindow(QMainWindow):
         self.status("Deleted action")
 
     def duplicate_action(self, index):
-        if index < 0 or index >= len(self.engine.actions):
+        if index < 0 or index >= self.action_model.rowCount():
             self.status("No action selected to duplicate")
             return
-        self.history.push(self.engine.actions)
-        self.engine.actions.insert(index + 1, deepcopy(self.engine.actions[index]))
+        self.history.push(self.action_model.actions())
+        action = deepcopy(self.action_model.get(index))
+        self.action_model._actions.insert(index + 1, action)
+        self.action_model.beginInsertRows(QModelIndex(), index + 1, index + 1)
+        self.action_model.endInsertRows()
         self.active_index = index + 1
         self.refresh()
         self.update_statistics()
@@ -1031,27 +1034,31 @@ class MainWindow(QMainWindow):
         self.status("Duplicated action")
 
     def move_action(self, index, direction):
-        if index < 0 or index >= len(self.engine.actions):
+        if index < 0 or index >= self.action_model.rowCount():
             return
         new_index = index + direction
-        if new_index < 0 or new_index >= len(self.engine.actions):
+        if new_index < 0 or new_index >= self.action_model.rowCount():
             return
-        self.history.push(self.engine.actions)
-        action = self.engine.actions.pop(index)
-        self.engine.actions.insert(new_index, action)
+        self.history.push(self.action_model.actions())
+        action = self.action_model._actions.pop(index)
+        self.action_model._actions.insert(new_index, action)
+        self.action_model.beginResetModel()
+        self.action_model.endResetModel()
         self.active_index = new_index
         self.refresh()
         self.save_session()
         self.status("Moved action")
 
     def move_action_to(self, index, target_index):
-        if index < 0 or index >= len(self.engine.actions):
+        if index < 0 or index >= self.action_model.rowCount():
             return
-        if target_index < 0 or target_index >= len(self.engine.actions):
+        if target_index < 0 or target_index >= self.action_model.rowCount():
             return
-        self.history.push(self.engine.actions)
-        action = self.engine.actions.pop(index)
-        self.engine.actions.insert(target_index, action)
+        self.history.push(self.action_model.actions())
+        action = self.action_model._actions.pop(index)
+        self.action_model._actions.insert(target_index, action)
+        self.action_model.beginResetModel()
+        self.action_model.endResetModel()
         self.active_index = target_index
         self.refresh()
         self.update_statistics(immediate=True)
@@ -1059,23 +1066,25 @@ class MainWindow(QMainWindow):
         self.status("Moved action")
 
     def copy_action(self):
-        if self.active_index < 0 or self.active_index >= len(self.engine.actions):
+        if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
             self.status("No action selected to copy")
             return
-        self.clipboard = deepcopy(self.engine.actions[self.active_index])
+        self.clipboard = deepcopy(self.action_model.get(self.active_index))
         self.status("Copied action")
 
     def paste_action(self):
         if self.clipboard is None:
             self.status("Clipboard empty")
             return
-        self.history.push(self.engine.actions)
+        self.history.push(self.action_model.actions())
         new_action = deepcopy(self.clipboard)
-        if 0 <= self.active_index < len(self.engine.actions):
+        if 0 <= self.active_index < self.action_model.rowCount():
             insert_at = self.active_index + 1
         else:
-            insert_at = len(self.engine.actions)
-        self.engine.actions.insert(insert_at, new_action)
+            insert_at = self.action_model.rowCount()
+        self.action_model._actions.insert(insert_at, new_action)
+        self.action_model.beginInsertRows(QModelIndex(), insert_at, insert_at)
+        self.action_model.endInsertRows()
         self.active_index = insert_at
         self.refresh()
         self.update_statistics()
@@ -1256,7 +1265,7 @@ class MainWindow(QMainWindow):
     def _update_rec_action_count(self):
         rec = self._recorder
         if rec["running"] and rec["actions_lbl"] is not None:
-            rec["actions_lbl"].setText(str(len(self.engine.actions)))
+            rec["actions_lbl"].setText(str(self.action_model.rowCount()))
 
     def _start_recording(self):
         if self._recorder["running"]:
@@ -1377,10 +1386,10 @@ class MainWindow(QMainWindow):
 
     def _rec_delete_last(self):
         try:
-            if self.engine.actions:
-                self.history.push(self.engine.actions)
-                self.engine.actions.pop()
-                self.active_index = len(self.engine.actions) - 1
+            if self.action_model.rowCount() > 0:
+                self.history.push(self.action_model.actions())
+                self.action_model.remove_action(self.action_model.rowCount() - 1)
+                self.active_index = self.action_model.rowCount() - 1
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
@@ -1451,12 +1460,12 @@ class MainWindow(QMainWindow):
                     action = rec["queue"].get_nowait()
                 except queue.Empty:
                     break
-                self.history.push(self.engine.actions)
-                self.engine.actions.append(action)
+                self.history.push(self.action_model.actions())
+                self.action_model.add_action(action)
                 self._update_rec_action_count()
                 updated = True
             if updated:
-                self.active_index = len(self.engine.actions) - 1
+                self.active_index = self.action_model.rowCount() - 1
                 self.refresh()
                 self.timeline.ensure_visible(self.active_index)
                 self.update_statistics()
@@ -1534,11 +1543,11 @@ class MainWindow(QMainWindow):
                     action = rec["queue"].get_nowait()
                 except queue.Empty:
                     break
-                self.history.push(self.engine.actions)
-                self.engine.actions.append(action)
+                self.history.push(self.action_model.actions())
+                self.action_model.add_action(action)
                 updated = True
             if updated:
-                self.active_index = len(self.engine.actions) - 1
+                self.active_index = self.action_model.rowCount() - 1
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
@@ -1594,8 +1603,8 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 with open(path, "w") as f:
-                    json.dump([a.to_dict() for a in self.engine.actions], f, indent=2)
-                self.status(f"Exported {len(self.engine.actions)} actions")
+                    json.dump([a.to_dict() for a in self.action_model.actions()], f, indent=2)
+                self.status(f"Exported {self.action_model.rowCount()} actions")
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
 
@@ -1605,20 +1614,21 @@ class MainWindow(QMainWindow):
             try:
                 with open(path, "r") as f:
                     data = json.load(f)
-                self.history.push(self.engine.actions)
-                self.engine.actions = [Action.from_dict(x) for x in data]
+                self.history.push(self.action_model.actions())
+                self.action_model.clear()
+                for action_data in data:
+                    self.action_model.add_action(Action.from_dict(action_data))
                 self.active_index = -1
-                self.timeline.set_actions(self.engine.actions)
                 self.timeline.refresh()
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
-                self.status(f"Imported {len(self.engine.actions)} actions")
+                self.status(f"Imported {len(data)} actions")
             except Exception as e:
                 QMessageBox.critical(self, "Import Error", str(e))
 
     def export_csv(self):
-        if not self.engine.actions:
+        if not self.action_model.rowCount():
             QMessageBox.warning(self, "No Actions", "Nothing to export")
             return
         path, _ = QFileDialog.getSaveFileName(self, "Export CSV", "", "CSV (*.csv)")
@@ -1627,9 +1637,9 @@ class MainWindow(QMainWindow):
                 with open(path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerow(["index", "key", "duration", "hold", "lane", "rand_delay", "rand_key", "type", "label"])
-                    for i, a in enumerate(self.engine.actions):
+                    for i, a in enumerate(self.action_model.actions()):
                         writer.writerow([i+1, a.key, a.duration, a.hold_mode, a.lane, a.random_delay, a.random_key, a.action_type, a.label])
-                self.status(f"Exported {len(self.engine.actions)} actions to CSV")
+                self.status(f"Exported {self.action_model.rowCount()} actions to CSV")
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
 
@@ -1637,7 +1647,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Import CSV", "", "CSV (*.csv)")
         if path:
             try:
-                self.history.push(self.engine.actions)
+                self.history.push(self.action_model.actions())
                 new_actions = []
                 with open(path, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
@@ -2037,10 +2047,10 @@ class MainWindow(QMainWindow):
                 logger.info(f"_open_capture_dialog: get_action done act={act is not None}")
                 if act:
                     logger.info("_open_capture_dialog: pushing history")
-                    self.history.push(self.engine.actions)
-                    logger.info("_open_capture_dialog: appending action")
-                    self.engine.actions.append(act)
-                    self.active_index = len(self.engine.actions) - 1
+                    self.history.push(self.action_model.actions())
+                    logger.info("_open_capture_dialog: adding action to model")
+                    self.action_model.add_action(act)
+                    self.active_index = self.action_model.rowCount() - 1
                     logger.info("_open_capture_dialog: calling refresh")
                     self.refresh()
                     logger.info("_open_capture_dialog: calling ensure_visible")
@@ -2056,48 +2066,56 @@ class MainWindow(QMainWindow):
 
     def _open_key_editor(self, index):
         from ui.dialogs.key_dialog import KeyDialog
-        dlg = KeyDialog(self, existing=self.engine.actions[index])
+        dlg = KeyDialog(self, existing=self.action_model.get(index))
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions[index] = act
+                self.history.push(self.action_model.actions())
+                self.action_model._actions[index] = act
+                self.action_model.beginResetModel()
+                self.action_model.endResetModel()
                 self.refresh()
                 self.save_session()
                 self.status("Key action updated")
 
     def _open_click_editor(self, index):
         from ui.dialogs.click_dialog import ClickDialog
-        dlg = ClickDialog(self, existing=self.engine.actions[index])
+        dlg = ClickDialog(self, existing=self.action_model.get(index))
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions[index] = act
+                self.history.push(self.action_model.actions())
+                self.action_model._actions[index] = act
+                self.action_model.beginResetModel()
+                self.action_model.endResetModel()
                 self.refresh()
                 self.save_session()
                 self.status("Click action updated")
 
     def _open_pause_editor(self, index):
         from ui.dialogs.pause_dialog import PauseDialog
-        dlg = PauseDialog(self, existing=self.engine.actions[index])
+        dlg = PauseDialog(self, existing=self.action_model.get(index))
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions[index] = act
+                self.history.push(self.action_model.actions())
+                self.action_model._actions[index] = act
+                self.action_model.beginResetModel()
+                self.action_model.endResetModel()
                 self.refresh()
                 self.save_session()
                 self.status("Delay action updated")
 
     def _open_image_editor(self, index):
         from ui.dialogs.image_dialog import ImageDialog
-        dlg = ImageDialog(self, existing=self.engine.actions[index])
+        dlg = ImageDialog(self, existing=self.action_model.get(index))
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions[index] = act
+                self.history.push(self.action_model.actions())
+                self.action_model._actions[index] = act
+                self.action_model.beginResetModel()
+                self.action_model.endResetModel()
                 self.refresh()
                 self.save_session()
                 self.status("Image action updated")
