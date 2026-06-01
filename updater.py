@@ -151,15 +151,20 @@ if exist "{internal_cur}" (
 )
 
 :: Use robocopy if available (more reliable), fallback to xcopy
+set COPY_OK=0
 where robocopy >nul 2>&1
 if %errorlevel% == 0 (
     echo Copying new files with robocopy...
-    robocopy "{e}" "{w}" /E /MOVE /NFL /NDL /NJH /NJS >nul 2>&1
+    robocopy "{e}" "{w}" /E /NFL /NDL /NJH /NJS >nul 2>&1
+    :: robocopy exit codes: 0-7 = success or warnings, 8+ = error
+    if %errorlevel% lss 8 set COPY_OK=1
 ) else (
     echo Copying new files with xcopy...
-    xcopy /E /I /Y /Q "{e}\\*.*" "{w}" >nul 2>&1
+    xcopy /E /I /Y /Q "{e}\\*" "{w}" >nul 2>&1
+    if %errorlevel% == 0 set COPY_OK=1
+    if %errorlevel% == 1 set COPY_OK=1
 )
-if %errorlevel% gtr 1 (
+if %COPY_OK% == 0 (
     echo ERROR: Failed to copy new files. Exit code: %errorlevel%
     :: Rollback
     if exist "{internal_old}" (
@@ -174,6 +179,14 @@ if %errorlevel% gtr 1 (
 :: Verify the new exe exists
 if not exist "{c}" (
     echo ERROR: MacroForge.exe missing after update!
+    pause
+    del "%~f0"
+    exit /b 1
+)
+
+:: Verify _internal folder exists
+if not exist "{internal_cur}" (
+    echo ERROR: _internal folder missing after update!
     pause
     del "%~f0"
     exit /b 1

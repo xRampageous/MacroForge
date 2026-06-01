@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QCursor
 from models import Action
 from ui.theme import COLORS
+from debugger import logger
 
 
 def _hsep(color):
@@ -548,13 +549,17 @@ class ImageDialog(QDialog):
                 QMessageBox.critical(self, "Error", str(e))
 
     def _capture_image(self):
+        logger.debug("image_dialog._capture_image: start")
         def _after(b64):
+            logger.debug("image_dialog._capture_image._after: got b64")
             self._img_data = b64
             self.img_path.setText("Captured")
             self._show_preview(b64)
+            logger.debug("image_dialog._capture_image._after: preview shown")
         self._do_capture(_after, "Capture screen region")
 
     def _do_capture(self, callback, title_text, return_region=False):
+        logger.debug(f"image_dialog._do_capture: start (return_region={return_region})")
         try:
             from PIL import ImageGrab
         except ImportError:
@@ -577,6 +582,7 @@ class ImageDialog(QDialog):
         self.activateWindow()
         if overlay.region:
             x, y, w, h = overlay.region
+            logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
             if return_region:
                 callback((x, y, w, h))
                 return
@@ -585,11 +591,16 @@ class ImageDialog(QDialog):
                 buf = io.BytesIO()
                 shot.save(buf, format="PNG")
                 b64 = base64.b64encode(buf.getvalue()).decode()
+                logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
                 callback(b64)
             except Exception as e:
+                logger.exception("image_dialog._do_capture: capture failed")
                 QMessageBox.critical(self, "Capture Error", str(e))
+        else:
+            logger.debug("image_dialog._do_capture: no region selected")
 
     def get_action(self):
+        logger.debug("image_dialog.get_action: start")
         try:
             sim_pct = max(0, min(100, int(self.sim_pct.value())))
             sim = round(1.0 - sim_pct / 100.0, 4)
@@ -598,8 +609,10 @@ class ImageDialog(QDialog):
             off_y = int(self.off_y.text() or "0")
             repeat = int(self.repeat.text() or "1")
         except ValueError:
+            logger.debug("image_dialog.get_action: ValueError -> None")
             return None
         if not self._img_data:
+            logger.debug("image_dialog.get_action: no img_data -> None")
             QMessageBox.warning(self, "No Image", "Please select or capture an image.")
             return None
         if self.reg_fg.isChecked():
@@ -612,6 +625,7 @@ class ImageDialog(QDialog):
             region = f"{rx},{ry},{rw},{rh}"
         else:
             region = ""
+        logger.debug(f"image_dialog.get_action: building Action sim={sim} wait={wait} region={region}")
         return Action(
             key="[IMAGE]",
             duration=0.05,
