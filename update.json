@@ -1,6 +1,6 @@
 {
-  "version": "1.2.21",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.21/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.21/MacroForge-v1.2.21.zip",
-  "notes": "v1.2.21: Redesigned add-action buttons to match reference style \u2014 flat solid full-color backgrounds, minimal border-radius, taller (40px), tight 2px spacing. Added Capture button with camera icon. Correct icon colors per button background."
+  "version": "1.2.22",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.22/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.22/MacroForge-v1.2.22.zip",
+  "notes": "v1.2.22: Fixed add-action buttons by applying per-button stylesheets directly (solid colors + hover now guaranteed). Removed Capture button. Made auto-exit bulletproof: every cleanup step wrapped in try/except so os._exit(0) always fires after update download."
 }
