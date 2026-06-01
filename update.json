@@ -1,6 +1,6 @@
 {
-  "version": "1.2.24",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.24/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.24/MacroForge-v1.2.24.zip",
-  "notes": "v1.2.24: Fixed image dialog preview blur by removing double-scaling (setScaledContents) and setting fixed preview size. Fixed timeline _init_pool to nullify img_item after removal to prevent stale references. Removed hidden img_path from layout to avoid invisible space."
+  "version": "1.2.25",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.25/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.25/MacroForge-v1.2.25.zip",
+  "notes": "v1.2.25: Rebuilt timeline with a simpler, more robust architecture that creates/destroys visible rows on each render instead of fragile object pooling. Fixed updater auto-exit bug (QTimer.singleShot from background thread was not firing; now uses pyqtSignal for reliable main-thread process termination). Fixed QSystemTrayIcon missing icon warning. Added exception logging around dialog add flow and timeline render for easier future diagnostics."
 }

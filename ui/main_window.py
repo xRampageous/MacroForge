@@ -19,15 +19,15 @@ from copy import deepcopy
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
-    QProgressBar, QFrame, QGraphicsEllipseItem, QMenu,
-    QSpinBox, QDoubleSpinBox, QGraphicsScene, QGraphicsView,
-    QFileDialog, QMessageBox, QInputDialog, QGraphicsTextItem,
+    QProgressBar, QFrame, QMenu,
+    QSpinBox, QDoubleSpinBox,
+    QFileDialog, QMessageBox, QInputDialog,
     QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut
+from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut, QIcon
 
 from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager
@@ -86,6 +86,8 @@ class MainWindow(QMainWindow):
     _update_found = pyqtSignal(dict)
     _update_not_found = pyqtSignal()
     _update_error = pyqtSignal(str)
+    _download_progress = pyqtSignal(int, str)  # pct, info_text
+    _do_exit = pyqtSignal()
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -93,6 +95,18 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(640, 560)
         self.resize(780, 760)
         self.setStyleSheet(build_stylesheet())
+
+        # Window / taskbar icon
+        try:
+            if getattr(sys, "frozen", False):
+                ico = os.path.join(os.path.dirname(sys.executable), "MacroForge.ico")
+            else:
+                ico = os.path.join(os.path.dirname(__file__), "..", "MacroForge.ico")
+            ico = os.path.abspath(ico)
+            if os.path.exists(ico):
+                self.setWindowIcon(QIcon(ico))
+        except Exception:
+            pass
 
         # Backend refs
         self.session_manager = profile_manager or ProfileManager()
@@ -114,6 +128,7 @@ class MainWindow(QMainWindow):
         self.actions_played = 0
         self.session_elapsed_time = 0.0
         self.session_start_time = None
+        self._seq_dur_cache = 0.0
 
         # Recorder state
         self._recorder = {
@@ -143,6 +158,7 @@ class MainWindow(QMainWindow):
         self._update_found.connect(self._on_update_found)
         self._update_not_found.connect(self._on_update_not_found)
         self._update_error.connect(self._on_update_error)
+        self._do_exit.connect(self._real_exit)
 
         self._check_update_silent()
         self.load_last_session()
@@ -168,21 +184,29 @@ class MainWindow(QMainWindow):
         # ━━ Left sidebar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         sidebar = QFrame()
         sidebar.setObjectName("glass_card")
-        sidebar.setFixedWidth(180)
+        sidebar.setFixedWidth(210)
         sidebar.setStyleSheet(f"background-color: {C['bg_secondary']}; border-right: 1px solid {C['border']};")
         sb_lo = QVBoxLayout(sidebar)
-        sb_lo.setContentsMargins(8, 8, 8, 8)
-        sb_lo.setSpacing(6)
+        sb_lo.setContentsMargins(10, 10, 10, 10)
+        sb_lo.setSpacing(8)
 
-        # Branding
+        # Branding + version
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(4)
         brand = QLabel("MACROFORGE")
         brand.setObjectName("title")
-        brand.setStyleSheet(f"color: {C['accent']}; font-size: 13px; font-weight: 800; letter-spacing: 2px;")
-        sb_lo.addWidget(brand)
+        brand.setStyleSheet(f"color: {C['accent']}; font-size: 14px; font-weight: 800; letter-spacing: 2px;")
+        brand_row.addWidget(brand)
+        brand_row.addStretch()
+        ver_lbl = QLabel(VERSION)
+        ver_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 600;")
+        brand_row.addWidget(ver_lbl)
+        sb_lo.addLayout(brand_row)
 
         # ── Add Actions ──
         add_lbl = QLabel("ADD")
         add_lbl.setObjectName("section")
+        add_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;")
         sb_lo.addWidget(add_lbl)
         self._add_btn("Key", self._open_key_dialog, C["key"], sb_lo, "key")
         self._add_btn("Click", self._open_click_dialog, C["click"], sb_lo, "click")
@@ -194,6 +218,7 @@ class MainWindow(QMainWindow):
         # ── Recorder ──
         rec_lbl = QLabel("REC")
         rec_lbl.setObjectName("section")
+        rec_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;")
         sb_lo.addWidget(rec_lbl)
         rec_card = QFrame()
         rec_card.setObjectName("rec_card")
@@ -206,14 +231,14 @@ class MainWindow(QMainWindow):
         self.rec_dot.set_color(C["text_dark"])
         rrow.addWidget(self.rec_dot)
         self.rec_status = QLabel("IDLE")
-        self.rec_status.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 600;")
+        self.rec_status.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 600;")
         rrow.addWidget(self.rec_status)
         rrow.addStretch()
         self.rec_time = QLabel("0:00")
-        self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
+        self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
         rrow.addWidget(self.rec_time)
         self.rec_actions = QLabel("0")
-        self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px;")
+        self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
         rrow.addWidget(self.rec_actions)
         rc_lo.addLayout(rrow)
         brow = QHBoxLayout()
@@ -246,6 +271,7 @@ class MainWindow(QMainWindow):
         # ── Playback ──
         play_lbl = QLabel("PLAY")
         play_lbl.setObjectName("section")
+        play_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;")
         sb_lo.addWidget(play_lbl)
         play_card = QFrame()
         play_card.setObjectName("play_card")
@@ -326,6 +352,7 @@ class MainWindow(QMainWindow):
         # ── Inspector ──
         insp_lbl = QLabel("INSPECTOR")
         insp_lbl.setObjectName("section")
+        insp_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;")
         sb_lo.addWidget(insp_lbl)
         insp_card = QFrame()
         insp_card.setObjectName("insp_card")
@@ -344,9 +371,9 @@ class MainWindow(QMainWindow):
                           ("edit", self._open_active_dialog, "Edit", C["accent"])]:
             b = QPushButton()
             b.setObjectName("icon_btn")
-            b.setIcon(icon(name, 12, clr))
+            b.setIcon(icon(name, 14, clr))
             b.setToolTip(tip)
-            b.setFixedSize(24, 24)
+            b.setFixedSize(28, 28)
             if slot:
                 b.clicked.connect(slot)
             ibrow.addWidget(b)
@@ -355,7 +382,7 @@ class MainWindow(QMainWindow):
 
         # Empty state
         self.insp_empty = QLabel("Select an action to inspect")
-        self.insp_empty.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; font-style: italic; padding: 8px 0;")
+        self.insp_empty.setStyleSheet(f"color: {C['text_dark']}; font-size: 11px; font-style: italic; padding: 10px 0;")
         self.insp_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icard_lo.addWidget(self.insp_empty)
 
@@ -552,61 +579,83 @@ class MainWindow(QMainWindow):
             f"QFrame#status_bar {{ background-color: {C['bg_secondary']}; "
             f"border-top: 1px solid {C['border']}; }}"
         )
-        status_bar.setFixedHeight(32)
+        status_bar.setFixedHeight(36)
         sbar_lo = QHBoxLayout(status_bar)
-        sbar_lo.setContentsMargins(10, 4, 10, 4)
+        sbar_lo.setContentsMargins(12, 5, 12, 5)
         sbar_lo.setSpacing(10)
 
-        # Progress bar (left side)
+        # Progress bar (fills remaining width)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(4)
-        self.progress_bar.setFixedWidth(120)
+        self.progress_bar.setFixedHeight(6)
         self.progress_bar.setStyleSheet(
-            f"QProgressBar {{ background-color: {C['border']}; border-radius: 2px; }}"
-            f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 2px; }}"
+            f"QProgressBar {{ background-color: {C['border']}; border-radius: 3px; }}"
+            f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 3px; }}"
         )
-        sbar_lo.addWidget(self.progress_bar)
+        sbar_lo.addWidget(self.progress_bar, stretch=1)
         self.progress_label = QLabel("0%")
-        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; min-width: 26px;")
+        self.progress_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; min-width: 30px;")
         sbar_lo.addWidget(self.progress_label)
-        sbar_lo.addSpacing(12)
+        sbar_lo.addSpacing(16)
 
-        # Stats
-        self._stat_actions = QLabel("0 actions")
-        self._stat_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-        sbar_lo.addWidget(self._stat_actions)
+        # Icon stats (bolt=actions, loop=loops, delay=seq, clock=time)
+        _stat_color = C["text_dim"]
+        def _make_stat(icon_name, text="0"):
+            f = QFrame()
+            f_lo = QHBoxLayout(f)
+            f_lo.setContentsMargins(0, 0, 0, 0)
+            f_lo.setSpacing(4)
+            ico = QLabel()
+            ico.setPixmap(icon(icon_name, 12, _stat_color).pixmap(12, 12))
+            f_lo.addWidget(ico)
+            lbl = QLabel(text)
+            lbl.setStyleSheet(f"color: {_stat_color}; font-size: 11px; background: transparent;")
+            f_lo.addWidget(lbl)
+            return f, lbl
 
-        self._stat_loops = QLabel("0/1")
-        self._stat_loops.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-        sbar_lo.addWidget(self._stat_loops)
+        self._stat_actions_w, self._stat_actions = _make_stat("bolt", "0")
+        self._stat_loops_w,   self._stat_loops   = _make_stat("loop", "0")
+        self._stat_seq_w,     self._stat_seq     = _make_stat("delay", "0.0s")
+        self._stat_time_w,    self._stat_time    = _make_stat("clock", "0:00:00")
 
-        self._stat_seq = QLabel("0.00s")
-        self._stat_seq.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-        sbar_lo.addWidget(self._stat_seq)
-
-        self._stat_time = QLabel("0.0s")
-        self._stat_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-        sbar_lo.addWidget(self._stat_time)
-
+        sbar_lo.addWidget(self._stat_actions_w)
+        sbar_lo.addWidget(self._stat_loops_w)
+        sbar_lo.addWidget(self._stat_seq_w)
+        sbar_lo.addWidget(self._stat_time_w)
         sbar_lo.addStretch()
         content_lo.addWidget(status_bar)
 
         main_lo.addWidget(content, stretch=1)
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):
-        # Map icon/type to the colorful theme object name
         type_map = {"key": "add_key", "click": "add_click", "delay": "add_pause",
                     "image": "add_image", "condition": "add_condition"}
         obj = type_map.get(icon_name, "action_add")
-        btn = QPushButton(f"  {text}")
+        btn = QPushButton(text)
         btn.setObjectName(obj)
-        icon_color = COLORS["text_inverse"] if obj != "action_add" else color
-        btn.setIcon(icon(icon_name, 14, icon_color))
-        btn.setIconSize(QSize(14, 14))
-        btn.setMinimumHeight(34)
+        # Image button has light amber bg → dark icon; others have colored bg → white icon
+        icon_color = "#0d0d14" if obj == "add_image" else "#ffffff"
+        btn.setIcon(icon(icon_name, 16, icon_color))
+        btn.setIconSize(QSize(16, 16))
+        btn.setMinimumHeight(40)
+        # Compute hover/pressed colors from the base color
+        def _shade(hexcol, factor):
+            r, g, b = int(hexcol[1:3], 16), int(hexcol[3:5], 16), int(hexcol[5:7], 16)
+            r = min(255, int(r * factor))
+            g = min(255, int(g * factor))
+            b = min(255, int(b * factor))
+            return f"#{r:02x}{g:02x}{b:02x}"
+        hover = _shade(color, 1.15)
+        pressed = _shade(color, 0.85)
+        text_col = "#0d0d14" if obj == "add_image" else "#ffffff"
+        btn.setStyleSheet(
+            f"QPushButton {{ background-color: {color}; color: {text_col}; border: none; "
+            f"border-radius: 4px; padding: 10px 12px; text-align: center; font-size: 12px; font-weight: 700; }}"
+            f"QPushButton:hover {{ background-color: {hover}; }}"
+            f"QPushButton:pressed {{ background-color: {pressed}; }}"
+        )
         btn.clicked.connect(callback)
         layout.addWidget(btn)
 
@@ -650,7 +699,7 @@ class MainWindow(QMainWindow):
     def _deselect(self):
         self.select(-1)
         self.timeline.selected_indices.clear()
-        self.timeline._dirty_all = True
+        self.timeline.refresh()
 
     def _delete_selected(self):
         self.delete_action(self.active_index)
@@ -1619,6 +1668,7 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _check_update_silent(self):
+        self._update_prompt_shown = False  # fresh startup = allow prompt
         def _bg():
             try:
                 manifest = check_update(silent=True)
@@ -1640,6 +1690,13 @@ class MainWindow(QMainWindow):
     def _on_update_error(self, error_msg):
         self._set_update_done()
         QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error_msg}")
+
+    def _on_download_progress(self, pct, txt):
+        """Slot for _download_progress signal — always runs on main thread."""
+        if hasattr(self, '_update_bar') and self._update_bar:
+            self._update_bar.setValue(pct)
+        if hasattr(self, '_update_info') and self._update_info:
+            self._update_info.setText(txt)
 
     def _set_update_done(self):
         self._update_checking = False
@@ -1702,44 +1759,61 @@ class MainWindow(QMainWindow):
             # Progress dialog
             dlg = QDialog(self)
             dlg.setWindowTitle("Updating MacroForge")
-            dlg.setFixedSize(320, 120)
-            dlg.setStyleSheet(f"background-color: {COLORS['bg_secondary']};")
+            dlg.setFixedSize(380, 140)
+            dlg.setStyleSheet(f"QDialog {{ background-color: {COLORS['bg_secondary']}; }}")
             dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
             lo = QVBoxLayout(dlg)
             lo.setContentsMargins(16, 16, 16, 16)
             lo.addWidget(QLabel(f"Downloading MacroForge {remote_ver}…"))
             bar = QProgressBar()
             bar.setRange(0, 100)
+            bar.setFixedHeight(8)
             lo.addWidget(bar)
             info = QLabel("Starting…")
             info.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px;")
             lo.addWidget(info)
             dlg.show()
+            dlg.raise_()
+            dlg.activateWindow()
+            dlg.update()
+            QApplication.processEvents()
+
+            # Store refs for signal-based updates (thread-safe)
+            self._update_bar = bar
+            self._update_info = info
+            try:
+                self._download_progress.disconnect(self._on_download_progress)
+            except Exception:
+                pass
+            self._download_progress.connect(self._on_download_progress)
 
             def _on_progress(downloaded, total):
                 pct = downloaded / total * 100 if total else 0
                 mb_down = downloaded / (1024 * 1024)
-                mb_total = total / (1024 * 1024)
-                QTimer.singleShot(0, lambda: (
-                    bar.setValue(int(pct)),
-                    info.setText(f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)")
-                ))
+                if total:
+                    mb_total = total / (1024 * 1024)
+                    txt = f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)"
+                else:
+                    txt = f"{mb_down:.1f} MB downloaded"
+                self._download_progress.emit(int(pct), txt)
+
+            def _cleanup():
+                self._update_bar = None
+                self._update_info = None
+                try:
+                    self._download_progress.disconnect(self._on_download_progress)
+                except Exception:
+                    pass
 
             def _download():
                 try:
                     if perform_update(manifest, progress_cb=_on_progress):
-                        QTimer.singleShot(0, lambda: (dlg.close(), self._real_exit()))
+                        self._do_exit.emit()
                     else:
-                        QTimer.singleShot(0, lambda: (
-                            dlg.close(),
-                            QMessageBox.critical(self, "Update Failed", "Download or installation failed.\n\nSee debug log for details.")
-                        ))
+                        self._update_error.emit("Download or installation failed. See debug log for details.")
                 except Exception as e:
                     logger.error(f"perform_update failed: {e}")
-                    QTimer.singleShot(0, lambda: (
-                        dlg.close(),
-                        QMessageBox.critical(self, "Update Error", f"Update failed:\n\n{e}")
-                    ))
+                    self._update_error.emit(f"Update failed: {e}")
             threading.Thread(target=_download, daemon=True).start()
         except Exception as e:
             logger.error(f"_prompt_update crashed: {e}")
@@ -1755,27 +1829,24 @@ class MainWindow(QMainWindow):
         logger.info(msg)
 
     def _invalidate_seq_dur(self):
-        pass  # Can cache sequence duration if needed
+        self._seq_dur_cache = sum(a.duration for a in self.engine.actions)
+
+    @staticmethod
+    def _format_hms(seconds: float) -> str:
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = int(seconds % 60)
+        return f"{h}:{m:02d}:{s:02d}"
 
     def update_statistics(self, immediate=False):
-        total = len(self.engine.actions)
-        loops = self.loops_spin.value()
-        self._stat_actions.setText(f"{total} actions")
-        # Show loop progress during playback, not raw action count
-        if self.engine.running:
-            current = getattr(self.engine, 'loops_completed_count', 0) + 1
-            if self.engine.infinite_loop:
-                self._stat_loops.setText(f"{current}/∞")
-            else:
-                self._stat_loops.setText(f"{current}/{loops}")
-        else:
-            self._stat_loops.setText(f"0/{loops}")
-        seq_dur = sum(a.duration for a in self.engine.actions)
-        self._stat_seq.setText(f"{seq_dur:.2f}s")
-        elapsed = self.session_elapsed_time
-        if self.session_start_time:
-            elapsed += time.time() - self.session_start_time
-        self._stat_time.setText(f"{elapsed:.1f}s")
+        seq_dur = getattr(self, '_seq_dur_cache', 0.0)
+        loops_done = getattr(self.engine, 'loops_completed_count', 0)
+        session_time = seq_dur * loops_done
+
+        self._stat_actions.setText(str(self.actions_played))
+        self._stat_loops.setText(str(loops_done))
+        self._stat_seq.setText(f"{seq_dur:.1f}s")
+        self._stat_time.setText(self._format_hms(session_time))
 
     # ═══════════════════════════════════════════════════════
     #  HOTKEYS & SYSTRAY
@@ -1808,6 +1879,7 @@ class MainWindow(QMainWindow):
             self._tray_menu.addAction("Quit", self._real_exit)
             self._tray_icon = QSystemTrayIcon(self)
             self._tray_icon.setContextMenu(self._tray_menu)
+            self._tray_icon.setIcon(self.windowIcon())
             self._tray_icon.activated.connect(self._tray_activated)
             self._tray_icon.show()
         except Exception as e:
@@ -1822,6 +1894,7 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def refresh(self):
+        self._invalidate_seq_dur()
         self.timeline.set_actions(self.engine.actions)
         self.update_statistics()
 
@@ -1843,60 +1916,94 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _open_key_dialog(self):
-        from ui.dialogs.key_dialog import KeyDialog
-        dlg = KeyDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            act = dlg.get_action()
-            if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions.append(act)
-                self.active_index = len(self.engine.actions) - 1
-                self.refresh()
-                self.timeline.ensure_visible(self.active_index)
-                self.save_session()
-                self.status(f"Added key: {act.key}")
+        try:
+            from ui.dialogs.key_dialog import KeyDialog
+            dlg = KeyDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.engine.actions)
+                    self.engine.actions.append(act)
+                    self.active_index = len(self.engine.actions) - 1
+                    self.refresh()
+                    self.timeline.ensure_visible(self.active_index)
+                    self.save_session()
+                    self.status(f"Added key: {act.key}")
+        except Exception as e:
+            logger.error(f"_open_key_dialog: {e}")
+            raise
 
     def _open_click_dialog(self):
-        from ui.dialogs.click_dialog import ClickDialog
-        dlg = ClickDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            act = dlg.get_action()
-            if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions.append(act)
-                self.active_index = len(self.engine.actions) - 1
-                self.refresh()
-                self.timeline.ensure_visible(self.active_index)
-                self.save_session()
-                self.status(f"Added click")
+        try:
+            from ui.dialogs.click_dialog import ClickDialog
+            dlg = ClickDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.engine.actions)
+                    self.engine.actions.append(act)
+                    self.active_index = len(self.engine.actions) - 1
+                    self.refresh()
+                    self.timeline.ensure_visible(self.active_index)
+                    self.save_session()
+                    self.status("Added click")
+        except Exception as e:
+            logger.error(f"_open_click_dialog: {e}")
+            raise
 
     def _open_pause_dialog(self):
-        from ui.dialogs.pause_dialog import PauseDialog
-        dlg = PauseDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            act = dlg.get_action()
-            if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions.append(act)
-                self.active_index = len(self.engine.actions) - 1
-                self.refresh()
-                self.timeline.ensure_visible(self.active_index)
-                self.save_session()
-                self.status(f"Added delay")
+        try:
+            from ui.dialogs.pause_dialog import PauseDialog
+            dlg = PauseDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.engine.actions)
+                    self.engine.actions.append(act)
+                    self.active_index = len(self.engine.actions) - 1
+                    self.refresh()
+                    self.timeline.ensure_visible(self.active_index)
+                    self.save_session()
+                    self.status("Added delay")
+        except Exception as e:
+            logger.error(f"_open_pause_dialog: {e}")
+            raise
 
     def _open_image_dialog(self):
-        from ui.dialogs.image_dialog import ImageDialog
-        dlg = ImageDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            act = dlg.get_action()
-            if act:
-                self.history.push(self.engine.actions)
-                self.engine.actions.append(act)
-                self.active_index = len(self.engine.actions) - 1
-                self.refresh()
-                self.timeline.ensure_visible(self.active_index)
-                self.save_session()
-                self.status(f"Added image search")
+        try:
+            from ui.dialogs.image_dialog import ImageDialog
+            dlg = ImageDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.engine.actions)
+                    self.engine.actions.append(act)
+                    self.active_index = len(self.engine.actions) - 1
+                    self.refresh()
+                    self.timeline.ensure_visible(self.active_index)
+                    self.save_session()
+                    self.status("Added image search")
+        except Exception as e:
+            logger.error(f"_open_image_dialog: {e}")
+            raise
+
+    def _open_capture_dialog(self):
+        try:
+            from ui.dialogs.image_dialog import ImageDialog
+            dlg = ImageDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.engine.actions)
+                    self.engine.actions.append(act)
+                    self.active_index = len(self.engine.actions) - 1
+                    self.refresh()
+                    self.timeline.ensure_visible(self.active_index)
+                    self.save_session()
+                    self.status("Added captured image search")
+        except Exception as e:
+            logger.error(f"_open_capture_dialog: {e}")
+            raise
 
     def _open_key_editor(self, index):
         from ui.dialogs.key_dialog import KeyDialog
@@ -1947,12 +2054,30 @@ class MainWindow(QMainWindow):
                 self.status("Image action updated")
 
     def _real_exit(self):
-        self._do_save_session()
+        try:
+            self._do_save_session()
+        except Exception:
+            pass
         try:
             stop_hotkeys()
         except Exception:
             pass
-        self.close()
+        try:
+            if self._tray_icon:
+                self._tray_icon.hide()
+                self._tray_icon = None
+        except Exception:
+            pass
+        try:
+            for w in QApplication.topLevelWidgets():
+                w.close()
+        except Exception:
+            pass
+        try:
+            QApplication.quit()
+        except Exception:
+            pass
+        os._exit(0)
 
     def closeEvent(self, event):
         self._do_save_session()
