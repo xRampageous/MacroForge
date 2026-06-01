@@ -1,6 +1,6 @@
 {
-  "version": "1.2.22",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.22/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.22/MacroForge-v1.2.22.zip",
-  "notes": "v1.2.22: Fixed add-action buttons by applying per-button stylesheets directly (solid colors + hover now guaranteed). Removed Capture button. Made auto-exit bulletproof: every cleanup step wrapped in try/except so os._exit(0) always fires after update download."
+  "version": "1.2.23",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.23/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.23/MacroForge-v1.2.23.zip",
+  "notes": "v1.2.23: Centered text and icons on add-action buttons. Redesigned Image Search dialog to a modern single-column layout matching reference: preview box + Capture/Browse side-by-side, similarity coefficient with note, position-mouse checkbox, search region radios with capture-region button, when-found/when-not-found dropdowns, key-to-press with clear button, wait timeout, click offset, random-click + loop checkboxes, and bottom meta row. All existing data fields preserved."
 }
