@@ -21,14 +21,13 @@ def _hsep(color):
     return f
 
 
-class CaptureOverlay(QWidget):
+class CaptureOverlay(QDialog):
     """Fullscreen overlay for selecting a screen region to capture."""
     def __init__(self):
         super().__init__(None)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
@@ -38,7 +37,6 @@ class CaptureOverlay(QWidget):
         self._end = None
         self._dragging = False
         self.region = None
-        self._done = False
         self.setMouseTracking(True)
         
         # Add instruction label
@@ -86,14 +84,12 @@ class CaptureOverlay(QWidget):
             r = QRect(self._start, self._end).normalized()
             if r.width() > 2 and r.height() > 2:
                 self.region = (r.left(), r.top(), r.width(), r.height())
-            self._done = True
-            self.close()
+            self.accept()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.region = None
-            self._done = True
-            self.close()
+            self.reject()
 
 
 class ImageDialog(QDialog):
@@ -577,19 +573,18 @@ class ImageDialog(QDialog):
         self._extra_flow.addStretch()
 
     def _capture_extra(self):
-        def _after(b64):
-            if not b64:
-                return
-            self._add_extra_thumb(b64)
-        self._do_capture(_after, "Capture extra template")
+        b64 = self._do_capture("Capture extra template")
+        if not b64:
+            return
+        self._add_extra_thumb(b64)
 
     def _capture_region(self):
-        def _after(region):
+        region = self._do_capture("Capture search region", return_region=True)
+        if region:
             self.reg_region.setChecked(True)
             x, y, w, h = region
             self.reg_x.setText(str(x)); self.reg_y.setText(str(y))
             self.reg_w.setText(str(w)); self.reg_h.setText(str(h))
-        self._do_capture(_after, "Capture search region", return_region=True)
 
     def _browse_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Images (*.png *.jpg *.jpeg *.bmp)")
@@ -605,75 +600,62 @@ class ImageDialog(QDialog):
 
     def _capture_image(self):
         logger.debug("image_dialog._capture_image: start")
-        def _after(b64):
-            if not b64:
-                return
-            logger.debug("image_dialog._capture_image._after: got b64")
-            self._img_data = b64
-            self.img_path.setText("Captured")
-            self._show_preview(b64)
-            logger.debug("image_dialog._capture_image._after: preview shown")
-        self._do_capture(_after, "Capture screen region")
+        b64 = self._do_capture("Capture screen region")
+        print(f"DEBUG: _capture_image got type={type(b64)}, value={b64}")
+        if not b64:
+            return
+        logger.debug("image_dialog._capture_image: got b64")
+        self._img_data = b64
+        self.img_path.setText("Captured")
+        self._show_preview(b64)
+        logger.debug("image_dialog._capture_image: preview shown")
 
-    def _do_capture(self, callback, title_text, return_region=False):
+    def _do_capture(self, title_text, return_region=False):
         logger.debug(f"image_dialog._do_capture: start (return_region={return_region})")
         try:
             from PIL import ImageGrab
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
-            return
-        # Hide parent dialog
+            return None
+        # Hide parent dialog completely (like tkinter withdraw)
         logger.debug("image_dialog._do_capture: hiding dialog")
         self.hide()
         import time
         time.sleep(0.1)
-        # Show overlay (non-modal)
+        # Show overlay as modal dialog (like tkinter grab_set)
         overlay = CaptureOverlay()
         logger.debug("image_dialog._do_capture: showing overlay")
-        overlay.show()
-        overlay.raise_()
-        overlay.activateWindow()
-        # Simple blocking wait without Qt event loop
-        import time
-        while not overlay._done:
-            QApplication.processEvents()
-            time.sleep(0.01)
-        logger.debug("image_dialog._do_capture: overlay closed")
+        result = overlay.exec()
+        logger.debug(f"image_dialog._do_capture: overlay returned result={result}")
         # Capture after overlay closes
-        if overlay.region:
+        captured_result = None
+        if result == QDialog.DialogCode.Accepted and overlay.region:
             x, y, w, h = overlay.region
             logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
             if return_region:
-                callback((x, y, w, h))
+                captured_result = (x, y, w, h)
+                logger.debug(f"image_dialog._do_capture: returning region={captured_result}")
             else:
                 try:
                     shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
-                    # Save to cache file
-                    import os
-                    import uuid
-                    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache")
-                    os.makedirs(cache_dir, exist_ok=True)
-                    filename = f"{uuid.uuid4()}.png"
-                    filepath = os.path.join(cache_dir, filename)
-                    shot.save(filepath)
-                    logger.debug(f"image_dialog._do_capture: saved to {filepath}")
-                    # Still return base64 for compatibility
                     buf = io.BytesIO()
                     shot.save(buf, format="PNG")
                     b64 = base64.b64encode(buf.getvalue()).decode()
-                    callback(b64)
+                    logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
+                    print(f"DEBUG: captured image type={type(b64)}, len={len(b64)}")
+                    captured_result = b64
                 except Exception as e:
                     logger.exception("image_dialog._do_capture: capture failed")
                     QMessageBox.critical(self, "Capture Error", str(e))
         else:
             logger.debug("image_dialog._do_capture: no region selected or cancelled")
-            callback(None)
-        # Show parent dialog again
+        # Show parent dialog again (like tkinter deiconify)
         logger.debug("image_dialog._do_capture: showing dialog")
         self.show()
         self.raise_()
         self.activateWindow()
-        overlay.deleteLater()
+        print(f"DEBUG: _do_capture returning type={type(captured_result)}, value={captured_result}")
+        return captured_result
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
