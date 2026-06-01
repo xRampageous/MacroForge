@@ -173,20 +173,47 @@ class _PoolRow(QGraphicsItemGroup):
         C = COLORS
         t = getattr(self, "_action_type", "key")
         if is_playing:
-            bg = QColor(63, 224, 138, 70); glow_c = C["playing"]
+            bg = QColor(63, 224, 138, 180)
+            glow_c = C["playing"]
+            accent_c = QColor(63, 224, 138)
+            label_c = QColor("#ffffff")
+            idx_c = QColor("#c8f7dc")
         elif is_active:
-            bg = QColor(C["bg_tertiary"]); glow_c = TYPE_GLOW.get(t, TYPE_GLOW["key"])
+            bg = QColor(C["bg_tertiary"])
+            glow_c = TYPE_GLOW.get(t, TYPE_GLOW["key"])
+            accent_c = TYPE_COLORS.get(t, C["text_dim"])
+            label_c = QColor(C["text"])
+            idx_c = QColor(C["text_dim"])
         elif is_multi:
-            bg = QColor(C["bg_card"]); glow_c = TYPE_GLOW.get(t, TYPE_GLOW["key"])
+            bg = QColor(C["bg_card"])
+            glow_c = TYPE_GLOW.get(t, TYPE_GLOW["key"])
+            accent_c = TYPE_COLORS.get(t, C["text_dim"])
+            label_c = QColor(C["text"])
+            idx_c = QColor(C["text_dim"])
         elif is_hover:
-            bg = QColor(C["bg_hover"]); glow_c = None
+            bg = QColor(C["bg_hover"])
+            glow_c = None
+            accent_c = TYPE_COLORS.get(t, C["text_dim"])
+            label_c = QColor(C["text"])
+            idx_c = QColor(C["text_dim"])
         else:
-            bg = QColor(C["bg_secondary"]); glow_c = None
+            bg = QColor(C["bg_secondary"])
+            glow_c = None
+            accent_c = TYPE_COLORS.get(t, C["text_dim"])
+            label_c = QColor(C["text"])
+            idx_c = QColor(C["text_dim"])
+
         self._bg.setBrush(QBrush(bg))
+        self._accent.setBrush(QBrush(QColor(accent_c)))
+        self._label.setDefaultTextColor(QColor(label_c))
+        self._idx_txt.setDefaultTextColor(QColor(idx_c))
+
         if glow_c:
-            self._glow.setPen(QPen(QColor(glow_c), 1))
+            self._glow.setPen(QPen(QColor(glow_c), 2))
+            self._glow.setBrush(QBrush(Qt.BrushStyle.NoBrush))
         else:
             self._glow.setPen(QPen(Qt.PenStyle.NoPen))
+            self._glow.setBrush(QBrush(Qt.BrushStyle.NoBrush))
 
         _, _, bar_w, bs, _, _ = self._cols(w)
         if is_playing and action_dur > 0:
@@ -195,10 +222,10 @@ class _PoolRow(QGraphicsItemGroup):
             remaining = max(0.0, action_dur - elapsed)
             progress = max(2, int(bar_w * (remaining / action_dur)))
             dur_text = f"{remaining:.1f}s"
-            dur_color = QColor(C["text"])
+            dur_color = QColor("#ffffff")
         else:
             progress = bar_w
-            dur_text = "0.00s"
+            dur_text = f"{action_dur:.2f}s" if action_dur > 0 else "0.00s"
             dur_color = QColor(C["text_dim"])
         self._prog_fill.setRect(int(bs), int(self._prog_fill.rect().y()), int(progress), 5)
         self._dur.setPlainText(dur_text)
@@ -399,6 +426,8 @@ class TimelineView(QGraphicsView):
                 row.apply_search_dim(False)
 
         self._create_header()
+        if self.playing_index >= 0:
+            self.viewport().update()
 
     def set_actions(self, actions):
         self._actions = actions
