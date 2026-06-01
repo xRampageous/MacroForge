@@ -602,13 +602,18 @@ class ImageDialog(QDialog):
         logger.debug("image_dialog._capture_image: start")
         b64 = self._do_capture("Capture screen region")
         print(f"DEBUG: _capture_image got type={type(b64)}, value={b64}")
+        if b64 is None:
+            print("[ERROR] Capture failed - image is None")
+            return
         if not b64:
+            print("[ERROR] Capture failed - image is empty")
             return
         logger.debug("image_dialog._capture_image: got b64")
         self._img_data = b64
         self.img_path.setText("Captured")
         self._show_preview(b64)
         logger.debug("image_dialog._capture_image: preview shown")
+        print(f"DEBUG: self._img_data type={type(self._img_data)}, len={len(self._img_data) if self._img_data else 0}")
 
     def _do_capture(self, title_text, return_region=False):
         logger.debug(f"image_dialog._do_capture: start (return_region={return_region})")
@@ -659,6 +664,16 @@ class ImageDialog(QDialog):
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
+        print(f"DEBUG: get_action self._img_data type={type(self._img_data)}, value={self._img_data}")
+        if self._img_data is None:
+            print("[ERROR] get_action - self._img_data is None")
+            QMessageBox.warning(self, "No Image", "Please select or capture an image.")
+            return None
+        if not self._img_data:
+            print("[ERROR] get_action - self._img_data is empty")
+            QMessageBox.warning(self, "No Image", "Please select or capture an image.")
+            return None
+        assert self._img_data is not None, "Captured image is None"
         try:
             sim_pct = max(0, min(100, int(self.sim_pct.value())))
             sim = round(1.0 - sim_pct / 100.0, 4)
@@ -668,10 +683,6 @@ class ImageDialog(QDialog):
             repeat = int(self.repeat.text() or "1")
         except ValueError:
             logger.debug("image_dialog.get_action: ValueError -> None")
-            return None
-        if not self._img_data:
-            logger.debug("image_dialog.get_action: no img_data -> None")
-            QMessageBox.warning(self, "No Image", "Please select or capture an image.")
             return None
         if self.reg_fg.isChecked():
             region = "foreground"
