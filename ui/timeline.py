@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QGraphicsItemGroup, QFrame
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPen, QBrush, QFont, QPixmap, QLinearGradient, QPainter
+from PyQt6.QtGui import QColor, QPen, QBrush, QFont, QFontMetrics, QPixmap, QLinearGradient, QPainter
 from ui.theme import COLORS, TYPE_COLORS, TYPE_GLOW
 from debugger import logger
 
