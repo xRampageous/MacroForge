@@ -48,7 +48,6 @@ project_hiddenimports = [
     'ui.dialogs.click_dialog',
     'ui.dialogs.image_dialog',
     'ui.dialogs.settings_dialog',
-    'ui.dialogs.condition_dialog',
     # Third-party
     'cv2',
     'PIL',
@@ -78,7 +77,11 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['tkinter', '_tkinter', 'Tkinter', 'tcl', 'tk'],
+    module_collection_mode={
+        'tkinter': 'py',
+        '_tkinter': 'py',
+    },
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     noarchive=False,

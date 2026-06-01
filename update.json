@@ -1,6 +1,6 @@
 {
-  "version": "1.2.27",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.27/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.27/MacroForge-v1.2.27.zip",
-  "notes": "v1.2.27: Completely rebuilt timeline with proper QGraphicsItemGroup-based row pooling for seamless virtualized rendering. Playback animations, progress bars, drag-and-drop, hover states, and multi-select now work smoothly. v1.2.26: Fixed updater dialog cleanup. v1.2.25: Timeline rebuild, updater auto-exit fix, QSystemTrayIcon fix."
+  "version": "1.2.28",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.28/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.28/MacroForge-v1.2.28.zip",
+  "notes": "v1.2.28: Fixed startup crash caused by PyInstaller bundling tkinter (excluded from build). Timeline playback indicator visibility improved. CSV export/import now preserves action_type and label. v1.2.27: Timeline row pooling rewrite. v1.2.26: Updater dialog cleanup. v1.2.25: Timeline rebuild, updater auto-exit fix."
 }
