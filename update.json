@@ -1,6 +1,6 @@
 {
-  "version": "1.2.25",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.25/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.25/MacroForge-v1.2.25.zip",
-  "notes": "v1.2.25: Rebuilt timeline with a simpler, more robust architecture that creates/destroys visible rows on each render instead of fragile object pooling. Fixed updater auto-exit bug (QTimer.singleShot from background thread was not firing; now uses pyqtSignal for reliable main-thread process termination). Fixed QSystemTrayIcon missing icon warning. Added exception logging around dialog add flow and timeline render for easier future diagnostics."
+  "version": "1.2.26",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.26/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.26/MacroForge-v1.2.26.zip",
+  "notes": "v1.2.26: Fixed updater progress dialog not closing on download success/failure. Added _close_update_dlg pyqtSignal for reliable main-thread dialog cleanup. v1.2.25: Rebuilt timeline with simpler architecture, fixed updater auto-exit, fixed QSystemTrayIcon missing icon warning."
 }

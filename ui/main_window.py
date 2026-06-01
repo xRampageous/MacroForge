@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
     _update_error = pyqtSignal(str)
     _download_progress = pyqtSignal(int, str)  # pct, info_text
     _do_exit = pyqtSignal()
+    _close_update_dlg = pyqtSignal()
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -159,6 +160,7 @@ class MainWindow(QMainWindow):
         self._update_not_found.connect(self._on_update_not_found)
         self._update_error.connect(self._on_update_error)
         self._do_exit.connect(self._real_exit)
+        self._close_update_dlg.connect(self._on_close_update_dlg)
 
         self._check_update_silent()
         self.load_last_session()
@@ -1689,7 +1691,21 @@ class MainWindow(QMainWindow):
 
     def _on_update_error(self, error_msg):
         self._set_update_done()
+        self._on_close_update_dlg()
         QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error_msg}")
+
+    def _on_close_update_dlg(self):
+        if hasattr(self, '_update_dlg') and self._update_dlg:
+            self._update_dlg.close()
+            self._update_dlg = None
+        if hasattr(self, '_update_bar'):
+            self._update_bar = None
+        if hasattr(self, '_update_info'):
+            self._update_info = None
+        try:
+            self._download_progress.disconnect(self._on_download_progress)
+        except Exception:
+            pass
 
     def _on_download_progress(self, pct, txt):
         """Slot for _download_progress signal — always runs on main thread."""
@@ -1757,12 +1773,12 @@ class MainWindow(QMainWindow):
                 return
 
             # Progress dialog
-            dlg = QDialog(self)
-            dlg.setWindowTitle("Updating MacroForge")
-            dlg.setFixedSize(380, 140)
-            dlg.setStyleSheet(f"QDialog {{ background-color: {COLORS['bg_secondary']}; }}")
-            dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-            lo = QVBoxLayout(dlg)
+            self._update_dlg = QDialog(self)
+            self._update_dlg.setWindowTitle("Updating MacroForge")
+            self._update_dlg.setFixedSize(380, 140)
+            self._update_dlg.setStyleSheet(f"QDialog {{ background-color: {COLORS['bg_secondary']}; }}")
+            self._update_dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+            lo = QVBoxLayout(self._update_dlg)
             lo.setContentsMargins(16, 16, 16, 16)
             lo.addWidget(QLabel(f"Downloading MacroForge {remote_ver}…"))
             bar = QProgressBar()
@@ -1772,10 +1788,10 @@ class MainWindow(QMainWindow):
             info = QLabel("Starting…")
             info.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px;")
             lo.addWidget(info)
-            dlg.show()
-            dlg.raise_()
-            dlg.activateWindow()
-            dlg.update()
+            self._update_dlg.show()
+            self._update_dlg.raise_()
+            self._update_dlg.activateWindow()
+            self._update_dlg.update()
             QApplication.processEvents()
 
             # Store refs for signal-based updates (thread-safe)
@@ -1797,22 +1813,17 @@ class MainWindow(QMainWindow):
                     txt = f"{mb_down:.1f} MB downloaded"
                 self._download_progress.emit(int(pct), txt)
 
-            def _cleanup():
-                self._update_bar = None
-                self._update_info = None
-                try:
-                    self._download_progress.disconnect(self._on_download_progress)
-                except Exception:
-                    pass
-
             def _download():
                 try:
                     if perform_update(manifest, progress_cb=_on_progress):
+                        self._close_update_dlg.emit()
                         self._do_exit.emit()
                     else:
+                        self._close_update_dlg.emit()
                         self._update_error.emit("Download or installation failed. See debug log for details.")
                 except Exception as e:
                     logger.error(f"perform_update failed: {e}")
+                    self._close_update_dlg.emit()
                     self._update_error.emit(f"Update failed: {e}")
             threading.Thread(target=_download, daemon=True).start()
         except Exception as e:
