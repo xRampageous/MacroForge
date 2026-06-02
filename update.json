@@ -1,6 +1,6 @@
 {
-  "version": "3.0.12",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.12/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.12/MacroForge-v3.0.12.zip",
-  "notes": "v3.0.12: QGridLayout crash fix - fixed NameError: QGridLayout is not defined by adding QGridLayout to PyQt6.QtWidgets import list, keeps compact panel rescale and icon renderer fixes from previous patches."
+  "version": "3.0.13",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.13/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.13/MacroForge-v3.0.13.zip",
+  "notes": "v3.0.13: Bottom panel alignment - removed PROGRESS text label, expanded progress bar, reworked Playback Options into two clean rows, aligned Speed, Loops, Focus, Sim, and Hum controls, kept bottom panel compact, preserved icon + value stats layout."
 }

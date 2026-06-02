@@ -612,12 +612,12 @@ class MainWindow(QMainWindow):
         main_lo.addWidget(content, stretch=1)
 
     def _make_playback_panel(self):
-        """Bottom-docked compact panel that fits the 760px-wide layout cleanly."""
+        """Bottom-docked compact panel with aligned playback/options/progress sections."""
         C = COLORS
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(94)
+        panel.setFixedHeight(96)
 
         lo = QVBoxLayout(panel)
         lo.setContentsMargins(8, 0, 8, 6)
@@ -629,10 +629,9 @@ class MainWindow(QMainWindow):
             f"QFrame#mf2_playback_dock {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
-        dock.setMinimumHeight(82)
         dlo = QHBoxLayout(dock)
-        dlo.setContentsMargins(7, 6, 7, 6)
-        dlo.setSpacing(6)
+        dlo.setContentsMargins(8, 6, 8, 6)
+        dlo.setSpacing(7)
 
         def section_title(txt):
             lbl = QLabel(txt)
@@ -644,7 +643,10 @@ class MainWindow(QMainWindow):
 
         def mini_label(txt):
             lbl = QLabel(txt)
-            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 7px; font-weight: 800; background: transparent;")
+            lbl.setStyleSheet(
+                f"color: {C['text_dim']}; font-size: 8px; font-weight: 800; "
+                "background: transparent;"
+            )
             return lbl
 
         def vline():
@@ -659,7 +661,7 @@ class MainWindow(QMainWindow):
         play_section.setStyleSheet("background: transparent; border: none;")
         play_lo = QVBoxLayout(play_section)
         play_lo.setContentsMargins(0, 0, 0, 0)
-        play_lo.setSpacing(4)
+        play_lo.setSpacing(5)
         play_lo.addWidget(section_title("PLAYBACK"))
 
         play_row = QHBoxLayout()
@@ -719,24 +721,33 @@ class MainWindow(QMainWindow):
 
         # ── 2. Playback options ────────────────────────────
         options_section = QFrame()
-        options_section.setFixedWidth(170)
+        options_section.setFixedWidth(172)
         options_section.setStyleSheet("background: transparent; border: none;")
         opt_lo = QVBoxLayout(options_section)
         opt_lo.setContentsMargins(0, 0, 0, 0)
         opt_lo.setSpacing(3)
         opt_lo.addWidget(section_title("PLAYBACK OPTIONS"))
 
-        opt_grid = QGridLayout()
-        opt_grid.setContentsMargins(0, 0, 0, 0)
-        opt_grid.setHorizontalSpacing(5)
-        opt_grid.setVerticalSpacing(2)
+        row_one = QHBoxLayout()
+        row_one.setContentsMargins(0, 0, 0, 0)
+        row_one.setSpacing(5)
 
+        speed_box = QVBoxLayout()
+        speed_box.setContentsMargins(0, 0, 0, 0)
+        speed_box.setSpacing(1)
+        speed_box.addWidget(mini_label("Speed"))
         self.speed_combo = QComboBox()
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
         self.speed_combo.setCurrentIndex(3)
         self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        self.speed_combo.setFixedSize(52, 23)
+        self.speed_combo.setFixedSize(50, 23)
+        speed_box.addWidget(self.speed_combo)
+        row_one.addLayout(speed_box)
 
+        loops_box = QVBoxLayout()
+        loops_box.setContentsMargins(0, 0, 0, 0)
+        loops_box.setSpacing(1)
+        loops_box.addWidget(mini_label("Loops"))
         loop_pair = QFrame()
         loop_pair.setStyleSheet("background: transparent; border: none;")
         loop_pair_lo = QHBoxLayout(loop_pair)
@@ -752,39 +763,42 @@ class MainWindow(QMainWindow):
         self.inf_check.setToolTip("Infinite loop")
         self.inf_check.setFixedSize(22, 23)
         loop_pair_lo.addWidget(self.inf_check)
+        loops_box.addWidget(loop_pair)
+        row_one.addLayout(loops_box)
 
+        focus_box = QVBoxLayout()
+        focus_box.setContentsMargins(0, 0, 0, 0)
+        focus_box.setSpacing(1)
+        focus_box.addWidget(mini_label("Focus"))
         self.focus_check = QCheckBox("Lock")
         self.focus_check.setObjectName("pill_check")
         self.focus_check.setToolTip("Keep playback targeted to the captured window")
         self.focus_check.setFixedSize(46, 23)
+        focus_box.addWidget(self.focus_check)
+        row_one.addLayout(focus_box)
 
-        mode_pair = QFrame()
-        mode_pair.setStyleSheet("background: transparent; border: none;")
-        mode_lo = QHBoxLayout(mode_pair)
-        mode_lo.setContentsMargins(0, 0, 0, 0)
-        mode_lo.setSpacing(3)
+        opt_lo.addLayout(row_one)
+
+        row_two = QHBoxLayout()
+        row_two.setContentsMargins(0, 0, 0, 0)
+        row_two.setSpacing(5)
+        row_two.addWidget(mini_label("Mode"))
+
         self.sim_check = QCheckBox("Sim")
         self.sim_check.setObjectName("pill_check")
         self.sim_check.setToolTip("Simulation mode")
-        self.sim_check.setFixedSize(38, 23)
-        mode_lo.addWidget(self.sim_check)
+        self.sim_check.setFixedSize(38, 22)
+        row_two.addWidget(self.sim_check)
+
         self.human_check = QCheckBox("Hum")
         self.human_check.setObjectName("pill_check")
         self.human_check.setToolTip("Humanized movement curve")
-        self.human_check.setFixedSize(40, 23)
+        self.human_check.setFixedSize(40, 22)
         self.human_check.setChecked(True)
-        mode_lo.addWidget(self.human_check)
+        row_two.addWidget(self.human_check)
+        row_two.addStretch()
 
-        opt_grid.addWidget(mini_label("Speed"), 0, 0)
-        opt_grid.addWidget(mini_label("Loops"), 0, 1)
-        opt_grid.addWidget(mini_label("Focus"), 0, 2)
-        opt_grid.addWidget(self.speed_combo, 1, 0)
-        opt_grid.addWidget(loop_pair, 1, 1)
-        opt_grid.addWidget(self.focus_check, 1, 2)
-        opt_grid.addWidget(mini_label("Mode"), 2, 0)
-        opt_grid.addWidget(mode_pair, 2, 1, 1, 2)
-
-        opt_lo.addLayout(opt_grid)
+        opt_lo.addLayout(row_two)
         opt_lo.addStretch()
         dlo.addWidget(options_section)
         dlo.addWidget(vline())
@@ -805,31 +819,27 @@ class MainWindow(QMainWindow):
         )
         progress_wrap.setFixedHeight(30)
         pw_lo = QHBoxLayout(progress_wrap)
-        pw_lo.setContentsMargins(7, 4, 7, 4)
-        pw_lo.setSpacing(6)
+        pw_lo.setContentsMargins(8, 5, 8, 5)
+        pw_lo.setSpacing(7)
 
-        pw_icon = QLabel()
-        pw_icon.setFixedSize(14, 14)
-        pw_icon.setPixmap(icon("play", 14, C["accent"]).pixmap(14, 14))
-        pw_lo.addWidget(pw_icon)
-
-        pw_label = QLabel("PROGRESS")
-        pw_label.setStyleSheet(f"color: {C['text_dim']}; font-size: 8px; font-weight: 900; letter-spacing: .6px; background: transparent;")
-        pw_lo.addWidget(pw_label)
-
+        # The text label was intentionally removed so the progress rail gets
+        # the full width of this section.
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(9)
+        self.progress_bar.setFixedHeight(10)
         self.progress_bar.setStyleSheet(
-            f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 4px; }}"
-            f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 4px; }}"
+            f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 5px; }}"
+            f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 5px; }}"
         )
         pw_lo.addWidget(self.progress_bar, stretch=1)
 
         self.progress_label = QLabel("0%")
-        self.progress_label.setStyleSheet(f"color: {C['accent']}; font-size: 11px; font-weight: 950; min-width: 28px; background: transparent;")
+        self.progress_label.setStyleSheet(
+            f"color: {C['accent']}; font-size: 11px; font-weight: 950; "
+            "min-width: 28px; background: transparent;"
+        )
         pw_lo.addWidget(self.progress_label)
         ps_lo.addWidget(progress_wrap)
 
