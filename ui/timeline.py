@@ -191,9 +191,12 @@ class TimelineView(QListView):
             m = ActionListModel()
             self.setModel(m)
         # Reset order matters: beginResetModel before mutating backing data.
-        m.beginResetModel()
-        m._actions = list(actions or [])
-        m.endResetModel()
+        if hasattr(m, "set_actions"):
+            m.set_actions(actions)
+        else:
+            m.beginResetModel()
+            m._actions = list(actions or [])
+            m.endResetModel()
         self.selected_indices.clear()
         self.viewport().update()
 

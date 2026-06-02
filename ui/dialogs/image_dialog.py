@@ -32,7 +32,8 @@ class CaptureOverlay(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         screen = QApplication.primaryScreen()
-        self.setGeometry(screen.virtualGeometry())
+        self._virtual_geometry = screen.virtualGeometry()
+        self.setGeometry(self._virtual_geometry)
         self._start = None
         self._end = None
         self._dragging = False
@@ -83,7 +84,15 @@ class CaptureOverlay(QDialog):
             self._end = event.position().toPoint()
             r = QRect(self._start, self._end).normalized()
             if r.width() > 2 and r.height() > 2:
-                self.region = (r.left(), r.top(), r.width(), r.height())
+                # Convert overlay-local coordinates to virtual desktop coordinates.
+                # This matters on multi-monitor layouts where the virtual desktop
+                # can start at a negative X/Y offset.
+                self.region = (
+                    self._virtual_geometry.left() + r.left(),
+                    self._virtual_geometry.top() + r.top(),
+                    r.width(),
+                    r.height(),
+                )
             self.accept()
 
     def keyPressEvent(self, event):
@@ -428,6 +437,9 @@ class ImageDialog(QDialog):
 
     def _on_ok_clicked(self):
         logger.debug("ImageDialog._on_ok_clicked")
+        if not isinstance(self._img_data, str) or not self._img_data:
+            QMessageBox.warning(self, "No Image", "Please select or capture an image before pressing OK.")
+            return
         self.accept()
 
     def _on_cancel_clicked(self):
@@ -601,19 +613,16 @@ class ImageDialog(QDialog):
     def _capture_image(self):
         logger.debug("image_dialog._capture_image: start")
         b64 = self._do_capture("Capture screen region")
-        print(f"DEBUG: _capture_image got type={type(b64)}, value={b64}")
-        if b64 is None:
-            print("[ERROR] Capture failed - image is None")
-            return
+        logger.debug("image_dialog._capture_image: captured len=%s", len(b64) if isinstance(b64, str) else 0)
         if not b64:
-            print("[ERROR] Capture failed - image is empty")
+            logger.debug("image_dialog._capture_image: no image captured")
             return
         logger.debug("image_dialog._capture_image: got b64")
         self._img_data = b64
         self.img_path.setText("Captured")
         self._show_preview(b64)
         logger.debug("image_dialog._capture_image: preview shown")
-        print(f"DEBUG: self._img_data type={type(self._img_data)}, len={len(self._img_data) if self._img_data else 0}")
+        logger.debug("image_dialog._capture_image: stored image len=%s", len(self._img_data) if self._img_data else 0)
 
     def _do_capture(self, title_text, return_region=False):
         logger.debug(f"image_dialog._do_capture: start (return_region={return_region})")
@@ -625,8 +634,9 @@ class ImageDialog(QDialog):
         # Hide parent dialog completely (like tkinter withdraw)
         logger.debug("image_dialog._do_capture: hiding dialog")
         self.hide()
+        QApplication.processEvents()
         import time
-        time.sleep(0.1)
+        time.sleep(0.08)
         # Show overlay as modal dialog (like tkinter grab_set)
         overlay = CaptureOverlay()
         logger.debug("image_dialog._do_capture: showing overlay")
@@ -647,7 +657,7 @@ class ImageDialog(QDialog):
                     shot.save(buf, format="PNG")
                     b64 = base64.b64encode(buf.getvalue()).decode()
                     logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
-                    print(f"DEBUG: captured image type={type(b64)}, len={len(b64)}")
+                    logger.debug("image_dialog._do_capture: captured image len=%s", len(b64))
                     captured_result = b64
                 except Exception as e:
                     logger.exception("image_dialog._do_capture: capture failed")
@@ -659,25 +669,19 @@ class ImageDialog(QDialog):
         self.show()
         self.raise_()
         self.activateWindow()
-        print(f"DEBUG: _do_capture returning type={type(captured_result)}, value={captured_result}")
+        QApplication.processEvents()
+        logger.debug("image_dialog._do_capture: returning %s", "region" if return_region and captured_result else f"image len={len(captured_result) if isinstance(captured_result, str) else 0}")
         return captured_result
 
     def get_action(self):
         logger.debug("image_dialog.get_action: start")
-        print(f"DEBUG: get_action self._img_data type={type(self._img_data)}, value={self._img_data}")
-        if self._img_data is None:
-            print("[ERROR] get_action - self._img_data is None")
+        logger.debug("image_dialog.get_action: image len=%s", len(self._img_data) if isinstance(self._img_data, str) else 0)
+        if not isinstance(self._img_data, str) or not self._img_data:
             QMessageBox.warning(self, "No Image", "Please select or capture an image.")
             return None
-        if not self._img_data:
-            print("[ERROR] get_action - self._img_data is empty")
-            QMessageBox.warning(self, "No Image", "Please select or capture an image.")
+        if len(self._img_data) < 32:
+            QMessageBox.warning(self, "Invalid Image", "The captured image data was too small. Please capture the image again.")
             return None
-        assert self._img_data is not None, "Captured image is None"
-        assert isinstance(self._img_data, str), "image_data must be base64 string"
-        assert len(self._img_data) > 100, "image_data too small"
-        print(f"DEBUG image_data length: {len(self._img_data)}")
-        print(f"DEBUG image_data prefix: {str(self._img_data)[:50]}")
         try:
             sim_pct = max(0, min(100, int(self.sim_pct.value())))
             sim = round(1.0 - sim_pct / 100.0, 4)

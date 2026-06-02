@@ -175,6 +175,21 @@ class ActionListModel(QAbstractListModel):
     def get(self, row):
         return self._actions[row]
 
+    def set_actions(self, actions):
+        """Replace the backing list while preserving Qt model reset semantics."""
+        self.beginResetModel()
+        self._actions = list(actions or [])
+        self.endResetModel()
+
+    def replace_action(self, row, action):
+        """Replace one action and notify any attached views/delegates."""
+        if 0 <= row < len(self._actions):
+            self._actions[row] = action
+            idx = self.index(row, 0)
+            self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DisplayRole, self.ActionRole])
+            return True
+        return False
+
     def move_action(self, source, target):
         if source == target or source < 0 or source >= len(self._actions):
             return False

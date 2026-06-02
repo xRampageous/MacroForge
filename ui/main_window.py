@@ -772,6 +772,7 @@ class MainWindow(QMainWindow):
                 self.timeline.zoom = settings.get("zoom", 1.0)
                 # Window geometry is stored GLOBALLY (see _restore_window_geometry),
                 # never per-profile, so switching profiles never moves the window.
+                self.engine.actions = self.action_model.actions()
                 self._invalidate_seq_dur()
                 self.active_index = -1
                 self.timeline.selected_indices.clear()
@@ -1929,8 +1930,12 @@ class MainWindow(QMainWindow):
 
     def refresh(self):
         try:
+            # Keep one authoritative backing list. The timeline view already uses
+            # self.action_model; resetting it from engine.actions can resurrect a
+            # stale list after dialog edits/captures and make new image actions vanish.
+            self.engine.actions = self.action_model.actions()
             self._invalidate_seq_dur()
-            self.timeline.set_actions(self.engine.actions)
+            self.timeline.refresh()
             self.update_statistics()
         except Exception:
             logger.exception("refresh() crashed")
@@ -2072,9 +2077,7 @@ class MainWindow(QMainWindow):
             act = dlg.get_action()
             if act:
                 self.history.push(self.action_model.actions())
-                self.action_model._actions[index] = act
-                self.action_model.beginResetModel()
-                self.action_model.endResetModel()
+                self.action_model.replace_action(index, act)
                 self.refresh()
                 self.save_session()
                 self.status("Key action updated")
@@ -2086,9 +2089,7 @@ class MainWindow(QMainWindow):
             act = dlg.get_action()
             if act:
                 self.history.push(self.action_model.actions())
-                self.action_model._actions[index] = act
-                self.action_model.beginResetModel()
-                self.action_model.endResetModel()
+                self.action_model.replace_action(index, act)
                 self.refresh()
                 self.save_session()
                 self.status("Click action updated")
@@ -2100,9 +2101,7 @@ class MainWindow(QMainWindow):
             act = dlg.get_action()
             if act:
                 self.history.push(self.action_model.actions())
-                self.action_model._actions[index] = act
-                self.action_model.beginResetModel()
-                self.action_model.endResetModel()
+                self.action_model.replace_action(index, act)
                 self.refresh()
                 self.save_session()
                 self.status("Delay action updated")
@@ -2114,9 +2113,7 @@ class MainWindow(QMainWindow):
             act = dlg.get_action()
             if act:
                 self.history.push(self.action_model.actions())
-                self.action_model._actions[index] = act
-                self.action_model.beginResetModel()
-                self.action_model.endResetModel()
+                self.action_model.replace_action(index, act)
                 self.refresh()
                 self.save_session()
                 self.status("Image action updated")
@@ -2162,7 +2159,8 @@ class MainWindow(QMainWindow):
         result = self.history.undo(self.engine.actions)
         if result is None:
             return
-        self.engine.actions = result
+        self.action_model.set_actions(result)
+        self.engine.actions = self.action_model.actions()
         self.active_index = -1
         self.refresh()
         self.update_statistics()
@@ -2176,7 +2174,8 @@ class MainWindow(QMainWindow):
         result = self.history.redo(self.engine.actions)
         if result is None:
             return
-        self.engine.actions = result
+        self.action_model.set_actions(result)
+        self.engine.actions = self.action_model.actions()
         self.active_index = -1
         self.refresh()
         self.update_statistics()
