@@ -252,10 +252,37 @@ class PlatformInput:
             flag = MOUSEEVENTF_LEFTUP
         self._send([self._mouse_input(0, 0, flag)])
 
+
+    def scroll(self, clicks: int):
+        """Scroll the mouse wheel. Positive is up, negative is down."""
+        data = int(clicks * 120)
+        self._send([self._mouse_input(0, 0, MOUSEEVENTF_WHEEL, data)])
+
+    def _combo_parts(self, key: str):
+        """Return normalized combo parts for keys like ctrl+c, or None for normal keys."""
+        if not isinstance(key, str):
+            return None
+        parts = [p.strip().lower() for p in key.split('+') if p.strip()]
+        return parts if len(parts) > 1 else None
+
     # ── public keyboard API ──────────────────────────────
     def key_down(self, key: str):
-        """Hold a key down (must pair with key_up)."""
-        vk = self._vk(key)
+        """Hold a key down. Also supports combos and recorded scroll pseudo-keys."""
+        k = (key or '').strip().lower()
+        if k in ('[scroll_up]', 'scroll_up'):
+            self.scroll(1)
+            return
+        if k in ('[scroll_down]', 'scroll_down'):
+            self.scroll(-1)
+            return
+
+        combo = self._combo_parts(k)
+        if combo:
+            for part in combo:
+                self.key_down(part)
+            return
+
+        vk = self._vk(k)
         if vk is None:
             return
         scan, ext = self._scan(vk)
@@ -263,8 +290,18 @@ class PlatformInput:
         self._send([self._key_input(scan, flags)])
 
     def key_up(self, key: str):
-        """Release a key."""
-        vk = self._vk(key)
+        """Release a key. Combo keys are released in reverse order."""
+        k = (key or '').strip().lower()
+        if k in ('[scroll_up]', '[scroll_down]', 'scroll_up', 'scroll_down'):
+            return
+
+        combo = self._combo_parts(k)
+        if combo:
+            for part in reversed(combo):
+                self.key_up(part)
+            return
+
+        vk = self._vk(k)
         if vk is None:
             return
         scan, ext = self._scan(vk)

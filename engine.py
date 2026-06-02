@@ -303,6 +303,14 @@ class ExecutionEngine:
             pass  # Fallback to original action if randomization fails
 
         return action
+
+    def _after_deploy(self, action: Action):
+        """Notify observers after an action has actually reached its execution path."""
+        if self.after_action_hook:
+            try:
+                self.after_action_hook(action)
+            except Exception:
+                pass
  
     def run(self, loops: int):
         self.running = True
@@ -359,6 +367,7 @@ class ExecutionEngine:
                                 break
                             self._exec_image_search(actual_action)
                         loop_actions_executed += 1
+                        self._after_deploy(actual_action)
                         if self.total_actions > 0:
                             self.progress_cb((loop_actions_executed / self.total_actions) * 100)
                         # Conditional jump on found / not found
@@ -396,6 +405,7 @@ class ExecutionEngine:
                                 time.sleep(0.01)
                             self.time_cursor += actual_action.duration
                         loop_actions_executed += 1
+                        self._after_deploy(actual_action)
                         if self.total_actions > 0:
                             self.progress_cb((loop_actions_executed / self.total_actions) * 100)
                         i += 1
@@ -457,6 +467,7 @@ class ExecutionEngine:
                             mode = "hold" if getattr(actual_action, 'hold_mode', False) else "click"
                             self.status(f"{mode.capitalize()} {actual_action.click_button} at {cx},{cy}")
                         loop_actions_executed += 1
+                        self._after_deploy(actual_action)
                         if self.total_actions > 0:
                             self.progress_cb((loop_actions_executed / self.total_actions) * 100)
                         i += 1
@@ -473,6 +484,7 @@ class ExecutionEngine:
                             i = j
                             continue
                         loop_actions_executed += 1
+                        self._after_deploy(actual_action)
                         if self.total_actions > 0:
                             self.progress_cb((loop_actions_executed / self.total_actions) * 100)
                         i += 1
@@ -519,11 +531,7 @@ class ExecutionEngine:
                                     pass
 
                     # After action hook
-                    if self.after_action_hook:
-                        try:
-                            self.after_action_hook(actual_action)
-                        except Exception:
-                            pass
+                    self._after_deploy(actual_action)
 
                     loop_actions_executed += 1
                     if self.total_actions > 0:

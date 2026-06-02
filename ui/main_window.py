@@ -1278,6 +1278,10 @@ class MainWindow(QMainWindow):
         if self.engine.running:
             self.status("Already running")
             return
+        # Always sync the execution engine from the visible timeline/model
+        # immediately before playback. This prevents stale engine lists from
+        # looping visually while not deploying the edited/current actions.
+        self.engine.actions = self.action_model.actions()
         if not self.engine.actions:
             self.status("No actions to play")
             return
