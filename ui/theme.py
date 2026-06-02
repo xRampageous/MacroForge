@@ -12,7 +12,7 @@ COLORS = {
     "bg": "#050914",
     "bg_secondary": "#08111f",
     "bg_tertiary": "#101a2c",
-    "bg_card": "#111c30",
+    "bg_card": "#101b2e",
     "bg_hover": "#192743",
     "bg_pressed": "#243456",
     "bg_glass": "#ffffff06",
@@ -36,13 +36,13 @@ COLORS = {
 
     # ── Text ──
     "text": "#e6e8f5",
-    "text_dim": "#787a9c",
+    "text_dim": "#8b91b5",
     "text_dark": "#42445f",
     "text_inverse": "#06070d",
     "btn_text": "#ffffff",
 
     # ── Borders ──
-    "border": "#1e2b44",
+    "border": "#20304d",
     "border_light": "#31476e",
     "border_accent": "#4cc4ff44",
 
@@ -602,14 +602,14 @@ def build_stylesheet() -> str:
 
     QCheckBox#pill_check {{
         color: {C['text']};
-        font-size: 12px;
-        font-weight: 700;
-        spacing: 8px;
+        font-size: 10px;
+        font-weight: 800;
+        spacing: 4px;
     }}
     QCheckBox#pill_check::indicator {{
-        width: 18px;
-        height: 18px;
-        border-radius: 7px;
+        width: 14px;
+        height: 14px;
+        border-radius: 5px;
         border: 1px solid {C['border_light']};
         background-color: {C['bg_secondary']};
     }}

@@ -172,105 +172,133 @@ class TimelineDelegate(QStyledItemDelegate):
                 border = COLORS["accent"]
             self._rounded_rect(painter, outer, 10, bg, border, 1.2 if playing else 1)
 
+            # Compact-aware layout. The default app window is 780x780, so the
+            # delegate intentionally collapses labels/status metadata before it
+            # lets progress bars overlap or clip.
+            compact = outer.width() < 720
+            tiny = outer.width() < 560
+
             # Left type accent stripe and active play marker.
-            stripe = QRectF(outer.left(), outer.top() + 8, 3.0, outer.height() - 16)
+            stripe = QRectF(outer.left(), outer.top() + 7, 3.0, outer.height() - 14)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(type_color))
             painter.drawRoundedRect(stripe, 1.5, 1.5)
             if playing:
                 painter.setBrush(QColor(COLORS["accent"]))
-                tri_x = outer.left() + 18
+                tri_x = outer.left() + (12 if compact else 18)
                 tri_y = outer.center().y()
                 painter.drawPolygon([
-                    QPointF(tri_x, tri_y - 8), QPointF(tri_x, tri_y + 8), QPointF(tri_x + 11, tri_y)
+                    QPointF(tri_x, tri_y - 7), QPointF(tri_x, tri_y + 7), QPointF(tri_x + 10, tri_y)
                 ])
 
             # Drag grip.
-            grip_x = outer.left() + 18
-            grip_y = outer.center().y() - 12
+            grip_x = outer.left() + (14 if compact else 18)
+            grip_y = outer.center().y() - 10
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(COLORS["text_dark"]))
-            for gx in (0, 7):
-                for gy in (0, 7, 14):
-                    painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.6, 2.6))
+            for gx in (0, 6):
+                for gy in (0, 6, 12):
+                    painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.2, 2.2))
 
             # Index.
-            num_rect = QRectF(outer.left() + 46, outer.top(), 34, outer.height())
+            num_left = outer.left() + (34 if compact else 46)
+            num_rect = QRectF(num_left, outer.top(), 28 if compact else 34, outer.height())
             painter.setPen(QColor(COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+            painter.setFont(QFont("Segoe UI", 10 if compact else 12, QFont.Weight.DemiBold))
             painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, str(row + 1))
 
             # Icon tile.
-            icon_rect = QRectF(outer.left() + 90, outer.top() + 12, 36, 36)
+            icon_size = 30 if compact else 36
+            icon_left = outer.left() + (66 if compact else 90)
+            icon_rect = QRectF(icon_left, outer.center().y() - icon_size / 2, icon_size, icon_size)
             tile_col = _mix(type_color, COLORS["bg_secondary"], 0.45)
             gradient = QLinearGradient(icon_rect.topLeft(), icon_rect.bottomRight())
             gradient.setColorAt(0, QColor(_mix(type_color, "#ffffff", 0.10)))
             gradient.setColorAt(1, QColor(tile_col))
-            path = QPainterPath(); path.addRoundedRect(icon_rect, 8, 8)
+            path = QPainterPath(); path.addRoundedRect(icon_rect, 7, 7)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(gradient))
             painter.drawPath(path)
             self._draw_type_icon(painter, icon_rect, kind, type_color)
 
-            # Title/detail.
-            title, detail = _action_text(action)
-            text_x = outer.left() + 146
-            title_rect = QRectF(text_x, outer.top() + 12, 250, 20)
-            detail_rect = QRectF(text_x, outer.top() + 34, 320, 18)
-            painter.setPen(QColor(COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-            painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title)
-            painter.setPen(QColor(COLORS["text_dim"]))
-            painter.setFont(QFont("Segoe UI", 8))
-            painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, detail)
+            # Right-side progress area.
+            menu_reserve = 22
+            pct_w = 38
+            chip_w = 40 if kind == "image" and not tiny else 0
+            bar_w = int(outer.width() * (0.24 if compact else 0.28))
+            bar_w = max(86 if compact else 130, min(220 if compact else 300, bar_w))
+            bar_x = outer.right() - menu_reserve - pct_w - chip_w - bar_w - 14
+            min_bar_x = icon_rect.right() + 145
+            if bar_x < min_bar_x:
+                bar_w = max(72, int(outer.right() - menu_reserve - pct_w - chip_w - 14 - min_bar_x))
+                bar_x = outer.right() - menu_reserve - pct_w - chip_w - bar_w - 14
 
-            # Status chip.
-            status_x = max(text_x + 270, outer.left() + outer.width() * 0.43)
+            # Title/detail with elision so compact windows remain readable.
+            title, detail = _action_text(action)
+            text_x = icon_rect.right() + 14
+            text_right = max(text_x + 88, bar_x - (18 if compact else 30))
+            text_w = max(82, text_right - text_x)
+            title_rect = QRectF(text_x, outer.top() + (10 if compact else 12), text_w, 18)
+            detail_rect = QRectF(text_x, outer.top() + (31 if compact else 34), text_w, 16)
+            painter.setPen(QColor(COLORS["text"]))
+            painter.setFont(QFont("Segoe UI", 9 if compact else 10, QFont.Weight.DemiBold))
+            fm = painter.fontMetrics()
+            painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(title, Qt.TextElideMode.ElideRight, int(text_w)))
+            painter.setPen(QColor(COLORS["text_dim"]))
+            painter.setFont(QFont("Segoe UI", 7 if compact else 8))
+            fm = painter.fontMetrics()
+            painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
+
+            # Status dot / chip.
             if playing:
                 status, status_col = ("Paused", COLORS["warning"]) if getattr(view, "paused", False) else ("Running", COLORS["accent"])
             elif progress >= 0.999:
                 status, status_col = "Completed", COLORS["success"]
             else:
                 status, status_col = "Pending", COLORS["text_dim"]
+
+            status_x = bar_x - (24 if compact else 118)
             painter.setBrush(QColor(status_col))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(QRectF(status_x, outer.center().y() - 4, 8, 8))
-            painter.setPen(QColor(COLORS["text_dim"] if status == "Pending" else COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 8))
-            painter.drawText(QRectF(status_x + 14, outer.top(), 92, outer.height()), Qt.AlignmentFlag.AlignVCenter, status)
+            if not compact:
+                painter.setPen(QColor(COLORS["text_dim"] if status == "Pending" else COLORS["text"]))
+                painter.setFont(QFont("Segoe UI", 8))
+                painter.drawText(QRectF(status_x + 14, outer.top(), 92, outer.height()), Qt.AlignmentFlag.AlignVCenter, status)
 
-            # Duration.
-            dur_rect = QRectF(status_x + 120, outer.top(), 70, outer.height())
-            painter.setPen(QColor(COLORS["text_dim"]))
-            painter.setFont(QFont("Segoe UI", 8))
-            painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
+            # Duration metadata; hidden on tiny widths, kept compact otherwise.
+            if not tiny:
+                dur_x = bar_x - (76 if compact else 0)
+                dur_rect = QRectF(dur_x, outer.top(), 58, outer.height())
+                painter.setPen(QColor(COLORS["text_dim"]))
+                painter.setFont(QFont("Segoe UI", 7 if compact else 8))
+                painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
 
             # Per-action progress bar.
-            bar_w = max(130, min(300, int(outer.width() * 0.28)))
-            bar_x = outer.right() - bar_w - 90
             bar_y = outer.center().y() - 4
-            bar_h = 8
+            bar_h = 7 if compact else 8
             track = QRectF(bar_x, bar_y, bar_w, bar_h)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(COLORS["lane"]))
-            painter.drawRoundedRect(track, 4, 4)
+            painter.drawRoundedRect(track, bar_h / 2, bar_h / 2)
             if progress > 0:
                 fill = QRectF(bar_x, bar_y, bar_w * progress, bar_h)
                 grad = QLinearGradient(fill.topLeft(), fill.topRight())
                 grad.setColorAt(0, QColor(type_color if not playing else COLORS["accent_secondary"]))
                 grad.setColorAt(1, QColor(COLORS["accent_hover"] if playing else _mix(type_color, "#ffffff", 0.18)))
                 painter.setBrush(QBrush(grad))
-                painter.drawRoundedRect(fill, 4, 4)
+                painter.drawRoundedRect(fill, bar_h / 2, bar_h / 2)
 
-            pct = f"{int(progress * 100):d}%"
+            pct = f"{int(round(progress * 100)):d}%"
+            pct_x = bar_x + bar_w + 8
             painter.setPen(QColor(COLORS["text_dim"] if progress < 1 else COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
-            painter.drawText(QRectF(bar_x + bar_w + 12, outer.top(), 42, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
+            painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold))
+            painter.drawText(QRectF(pct_x, outer.top(), pct_w, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
 
             # Image threshold metadata chip.
-            if kind == "image":
+            if kind == "image" and chip_w:
                 sim = int(float(getattr(action, "similarity", 0.95) or 0.95) * 100)
-                chip = QRectF(outer.right() - 76, outer.center().y() - 12, 38, 24)
+                chip = QRectF(outer.right() - menu_reserve - 42, outer.center().y() - 11, 36, 22)
                 self._rounded_rect(painter, chip, 7, COLORS["bg_secondary"], COLORS["border_light"], 1)
                 painter.setPen(QColor(COLORS["text_dim"]))
                 painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, f"{sim}%")
@@ -294,7 +322,7 @@ class TimelineDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         view = option.widget
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
-        height = max(46, int(70 * zoom))
+        height = max(44, int(62 * zoom))
         return QSize(100, height)
 
 
@@ -337,7 +365,7 @@ class TimelineView(QListView):
         self.setDropIndicatorShown(False)
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.setMinimumHeight(180)
+        self.setMinimumHeight(160)
         self.setStyleSheet(
             f"QListView {{ border: none; background-color: {COLORS['bg']}; outline: none; padding: 6px 0; }}"
             f"QListView::item {{ border: none; background: transparent; }}"
