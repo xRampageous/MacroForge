@@ -1,11 +1,4 @@
-"""MacroForge Main Window — fresh modern PyQt6 rebuild.
-
-Layout matches v1.1.0 Tkinter exactly:
-- 780x780 default compact layout, min 760x720
-- Profile tab bar across top
-- Left sidebar: Add Action, Playback, Recorder
-- Timeline + Inspector inline + Playback dock + Status bar
-"""
+"""MacroForge main window."""
 import os
 import sys
 import time
@@ -100,8 +93,8 @@ class MainWindow(QMainWindow):
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
         self.setWindowTitle("MacroForge")
-        self.setMinimumSize(760, 720)
-        self.resize(780, 780)
+        self.setMinimumSize(1040, 760)
+        self.resize(1168, 980)
         self.setStyleSheet(build_stylesheet())
 
         # Window / taskbar icon
@@ -200,6 +193,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         C = COLORS
         central = QWidget()
+        central.setObjectName("root")
         self.setCentralWidget(central)
         main_lo = QHBoxLayout(central)
         main_lo.setContentsMargins(0, 0, 0, 0)
@@ -208,30 +202,31 @@ class MainWindow(QMainWindow):
         # ━━ Left sidebar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         sidebar = QFrame()
         sidebar.setObjectName("glass_card")
-        sidebar.setFixedWidth(210)
+        sidebar.setFixedWidth(272)
         sidebar.setStyleSheet(
             f"background-color: {C['bg_secondary']}; "
             f"border-right: 1px solid {C['border']};"
         )
         sb_lo = QVBoxLayout(sidebar)
-        sb_lo.setContentsMargins(12, 12, 12, 10)
-        sb_lo.setSpacing(8)
+        sb_lo.setContentsMargins(34, 36, 24, 24)
+        sb_lo.setSpacing(12)
 
         # Branding + version
-        brand_row = QHBoxLayout()
-        brand_row.setSpacing(4)
+        brand_row = QVBoxLayout()
+        brand_row.setSpacing(3)
         brand = QLabel("MACROFORGE")
         brand.setObjectName("title")
-        brand.setStyleSheet(f"color: {C['text']}; font-size: 14px; font-weight: 900; letter-spacing: 2.6px;")
+        brand.setStyleSheet(f"color: {C['text']}; font-size: 25px; font-weight: 600; letter-spacing: -0.5px;")
         brand_row.addWidget(brand)
-        brand_row.addStretch()
         ver_lbl = QLabel(VERSION)
-        ver_lbl.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 850; letter-spacing: 0.8px;")
+        ver_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        ver_lbl.setStyleSheet(f"color: {C['accent']}; font-size: 15px; font-weight: 600;")
         brand_row.addWidget(ver_lbl)
         sb_lo.addLayout(brand_row)
+        sb_lo.addSpacing(28)
 
         # ── Add Actions ──
-        add_lbl = QLabel("ADD  ˅")
+        add_lbl = QLabel("ADD ACTION")
         add_lbl.setObjectName("section")
         add_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;")
         sb_lo.addWidget(add_lbl)
@@ -240,10 +235,10 @@ class MainWindow(QMainWindow):
         self._add_btn("Delay", self._open_pause_dialog, C["pause"], sb_lo, "delay")
         self._add_btn("Image", self._open_image_dialog, C["image"], sb_lo, "image")
 
-        sb_lo.addWidget(self._hsep())
+        sb_lo.addSpacing(22)
 
         # ── Recorder ──
-        rec_lbl = QLabel("REC  ◇")
+        rec_lbl = QLabel("RECORDER  ˅")
         rec_lbl.setObjectName("section")
         rec_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;")
         sb_lo.addWidget(rec_lbl)
@@ -251,14 +246,14 @@ class MainWindow(QMainWindow):
         rec_card.setObjectName("rec_card")
         rec_card.setStyleSheet(
             f"QFrame#rec_card {{ background-color: {C['bg_card']}; "
-            f"border: 1px solid {C['border']}; border-radius: 14px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
         rc_lo = QVBoxLayout(rec_card)
         rc_lo.setContentsMargins(9, 9, 9, 9)
         rc_lo.setSpacing(8)
         rrow = QHBoxLayout()
         self.rec_dot = StatusDot()
-        self.rec_dot.set_color(C["text_dark"])
+        self.rec_dot.set_color(C["playing"])
         rrow.addWidget(self.rec_dot)
         self.rec_status = QLabel("IDLE")
         self.rec_status.setStyleSheet(f"color: {C['text']}; font-size: 11px; font-weight: 800; letter-spacing: .8px;")
@@ -274,16 +269,16 @@ class MainWindow(QMainWindow):
         brow = QHBoxLayout()
         self.rec_btn = QPushButton()
         self.rec_btn.setObjectName("rec_round_btn")
-        self.rec_btn.setIcon(icon("record", 18, "#ffffff"))
+        self.rec_btn.setIcon(icon("record", 18, C["error"]))
         self.rec_btn.setIconSize(QSize(18, 18))
-        self.rec_btn.setFixedSize(48, 38)
+        self.rec_btn.setFixedSize(68, 68)
         self.rec_btn.setToolTip("Record (F7)")
         self.rec_btn.clicked.connect(self._toggle_record)
         self.rec_pause_btn = QPushButton()
         self.rec_pause_btn.setObjectName("rec_pause_btn")
-        self.rec_pause_btn.setIcon(icon("pause", 16, "#ffffff"))
+        self.rec_pause_btn.setIcon(icon("pause", 16, C["text"]))
         self.rec_pause_btn.setIconSize(QSize(16, 16))
-        self.rec_pause_btn.setFixedSize(48, 38)
+        self.rec_pause_btn.setFixedSize(68, 68)
         self.rec_pause_btn.setToolTip("Pause")
         self.rec_pause_btn.setEnabled(False)
         self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
@@ -300,7 +295,7 @@ class MainWindow(QMainWindow):
         self._recorder["time_lbl"] = self.rec_time
         self._recorder["actions_lbl"] = self.rec_actions
 
-        sb_lo.addWidget(self._hsep())
+        sb_lo.addSpacing(22)
 
         # ── Playback moved to the main content area in MacroForge 2.0 ──
         # The old sidebar playback card was intentionally removed so the
@@ -315,11 +310,16 @@ class MainWindow(QMainWindow):
         insp_card.setObjectName("insp_card")
         insp_card.setStyleSheet(
             f"QFrame#insp_card {{ background-color: {C['bg_card']}; "
-            f"border: 1px solid {C['border']}; border-radius: 14px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
         icard_lo = QVBoxLayout(insp_card)
         icard_lo.setContentsMargins(9, 9, 9, 9)
         icard_lo.setSpacing(8)
+
+        self.inspector_selector = QComboBox()
+        self.inspector_selector.addItem("Select an action")
+        self.inspector_selector.setEnabled(False)
+        icard_lo.addWidget(self.inspector_selector)
 
         # Toolbar
         ibrow = QHBoxLayout()
@@ -442,14 +442,14 @@ class MainWindow(QMainWindow):
         # ── Header / top bar ──
         title = QFrame()
         title.setObjectName("topbar")
-        title.setFixedHeight(56)
+        title.setFixedHeight(142)
         title.setStyleSheet(
             f"QFrame#topbar {{ background-color: {C['bg_secondary']}; "
             f"border-bottom: 1px solid {C['border']}; }}"
         )
         tl = QHBoxLayout(title)
-        tl.setContentsMargins(18, 8, 18, 8)
-        tl.setSpacing(9)
+        tl.setContentsMargins(24, 38, 38, 34)
+        tl.setSpacing(20)
 
         # Profile switcher (left)
         self.profile_btn = QPushButton("Default")
@@ -460,8 +460,8 @@ class MainWindow(QMainWindow):
         self.profile_btn.setToolTip("Switch profile")
         self.profile_btn.setStyleSheet(
             f"QPushButton#profile_switcher {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border_light']}; border-radius: 12px; padding: 8px 12px; "
-            f"font-weight: 700; text-align: left; }} "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 12px 16px; "
+            f"font-size: 16px; font-weight: 500; text-align: left; min-width: 150px; min-height: 38px; }} "
             f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
         )
         self.profile_btn.clicked.connect(self._show_profile_menu)
@@ -474,16 +474,16 @@ class MainWindow(QMainWindow):
         status_pill.setObjectName("status_pill")
         status_pill.setStyleSheet(
             f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
-            f"border: 1px solid {C['border']}; border-radius: 13px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 6px; }}"
         )
         sp_lo = QHBoxLayout(status_pill)
         sp_lo.setContentsMargins(11, 5, 13, 5)
         sp_lo.setSpacing(7)
         self.status_dot = StatusDot()
-        self.status_dot.set_color(C["text_dark"])
+        self.status_dot.set_color(C["playing"])
         sp_lo.addWidget(self.status_dot)
-        self.status_text = QLabel("Ready")
-        self.status_text.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 600; background: transparent;")
+        self.status_text = QLabel("Profile loaded")
+        self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 14px; font-weight: 500; background: transparent;")
         sp_lo.addWidget(self.status_text)
         tl.addWidget(status_pill)
 
@@ -491,12 +491,14 @@ class MainWindow(QMainWindow):
         up_btn.setObjectName("icon_btn")
         up_btn.setIcon(icon("update", 16, C["text_dim"]))
         up_btn.setToolTip("Check for updates")
+        up_btn.setFixedSize(62, 62)
         up_btn.clicked.connect(self._check_update_manual)
         tl.addWidget(up_btn)
         gear = QPushButton()
         gear.setObjectName("icon_btn")
         gear.setIcon(icon("menu", 16, C["text_dim"]))
         gear.setToolTip("Menu")
+        gear.setFixedSize(62, 62)
         gear.clicked.connect(self._show_action_menu)
         tl.addWidget(gear)
         content_lo.addWidget(title)
@@ -504,23 +506,23 @@ class MainWindow(QMainWindow):
         # Timeline header / command strip
         tl_header = QFrame()
         tl_header.setObjectName("timeline_header")
-        tl_header.setFixedHeight(56)
+        tl_header.setFixedHeight(96)
         tl_header.setStyleSheet(
             f"QFrame#timeline_header {{ background-color: {C['bg_secondary']}; "
             f"border-bottom: 1px solid {C['border']}; }}"
         )
         tl_hl = QHBoxLayout(tl_header)
-        tl_hl.setContentsMargins(18, 8, 16, 8)
-        tl_hl.setSpacing(10)
+        tl_hl.setContentsMargins(24, 16, 38, 14)
+        tl_hl.setSpacing(16)
 
         header_stack = QVBoxLayout()
         header_stack.setContentsMargins(0, 0, 0, 0)
         header_stack.setSpacing(2)
         tl_lbl = QLabel("TIMELINE")
-        tl_lbl.setStyleSheet(f"color: {C['text']}; font-size: 14px; font-weight: 850; letter-spacing: 1.6px;")
+        tl_lbl.setStyleSheet(f"color: {C['text']}; font-size: 22px; font-weight: 600;")
         header_stack.addWidget(tl_lbl)
-        hints = QLabel("Scroll  •  Ctrl + wheel to zoom  •  Drag rows to reorder  •  Del removes selected")
-        hints.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        hints = QLabel("Drag rows to reorder")
+        hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px;")
         header_stack.addWidget(hints)
         tl_hl.addLayout(header_stack)
         tl_hl.addStretch()
@@ -531,17 +533,18 @@ class MainWindow(QMainWindow):
         self.compact_view_btn.setToolTip("Timeline list view")
         self.compact_view_btn.setCheckable(True)
         self.compact_view_btn.setChecked(True)
+        self.compact_view_btn.setFixedSize(54, 48)
         tl_hl.addWidget(self.compact_view_btn)
 
         self.tl_search = QLineEdit()
         self.tl_search.setPlaceholderText("Search actions…")
         self.tl_search.setClearButtonEnabled(True)
-        self.tl_search.setFixedWidth(220)
-        self.tl_search.setFixedHeight(34)
+        self.tl_search.setFixedWidth(305)
+        self.tl_search.setFixedHeight(48)
         self.tl_search.addAction(icon("search", 16, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
         self.tl_search.setStyleSheet(
             f"QLineEdit {{ background-color: {C['bg_card']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 12px; padding: 3px 10px; font-size: 11px; }} "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 5px 12px; font-size: 14px; }} "
             f"QLineEdit:focus {{ border-color: {C['accent']}; background-color: {C['bg_tertiary']}; }}"
         )
         self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
@@ -560,19 +563,19 @@ class MainWindow(QMainWindow):
             f"QFrame#status_bar {{ background-color: {C['bg_secondary']}; "
             f"border-top: 1px solid {C['border']}; }}"
         )
-        status_bar.setFixedHeight(54)
+        status_bar.setFixedHeight(78)
         sbar_lo = QHBoxLayout(status_bar)
-        sbar_lo.setContentsMargins(10, 6, 10, 7)
-        sbar_lo.setSpacing(6)
+        sbar_lo.setContentsMargins(22, 9, 38, 14)
+        sbar_lo.setSpacing(10)
 
         progress_wrap = QFrame()
         progress_wrap.setObjectName("progress_wrap")
         progress_wrap.setStyleSheet(
             f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
-            f"border: 1px solid {C['border']}; border-radius: 16px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 6px; }}"
         )
         pw_lo = QHBoxLayout(progress_wrap)
-        pw_lo.setContentsMargins(10, 6, 10, 6)
+        pw_lo.setContentsMargins(14, 9, 14, 9)
         pw_lo.setSpacing(8)
         pw_icon = QLabel()
         pw_icon.setPixmap(icon("play", 16, C["accent"]).pixmap(16, 16))
@@ -581,10 +584,10 @@ class MainWindow(QMainWindow):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setFixedHeight(7)
         self.progress_bar.setStyleSheet(
             f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 5px; }}"
-            f"QProgressBar::chunk {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['accent_secondary']}, stop:1 {C['accent_hover']}); border-radius: 5px; }}"
+            f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 5px; }}"
         )
         pw_lo.addWidget(self.progress_bar, stretch=1)
         self.progress_label = QLabel("0%")
@@ -606,7 +609,7 @@ class MainWindow(QMainWindow):
         main_lo.addWidget(content, stretch=1)
 
     def _make_playback_panel(self):
-        """MacroForge 2.0 playback deck, placed above progress and stats."""
+        """Playback deck placed above progress and stats."""
         C = COLORS
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
@@ -614,73 +617,74 @@ class MainWindow(QMainWindow):
             f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; "
             f"border-top: 1px solid {C['border']}; }}"
         )
-        panel.setFixedHeight(108)
-        lo = QHBoxLayout(panel)
-        lo.setContentsMargins(10, 10, 10, 10)
-        lo.setSpacing(8)
+        panel.setFixedHeight(176)
+        lo = QVBoxLayout(panel)
+        lo.setContentsMargins(22, 12, 38, 12)
+        lo.setSpacing(0)
 
-        # Main playback dock
         dock = QFrame()
         dock.setObjectName("mf2_playback_dock")
         dock.setStyleSheet(
             f"QFrame#mf2_playback_dock {{ background-color: {C['bg_card']}; "
-            f"border: 1px solid {C['border']}; border-radius: 18px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
-        dlo = QHBoxLayout(dock)
-        dlo.setContentsMargins(10, 10, 10, 10)
-        dlo.setSpacing(8)
+        dlo = QVBoxLayout(dock)
+        dlo.setContentsMargins(18, 14, 18, 14)
+        dlo.setSpacing(10)
 
-        _white = "#ffffff"
+        title = QLabel("PLAYBACK CONTROLS")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 15px; font-weight: 600; background: transparent;")
+        dlo.addWidget(title)
+
+        controls = QHBoxLayout()
+        controls.setSpacing(12)
+
         self.start_btn = QPushButton("  Start")
         self.start_btn.setObjectName("play_btn")
-        self.start_btn.setIcon(icon("play", 20, _white))
+        self.start_btn.setIcon(icon("play", 20, C["text"]))
         self.start_btn.setIconSize(QSize(20, 20))
         self.start_btn.setToolTip("Start playback (F9)")
-        self.start_btn.setFixedSize(74, 52)
+        self.start_btn.setFixedSize(108, 70)
         self.start_btn.clicked.connect(self.start)
-        dlo.addWidget(self.start_btn)
+        controls.addWidget(self.start_btn)
 
         self.pause_btn = QPushButton("Pause")
         self.pause_btn.setObjectName("pause_btn")
-        self.pause_btn.setIcon(icon("pause", 18, _white))
+        self.pause_btn.setIcon(icon("pause", 18, C["pause_cyan"]))
         self.pause_btn.setIconSize(QSize(18, 18))
         self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-        self.pause_btn.setFixedSize(62, 52)
+        self.pause_btn.setFixedSize(78, 70)
         self.pause_btn.setEnabled(False)
         self.pause_btn.clicked.connect(self.engine.toggle_pause)
-        dlo.addWidget(self.pause_btn)
+        controls.addWidget(self.pause_btn)
 
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("stop_btn")
-        self.stop_btn.setIcon(icon("stop", 17, _white))
+        self.stop_btn.setIcon(icon("stop", 17, C["error"]))
         self.stop_btn.setIconSize(QSize(17, 17))
         self.stop_btn.setToolTip("Stop playback")
-        self.stop_btn.setFixedSize(60, 52)
+        self.stop_btn.setFixedSize(78, 70)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop)
-        dlo.addWidget(self.stop_btn)
+        controls.addWidget(self.stop_btn)
 
         divider = QFrame()
         divider.setStyleSheet(f"background-color: {C['border']}; min-width: 1px; max-width: 1px;")
-        dlo.addWidget(divider)
+        controls.addWidget(divider)
 
         settings = QFrame()
         settings.setObjectName("mf2_run_settings")
         settings.setStyleSheet("QFrame#mf2_run_settings { background: transparent; border: none; }")
         slo = QVBoxLayout(settings)
         slo.setContentsMargins(4, 0, 0, 0)
-        slo.setSpacing(8)
-
-        settings_title = QLabel("RUN SETTINGS")
-        settings_title.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 900; letter-spacing: 1.3px; background: transparent;")
-        slo.addWidget(settings_title)
+        slo.setSpacing(0)
 
         controls_row = QHBoxLayout()
-        controls_row.setSpacing(7)
+        controls_row.setSpacing(16)
 
         def label(text):
             w = QLabel(text)
-            w.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 750; background: transparent;")
+            w.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 500; background: transparent;")
             return w
 
         speed_box = QVBoxLayout()
@@ -690,7 +694,7 @@ class MainWindow(QMainWindow):
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
         self.speed_combo.setCurrentIndex(3)
         self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        self.speed_combo.setFixedSize(66, 28)
+        self.speed_combo.setFixedSize(86, 38)
         speed_box.addWidget(self.speed_combo)
         controls_row.addLayout(speed_box)
 
@@ -702,12 +706,12 @@ class MainWindow(QMainWindow):
         self.loops_spin = QSpinBox()
         self.loops_spin.setRange(1, 9999)
         self.loops_spin.setValue(1)
-        self.loops_spin.setFixedSize(52, 28)
+        self.loops_spin.setFixedSize(62, 38)
         loop_row.addWidget(self.loops_spin)
         self.inf_check = QCheckBox("∞")
         self.inf_check.setObjectName("pill_check")
         self.inf_check.setToolTip("Infinite loop")
-        self.inf_check.setFixedSize(34, 28)
+        self.inf_check.setFixedSize(38, 38)
         loop_row.addWidget(self.inf_check)
         loop_box.addLayout(loop_row)
         controls_row.addLayout(loop_box)
@@ -720,12 +724,12 @@ class MainWindow(QMainWindow):
         self.sim_check = QCheckBox("Sim")
         self.sim_check.setObjectName("pill_check")
         self.sim_check.setToolTip("Simulation mode")
-        self.sim_check.setFixedSize(48, 28)
+        self.sim_check.setFixedSize(54, 38)
         mode_row.addWidget(self.sim_check)
         self.human_check = QCheckBox("Human")
         self.human_check.setObjectName("pill_check")
         self.human_check.setToolTip("Humanized movement curve")
-        self.human_check.setFixedSize(64, 28)
+        self.human_check.setFixedSize(68, 38)
         self.human_check.setChecked(True)
         mode_row.addWidget(self.human_check)
         flags.addLayout(mode_row)
@@ -733,19 +737,18 @@ class MainWindow(QMainWindow):
 
         focus_box = QVBoxLayout()
         focus_box.setSpacing(4)
-        focus_box.addWidget(label("Target"))
-        self.focus_check = QCheckBox("Focus")
+        focus_box.addWidget(label("Focus"))
+        self.focus_check = QCheckBox("Lock")
         self.focus_check.setObjectName("pill_check")
         self.focus_check.setToolTip("Keep playback targeted to the captured window")
-        self.focus_check.setFixedSize(70, 28)
+        self.focus_check.setFixedSize(64, 38)
         focus_box.addWidget(self.focus_check)
         controls_row.addLayout(focus_box)
         controls_row.addStretch()
         slo.addLayout(controls_row)
-        dlo.addWidget(settings, stretch=1)
+        controls.addWidget(settings, stretch=1)
+        dlo.addLayout(controls)
         lo.addWidget(dock, stretch=1)
-        # Compact 780x780 default: keep playback controls docked and omit the
-        # decorative helper card so speed/loop/mode/focus controls do not clip.
         return panel
 
     def _make_stat_chip(self, icon_name, title, value, color, tooltip):
@@ -755,17 +758,17 @@ class MainWindow(QMainWindow):
         chip.setToolTip(tooltip)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
-            f"border: 1px solid {C['border']}; border-radius: 16px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 6px; }}"
         )
-        chip.setMinimumWidth(72)
-        chip.setMaximumWidth(92)
-        chip.setFixedHeight(40)
+        chip.setMinimumWidth(84)
+        chip.setMaximumWidth(110)
+        chip.setFixedHeight(48)
         lo = QHBoxLayout(chip)
         lo.setContentsMargins(8, 6, 8, 6)
         lo.setSpacing(6)
 
         icon_wrap = QFrame()
-        icon_wrap.setStyleSheet(f"background-color: {color}18; border: 1px solid {color}40; border-radius: 10px;")
+        icon_wrap.setStyleSheet(f"background-color: transparent; border: 1px solid {color}; border-radius: 6px;")
         icon_wrap.setFixedSize(24, 24)
         iw_lo = QHBoxLayout(icon_wrap)
         iw_lo.setContentsMargins(0, 0, 0, 0)
@@ -793,29 +796,15 @@ class MainWindow(QMainWindow):
         obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(f"  {text}")
         btn.setObjectName(obj)
-        icon_color = "#ffffff" if obj != "add_image" else "#11131d"
-        btn.setIcon(icon(icon_name, 15, icon_color))
-        btn.setIconSize(QSize(15, 15))
-        btn.setMinimumHeight(42)
+        btn.setIcon(icon(icon_name, 20, color))
+        btn.setIconSize(QSize(20, 20))
+        btn.setMinimumHeight(68)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        def _shade(hexcol, factor):
-            r, g, b = int(hexcol[1:3], 16), int(hexcol[3:5], 16), int(hexcol[5:7], 16)
-            r = min(255, max(0, int(r * factor)))
-            g = min(255, max(0, int(g * factor)))
-            b = min(255, max(0, int(b * factor)))
-            return f"#{r:02x}{g:02x}{b:02x}"
-
-        hover = _shade(color, 1.12)
-        pressed = _shade(color, 0.84)
-        dark_edge = _shade(color, 0.62)
-        text_col = "#11131d" if obj == "add_image" else "#ffffff"
         btn.setStyleSheet(
-            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {hover}, stop:1 {color}); "
-            f"color: {text_col}; border: 1px solid {dark_edge}; border-radius: 11px; padding: 9px 11px; "
-            f"text-align: left; font-size: 12px; font-weight: 850; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {hover}, stop:1 {_shade(color, 1.04)}); border-color: {hover}; }}"
-            f"QPushButton:pressed {{ background-color: {pressed}; border-color: {pressed}; padding-top: 10px; }}"
+            f"QPushButton {{ background-color: transparent; color: {COLORS['text']}; border: 1px solid {color}; "
+            f"border-radius: 6px; padding: 10px 14px; text-align: left; font-size: 15px; font-weight: 500; }}"
+            f"QPushButton:hover {{ background-color: {COLORS['bg_hover']}; }}"
+            f"QPushButton:pressed {{ background-color: {COLORS['bg_pressed']}; }}"
         )
         btn.clicked.connect(callback)
         layout.addWidget(btn)
@@ -1043,12 +1032,16 @@ class MainWindow(QMainWindow):
             self.active_index = -1
             self.timeline.set_active(-1)
             self.timeline.selected_indices.clear()
+            self.inspector_selector.clear()
+            self.inspector_selector.addItem("Select an action")
             self._show_inspector(False)
             return
         self.active_index = index
         self.timeline.selected_indices.clear()
         self.timeline.set_active(index)
         action = self.action_model.get(index)
+        self.inspector_selector.clear()
+        self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
         self._show_inspector(True, action.action_type)
         if action.action_type == "key":
             self.ik_key.setText(action.key)
@@ -1355,18 +1348,18 @@ class MainWindow(QMainWindow):
             rec["last_time"] = time.time()
             self.rec_pause_btn.setText(" Pause")
             self.rec_pause_btn.setStyleSheet(f"background: {COLORS['playing']}; color: #fff; border-radius: 8px;")
-            self.rec_dot.set_color("#ff4444", glow=True)
+            self.rec_dot.set_color(COLORS["error"], glow=True)
             self.rec_status.setText("RECORDING")
-            self.rec_status.setStyleSheet(f"color: #ff4444; font-size: 11px; font-weight: 600;")
+            self.rec_status.setStyleSheet(f"color: {COLORS['error']}; font-size: 11px; font-weight: 600;")
             self._rec_timer_tick()
             self.status("Recording resumed")
             self._show_rec_badge(True)
         else:
             rec["paused"] = True
             self.rec_pause_btn.setText(" Resume")
-            self.rec_dot.set_color("#f0a844", glow=True)
+            self.rec_dot.set_color(COLORS["pause_cyan"], glow=True)
             self.rec_status.setText("PAUSED")
-            self.rec_status.setStyleSheet(f"color: #f0a844; font-size: 11px; font-weight: 600;")
+            self.rec_status.setStyleSheet(f"color: {COLORS['pause_cyan']}; font-size: 11px; font-weight: 600;")
             self.status("Recording paused — click Resume to continue, or Stop to finish")
             self._show_rec_badge(False)
 
@@ -1382,7 +1375,7 @@ class MainWindow(QMainWindow):
             ov.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
             ov.setFixedSize(60, 28)
             lbl = QLabel("REC")
-            lbl.setStyleSheet("color: #ff4444; font-weight: bold; font-size: 12px;")
+            lbl.setStyleSheet(f"color: {COLORS['error']}; font-weight: bold; font-size: 12px;")
             lo = QHBoxLayout(ov)
             lo.addWidget(lbl)
             ov.show()
@@ -1424,9 +1417,9 @@ class MainWindow(QMainWindow):
         self.rec_pause_btn.setText(" Pause")
         self.rec_pause_btn.setEnabled(True)
         self.rec_pause_btn.setStyleSheet(f"background: {COLORS['playing']}; color: #fff; border-radius: 8px;")
-        self.rec_dot.set_color("#ff4444", glow=True)
+        self.rec_dot.set_color(COLORS["error"], glow=True)
         self.rec_status.setText("RECORDING")
-        self.rec_status.setStyleSheet("color: #ff4444; font-size: 11px; font-weight: 600;")
+        self.rec_status.setStyleSheet(f"color: {COLORS['error']}; font-size: 11px; font-weight: 600;")
         self.rec_actions.setText("0")
         rec["rec_start_time"] = time.time()
         self._rec_timer_tick()

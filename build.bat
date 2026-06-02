@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-title MacroForge — Builder
+title MacroForge - Builder
 color 0A
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  PARSE FLAGS
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 set "FAST=0"
 set "NO_ZIP=0"
 set "NO_SMOKE=0"
@@ -18,9 +18,9 @@ for %%a in (%*) do (
     if "%%~a"=="--no-installer" set "NO_INSTALLER=1"
 )
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  CONFIG
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 set "SCRIPT_DIR=%~dp0"
 set "SRC_FILE=%SCRIPT_DIR%MacroForge.py"
 set "SPEC_FILE=%SCRIPT_DIR%MacroForge.spec"
@@ -29,9 +29,9 @@ set "PNG_FILE=%SCRIPT_DIR%MacroForge.png"
 set "DIST_DIR=%SCRIPT_DIR%dist"
 set "BUILD_DIR=%SCRIPT_DIR%build"
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  PRE-FLIGHT
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 if not exist "%SRC_FILE%" (
     echo  [ERROR] Cannot find MacroForge.py
     echo          Expected: %SRC_FILE%
@@ -51,9 +51,9 @@ if %errorlevel% neq 0 (
 
 cd /d "%SCRIPT_DIR%"
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  READ VERSION
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 python -c "import re; m=re.search(r'VERSION\s*=\s*\x22([^\x22]+)\x22', open('version.py','r',encoding='utf-8').read()); print(m.group(1) if m else '')" > _ver.txt
 for /f "delims=" %%v in (_ver.txt) do set "VER=%%v"
 del /f /q _ver.txt >nul 2>&1
@@ -73,9 +73,9 @@ if "%NO_SMOKE%"=="1"  echo   Smoke    : skipped
 if "%NO_INSTALLER%"=="1" echo   Installer: skipped
 echo.
 
-:: ═══════════════════════════════════════════════════════════
-::  STEP 1 — BUILD  (timed)
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
+::  STEP 1 - BUILD  (timed)
+:: ===========================================================
 echo [1/5] Building with PyInstaller (onedir)...
 set "START_TIME=%time%"
 
@@ -96,9 +96,9 @@ if not exist "%DIST_DIR%\MacroForge\MacroForge.exe" (
 )
 echo        EXE OK  ^|  %DIST_DIR%\MacroForge\MacroForge.exe
 
-:: ═══════════════════════════════════════════════════════════
-::  STEP 2 — COPY ASSETS
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
+::  STEP 2 - COPY ASSETS
+:: ===========================================================
 echo.
 echo [2/5] Copying assets...
 if exist "%PNG_FILE%" (
@@ -110,9 +110,9 @@ if exist "%ICON_FILE%" (
     echo        + MacroForge.ico
 )
 
-:: ═══════════════════════════════════════════════════════════
-::  STEP 3 — GENERATE update.json / ZIP
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
+::  STEP 3 - GENERATE update.json / ZIP
+:: ===========================================================
 if "%NO_ZIP%"=="1" goto :skip_zip
 
 echo.
@@ -125,13 +125,13 @@ if exist "%SCRIPT_DIR%build_helper.py" (
         echo        update.json + ZIP generated.
     )
 ) else (
-    echo  [WARNING] build_helper.py not found — skipping.
+    echo  [WARNING] build_helper.py not found - skipping.
 )
 :skip_zip
 
-:: ═══════════════════════════════════════════════════════════
-::  STEP 4 — VERIFY BUILT EXE
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
+::  STEP 4 - VERIFY BUILT EXE
+:: ===========================================================
 echo.
 echo [4/5] Verifying built executable...
 python -c "import sys,os; p=os.path.join(r'%DIST_DIR%','MacroForge','_internal'); sys.path.insert(0,p); from version import VERSION; print(VERSION)" > _bver.txt
@@ -146,15 +146,17 @@ if "%BUILT_VER%"=="" (
 if "%NO_SMOKE%"=="1" goto :skip_smoke
 
 echo        Smoke-test: launching for 3s...
-start "" /B "%DIST_DIR%\MacroForge\MacroForge.exe"
-ping -n 4 127.0.0.1 >nul 2>&1
-taskkill /F /IM MacroForge.exe >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath '%DIST_DIR%\MacroForge\MacroForge.exe' -PassThru -WindowStyle Hidden; Start-Sleep -Seconds 3; if ($p.HasExited) { exit 1 }; Stop-Process -Id $p.Id -Force; exit 0"
+if %errorlevel% neq 0 (
+    echo  [ERROR] Smoke-test executable exited unexpectedly.
+    pause & exit /b 1
+)
 echo        Smoke-test complete.
 :skip_smoke
 
-:: ═══════════════════════════════════════════════════════════
-::  STEP 5 — OPTIONAL PACKAGING
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
+::  STEP 5 - OPTIONAL PACKAGING
+:: ===========================================================
 if "%NO_INSTALLER%"=="1" goto :skip_installer
 
 echo.
@@ -162,7 +164,7 @@ echo [5/5] Optional packaging...
 where iscc >nul 2>&1
 if %errorlevel% == 0 (
     if exist "%SCRIPT_DIR%setup.iss" (
-        echo        Inno Setup found — building installer...
+        echo        Inno Setup found - building installer...
         iscc "/DMyAppVersion=%VER%" "%SCRIPT_DIR%setup.iss"
         if %errorlevel% equ 0 (
             echo        installer ready.
@@ -170,16 +172,16 @@ if %errorlevel% == 0 (
             echo  [WARNING] Inno Setup build failed.
         )
     ) else (
-        echo        setup.iss not found — skipping.
+        echo        setup.iss not found - skipping.
     )
 ) else (
-    echo        Inno Setup not in PATH — skipping.
+    echo        Inno Setup not in PATH - skipping.
 )
 :skip_installer
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  SUMMARY
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 echo.
 echo  ============================================
 echo   BUILD COMPLETE  v%VER%

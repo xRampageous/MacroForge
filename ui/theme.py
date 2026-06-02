@@ -1,69 +1,70 @@
-"""Modern dark theme for MacroForge PyQt6 — fresh rebuild.
+"""MacroForge desktop theme.
 
-Glassmorphism-inspired dark theme with vibrant accents,
-gradient highlights, and smooth micro-interactions.
+The palette mirrors the supplied MacroForge UI reference: deep navy surfaces,
+quiet blue-grey borders, and restrained neon accents used as outlines.
 """
 
 # ═══════════════════════════════════════════════════════
 #  COLOR PALETTE
 # ═══════════════════════════════════════════════════════
 COLORS = {
-    # ── Surfaces (dark grey-black from reference) ──
-    "bg": "#1a1a1a",
-    "bg_secondary": "#2d2d2d",
-    "bg_tertiary": "#3d3d3d",
-    "bg_card": "#2a2a2a",
-    "bg_hover": "#404040",
-    "bg_pressed": "#4d4d4d",
-    "bg_glass": "#ffffff08",
+    # ── Surfaces ──
+    "bg": "#02070D",
+    "bg_secondary": "#07111D",
+    "bg_tertiary": "#091522",
+    "bg_card": "#050B12",
+    "bg_hover": "#0E1C2A",
+    "bg_pressed": "#132638",
+    "bg_glass": "#06111B",
 
-    # ── Primary accent (blue from reference) ──
-    "accent": "#3b82f6",
-    "accent_secondary": "#2563eb",
-    "accent_glow": "#3b82f622",
-    "accent_hover": "#60a5fa",
-    "accent_dim": "#3b82f666",
+    # ── Primary accent ──
+    "accent": "#008DFF",
+    "accent_secondary": "#006ED6",
+    "accent_glow": "rgba(0, 141, 255, 0.14)",
+    "accent_hover": "#28A3FF",
+    "accent_dim": "#1E5E91",
 
     # ── Semantic ──
-    "error": "#ef4444",
-    "error_bg": "#ef444418",
-    "warning": "#f59e0b",
-    "warning_bg": "#f59e0b18",
-    "success": "#22c55e",
-    "success_bg": "#22c55e18",
-    "info": "#3b82f6",
-    "info_bg": "#3b82f618",
+    "error": "#FF2330",
+    "error_bg": "rgba(255, 35, 48, 0.10)",
+    "warning": "#FFD000",
+    "warning_bg": "rgba(255, 208, 0, 0.10)",
+    "success": "#00D75A",
+    "success_bg": "rgba(0, 215, 90, 0.10)",
+    "info": "#008DFF",
+    "info_bg": "rgba(0, 141, 255, 0.10)",
 
     # ── Text ──
-    "text": "#ffffff",
-    "text_dim": "#9ca3af",
-    "text_dark": "#6b7280",
-    "text_inverse": "#ffffff",
-    "btn_text": "#ffffff",
+    "text": "#F3F6FA",
+    "text_dim": "#AAB6C8",
+    "text_dark": "#687787",
+    "text_inverse": "#F3F6FA",
+    "btn_text": "#F3F6FA",
 
     # ── Borders ──
-    "border": "#404040",
-    "border_light": "#525252",
-    "border_accent": "#3b82f644",
+    "border": "#1E2B3A",
+    "border_light": "#334A5D",
+    "border_accent": "#008DFF",
 
     # ── Action-type accents (from reference) ──
-    "key": "#3b82f6",       # blue
-    "click": "#ef4444",     # red
-    "image": "#f59e0b",     # amber
-    "pause": "#9ca3af",     # grey
-    "condition": "#8b5cf6", # violet
+    "key": "#008DFF",
+    "click": "#FF2330",
+    "image": "#FFD000",
+    "pause": "#B9B9B9",
+    "condition": "#D932FF",
+    "pause_cyan": "#00C8FF",
 
     # ── Playback ──
-    "playing": "#22c55e",
-    "playing_glow": "#22c55e22",
-    "lane": "#2d2d2d",
+    "playing": "#00D75A",
+    "playing_glow": "rgba(0, 215, 90, 0.14)",
+    "lane": "#27333D",
 
     # ── Neon highlights ──
-    "neon_blue": "#3b82f6",
-    "neon_purple": "#8b5cf6",
-    "neon_gold": "#f59e0b",
-    "neon_green": "#22c55e",
-    "neon_rose": "#ef4444",
+    "neon_blue": "#008DFF",
+    "neon_purple": "#D932FF",
+    "neon_gold": "#FFD000",
+    "neon_green": "#00D75A",
+    "neon_rose": "#FF2330",
 }
 
 TYPE_COLORS = {
@@ -75,11 +76,11 @@ TYPE_COLORS = {
 }
 
 TYPE_GLOW = {
-    "key": "#00e5a020",
-    "pause": "#9ca3af20",
-    "image": "#f59e0b20",
-    "click": "#60a5fa20",
-    "condition": "#d26bff20",
+    "key": "#008DFF",
+    "pause": "#B9B9B9",
+    "image": "#FFD000",
+    "click": "#FF2330",
+    "condition": "#D932FF",
 }
 
 
@@ -96,7 +97,7 @@ def build_stylesheet() -> str:
         font-family: 'Segoe UI', 'SF Pro Display', -apple-system, sans-serif;
         font-size: 13px;
         color: {C['text']};
-        background-color: {C['bg']};
+        background-color: transparent;
         selection-background-color: {C['accent_glow']};
         selection-color: {C['accent']};
     }}
@@ -137,7 +138,7 @@ def build_stylesheet() -> str:
     /*  BUTTONS                                               */
     /* ═══════════════════════════════════════════════════════ */
     QPushButton {{
-        background-color: {C['bg_tertiary']};
+        background-color: {C['bg_card']};
         color: {C['text']};
         border: 1px solid {C['border']};
         border-radius: 10px;
@@ -258,42 +259,42 @@ def build_stylesheet() -> str:
         border-color: {C['accent']};
     }}
 
-    /* ── Colorful per-action-type add buttons (flat solid full-color) ── */
+    /* ── Outlined per-action-type add buttons ── */
     QPushButton#add_key {{
-        background-color: {C['key']};
-        color: #ffffff; border: none;
-        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        background-color: transparent;
+        color: {C['text']}; border: 1px solid {C['key']};
+        border-radius: 6px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
         margin-bottom: 4px;
     }}
-    QPushButton#add_key:hover {{ background-color: {C['accent_hover']}; }}
-    QPushButton#add_key:pressed {{ background-color: {C['accent_secondary']}; }}
+    QPushButton#add_key:hover {{ background-color: {C['info_bg']}; }}
+    QPushButton#add_key:pressed {{ background-color: {C['bg_pressed']}; }}
 
     QPushButton#add_click {{
-        background-color: {C['click']};
-        color: #ffffff; border: none;
-        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        background-color: transparent;
+        color: {C['text']}; border: 1px solid {C['click']};
+        border-radius: 6px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
         margin-bottom: 4px;
     }}
-    QPushButton#add_click:hover {{ background-color: #f87171; }}
-    QPushButton#add_click:pressed {{ background-color: #dc2626; }}
+    QPushButton#add_click:hover {{ background-color: {C['error_bg']}; }}
+    QPushButton#add_click:pressed {{ background-color: {C['bg_pressed']}; }}
 
     QPushButton#add_image {{
-        background-color: {C['image']};
-        color: #000000; border: none;
-        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        background-color: transparent;
+        color: {C['text']}; border: 1px solid {C['image']};
+        border-radius: 6px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
         margin-bottom: 4px;
     }}
-    QPushButton#add_image:hover {{ background-color: #fbbf24; }}
-    QPushButton#add_image:pressed {{ background-color: #d97706; }}
+    QPushButton#add_image:hover {{ background-color: {C['warning_bg']}; }}
+    QPushButton#add_image:pressed {{ background-color: {C['bg_pressed']}; }}
 
     QPushButton#add_pause {{
-        background-color: {C['pause']};
-        color: #ffffff; border: none;
-        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        background-color: transparent;
+        color: {C['text']}; border: 1px solid {C['pause']};
+        border-radius: 6px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
         margin-bottom: 4px;
     }}
-    QPushButton#add_pause:hover {{ background-color: #a1a1aa; }}
-    QPushButton#add_pause:pressed {{ background-color: #71717a; }}
+    QPushButton#add_pause:hover {{ background-color: {C['bg_hover']}; }}
+    QPushButton#add_pause:pressed {{ background-color: {C['bg_pressed']}; }}
 
     QPushButton#add_condition {{
         background-color: {C['condition']};
@@ -313,33 +314,33 @@ def build_stylesheet() -> str:
     QPushButton#add_capture:hover {{ background-color: {C['accent_hover']}; }}
     QPushButton#add_capture:pressed {{ background-color: {C['accent_secondary']}; }}
 
-    /* ── Circular playback control buttons ── */
+    /* ── Outlined playback controls ── */
     QPushButton#play_btn {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['success']}, stop:1 #2bbf6e);
-        color: #ffffff; border: none; border-radius: 14px; font-weight: 850; padding: 8px;
+        background-color: transparent;
+        color: {C['text']}; border: 1px solid {C['success']}; border-radius: 7px; font-weight: 700; padding: 8px;
     }}
-    QPushButton#play_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5cf0a0, stop:1 {C['success']}); }}
+    QPushButton#play_btn:hover {{ background-color: {C['success_bg']}; }}
     QPushButton#play_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#pause_btn {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['warning']}, stop:1 #e09020);
-        color: #ffffff; border: none; border-radius: 14px; font-weight: 850; padding: 8px;
+        background-color: transparent;
+        color: {C['pause_cyan']}; border: 1px solid {C['border']}; border-radius: 7px; font-weight: 700; padding: 8px;
     }}
-    QPushButton#pause_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffc766, stop:1 {C['warning']}); }}
+    QPushButton#pause_btn:hover {{ background-color: {C['bg_hover']}; border-color: {C['pause_cyan']}; }}
     QPushButton#pause_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#stop_btn {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
-        color: #ffffff; border: none; border-radius: 14px; font-weight: 850; padding: 8px;
+        background-color: transparent;
+        color: {C['error']}; border: 1px solid {C['border']}; border-radius: 7px; font-weight: 700; padding: 8px;
     }}
-    QPushButton#stop_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff7a92, stop:1 {C['error']}); }}
+    QPushButton#stop_btn:hover {{ background-color: {C['error_bg']}; border-color: {C['error']}; }}
     QPushButton#stop_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#record_btn {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
-        color: #ffffff; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+        background-color: transparent;
+        color: {C['error']}; border: 1px solid {C['error']}; border-radius: 8px; font-weight: 700; padding: 8px;
     }}
-    QPushButton#record_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff7a92, stop:1 {C['error']}); }}
+    QPushButton#record_btn:hover {{ background-color: {C['error_bg']}; }}
 
     QPushButton#icon_btn {{
         background: transparent; border: none; border-radius: 6px;
@@ -468,8 +469,7 @@ def build_stylesheet() -> str:
         text-align: center;
     }}
     QProgressBar::chunk {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-            stop:0 {C['accent_secondary']}, stop:1 {C['accent']});
+        background-color: {C['accent']};
         border-radius: 3px;
     }}
 
@@ -584,18 +584,17 @@ def build_stylesheet() -> str:
     }}
 
     QPushButton#rec_round_btn {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-            stop:0 {C['error']}, stop:1 #d9415e);
-        border: 1px solid #ff5c7944;
-        border-radius: 12px;
+        background-color: transparent;
+        border: 1px solid {C['border']};
+        border-radius: 34px;
     }}
-    QPushButton#rec_round_btn:hover {{ background-color: #ff708a; border-color: {C['error']}; }}
-    QPushButton#rec_round_btn:pressed {{ background-color: #cc344f; }}
+    QPushButton#rec_round_btn:hover {{ background-color: {C['error_bg']}; border-color: {C['error']}; }}
+    QPushButton#rec_round_btn:pressed {{ background-color: {C['bg_pressed']}; }}
 
     QPushButton#rec_pause_btn {{
         background-color: {C['bg_tertiary']};
         border: 1px solid {C['border']};
-        border-radius: 12px;
+        border-radius: 34px;
     }}
     QPushButton#rec_pause_btn:hover {{ background-color: {C['bg_hover']}; border-color: {C['accent']}; }}
     QPushButton#rec_pause_btn:disabled {{ background-color: {C['bg_secondary']}; border-color: {C['border']}; }}
@@ -614,8 +613,8 @@ def build_stylesheet() -> str:
         background-color: {C['bg_secondary']};
     }}
     QCheckBox#pill_check::indicator:checked {{
-        background-color: {C['accent']};
-        border-color: {C['accent_hover']};
+        background-color: {C['accent_glow']};
+        border-color: {C['accent']};
     }}
 
     QPushButton#icon_btn {{

@@ -1,6 +1,5 @@
 {
-  "version": "3.0.0",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.0/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.0/MacroForge-v3.0.0.zip",
-  "notes": "v3.0.0: Complete UI redesign - updated color scheme to match reference design with dark grey-black surfaces, blue accent color, improved button styling with rounded corners, and enhanced timeline visuals."
+  "version": "3.0.1",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.1/MacroForge-v3.0.1.zip",
+  "notes": "v3.0.1: Reference-aligned UI stability release. Reworked the desktop shell with the supplied deep navy palette, outlined action and playback controls, action-colored timeline rows and status chips, a restored inspector selector, green idle indicators, and a complete source asset pack for future visual refinement. Updates are distributed as the full ZIP package."
 }

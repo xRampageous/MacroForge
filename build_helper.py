@@ -26,7 +26,6 @@ def write_update_json(version: str) -> None:
         pass
     data = {
         "version": version,
-        "url": f"https://github.com/xRampageous/MacroForge/releases/download/v{version}/MacroForge.exe",
         "zip_url": f"https://github.com/xRampageous/MacroForge/releases/download/v{version}/MacroForge-v{version}.zip",
         "notes": existing_notes,
     }

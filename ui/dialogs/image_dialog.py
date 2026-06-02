@@ -503,7 +503,7 @@ class ImageDialog(QDialog):
 
     def _listen_key(self):
         self.found_key.setText("press a key...")
-        self.found_key.setStyleSheet("color: #4cc4ff;")
+        self.found_key.setStyleSheet(f"color: {COLORS['accent']};")
         self.grabKeyboard()
 
     def keyPressEvent(self, event):

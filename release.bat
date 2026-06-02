@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-:: MacroForge — One-shot Build + Release
+:: MacroForge - One-shot Build + Release
 :: Usage:
 ::   release.bat                    (patch bump, full build)
 ::   release.bat --bump none          (no bump, full build)
@@ -15,9 +15,9 @@ setlocal EnableDelayedExpansion
 ::
 cd /d "%~dp0"
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  PARSE ARGS
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 set "BUMP=patch"
 set "BUILD_FLAGS="
 
@@ -36,9 +36,9 @@ shift
 goto :arg_loop
 :done_args
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  PRE-FLIGHT
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 :: Verify gh CLI
 gh auth status >nul 2>&1
 if %errorlevel% neq 0 (
@@ -54,9 +54,9 @@ if %errorlevel% neq 0 (
     pause & exit /b 1
 )
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  BUMP VERSION
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 if not "!BUMP!"=="none" (
     echo [PRE] Bumping version ^(!BUMP!^)...
     python bump_version.py !BUMP!
@@ -67,9 +67,9 @@ if not "!BUMP!"=="none" (
     echo      Version bumped.
 )
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  READ VERSION
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 python -c "import re; m=re.search(r'VERSION\s*=\s*\x22([^\x22]+)\x22', open('version.py','r',encoding='utf-8').read()); print(m.group(1) if m else '')" > _ver.txt
 for /f "delims=" %%v in (_ver.txt) do set "VER=%%v"
 del /f /q _ver.txt >nul 2>&1
@@ -85,9 +85,9 @@ echo   RELEASE PIPELINE  v!VER!
 echo  ============================================
 echo.
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  BUILD
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 echo [1/3] Building...
 echo        Flags: !BUILD_FLAGS!
 call build.bat !BUILD_FLAGS!
@@ -96,9 +96,9 @@ if %errorlevel% neq 0 (
     pause & exit /b 1
 )
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  RELEASE
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 echo.
 echo [2/3] Releasing to GitHub...
 
@@ -113,7 +113,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Upload assets
-gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge\MacroForge.exe" "dist\MacroForge-v!VER!.zip" >nul 2>&1
+gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge-v!VER!.zip" >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Asset upload failed.
     pause & exit /b 1
@@ -121,23 +121,23 @@ if %errorlevel% neq 0 (
 
 echo        Release v!VER! published.
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  PUSH MANIFEST
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 echo.
 echo [3/3] Pushing update manifest...
 git add version.py update.json build.bat release.bat build_helper.py >nul 2>&1
 git commit -m "Release v!VER!" >nul 2>&1
 git push origin main >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARNING] Git push failed — update.json may be stale.
+    echo [WARNING] Git push failed - update.json may be stale.
 ) else (
     echo        Manifest synced to main.
 )
 
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 ::  DONE
-:: ═══════════════════════════════════════════════════════════
+:: ===========================================================
 echo.
 echo  ============================================
 echo   DONE  v!VER!
