@@ -128,18 +128,24 @@ class ActionListModel(QAbstractListModel):
         return len(self._actions)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if not index.isValid():
+        if not index.isValid() or index.row() < 0 or index.row() >= len(self._actions):
             return QVariant()
 
         action = self._actions[index.row()]
 
         if role == Qt.ItemDataRole.DisplayRole:
-            return action.label or action.key
+            return (getattr(action, "label", "") or getattr(action, "key", "") or "")
 
         if role == self.ActionRole:
             return action
 
         return QVariant()
+
+    def flags(self, index):
+        base = super().flags(index)
+        if index.isValid():
+            return base | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsDragEnabled
+        return base | Qt.ItemFlag.ItemIsDropEnabled
 
     def roleNames(self):
         return {
@@ -168,6 +174,16 @@ class ActionListModel(QAbstractListModel):
 
     def get(self, row):
         return self._actions[row]
+
+    def move_action(self, source, target):
+        if source == target or source < 0 or source >= len(self._actions):
+            return False
+        target = max(0, min(target, len(self._actions) - 1))
+        self.beginResetModel()
+        action = self._actions.pop(source)
+        self._actions.insert(target, action)
+        self.endResetModel()
+        return True
 
     def actions(self):
         return self._actions

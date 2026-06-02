@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog,
     QDialog
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QModelIndex
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut, QIcon
 
 from engine import ExecutionEngine
@@ -1024,8 +1024,9 @@ class MainWindow(QMainWindow):
             return
         self.history.push(self.action_model.actions())
         action = deepcopy(self.action_model.get(index))
-        self.action_model._actions.insert(index + 1, action)
-        self.action_model.beginInsertRows(QModelIndex(), index + 1, index + 1)
+        insert_at = index + 1
+        self.action_model.beginInsertRows(QModelIndex(), insert_at, insert_at)
+        self.action_model._actions.insert(insert_at, action)
         self.action_model.endInsertRows()
         self.active_index = index + 1
         self.refresh()
@@ -1040,9 +1041,9 @@ class MainWindow(QMainWindow):
         if new_index < 0 or new_index >= self.action_model.rowCount():
             return
         self.history.push(self.action_model.actions())
+        self.action_model.beginResetModel()
         action = self.action_model._actions.pop(index)
         self.action_model._actions.insert(new_index, action)
-        self.action_model.beginResetModel()
         self.action_model.endResetModel()
         self.active_index = new_index
         self.refresh()
@@ -1055,9 +1056,9 @@ class MainWindow(QMainWindow):
         if target_index < 0 or target_index >= self.action_model.rowCount():
             return
         self.history.push(self.action_model.actions())
+        self.action_model.beginResetModel()
         action = self.action_model._actions.pop(index)
         self.action_model._actions.insert(target_index, action)
-        self.action_model.beginResetModel()
         self.action_model.endResetModel()
         self.active_index = target_index
         self.refresh()
@@ -1082,8 +1083,8 @@ class MainWindow(QMainWindow):
             insert_at = self.active_index + 1
         else:
             insert_at = self.action_model.rowCount()
-        self.action_model._actions.insert(insert_at, new_action)
         self.action_model.beginInsertRows(QModelIndex(), insert_at, insert_at)
+        self.action_model._actions.insert(insert_at, new_action)
         self.action_model.endInsertRows()
         self.active_index = insert_at
         self.refresh()
