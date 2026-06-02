@@ -1,6 +1,6 @@
 {
-  "version": "3.0.15",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.15/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.15/MacroForge-v3.0.15.zip",
-  "notes": "v3.0.15: Theme dialog stylesheet brace fix - fixed NameError: name 'background' is not defined in ui/theme.py, escapes CSS braces correctly inside build_stylesheet's f-string, keeps dialog/message box dark styling from previous patch."
+  "version": "3.0.16",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.16/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.16/MacroForge-v3.0.16.zip",
+  "notes": "v3.0.16: Dialog gradient + default bottom panel fit + top button refresh - dialog primary buttons now use qlineargradient style, dialog headers use action accent colour, dialog header cards use subtle action-colour gradient, bottom panel resized for default window fit, progress/stats right-aligned without pushing off window, stats chips resized with clearer values, check update and menu buttons redesigned as 32px icon buttons with hover states."
 }

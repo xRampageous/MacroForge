@@ -21,9 +21,9 @@ def dialog_stylesheet(accent: str) -> str:
         }}
 
         QLabel#dialog_title {{
-            color: {C['text']};
+            color: {accent};
             font-size: 14px;
-            font-weight: 900;
+            font-weight: 950;
             letter-spacing: 0.8px;
         }}
 
@@ -181,9 +181,11 @@ def make_header(title: str, accent: str, icon_name: str, subtitle: str = "") -> 
     C = COLORS
     bar = QFrame()
     bar.setObjectName("dialog_card")
+    tint = accent.lstrip("#")
     bar.setStyleSheet(
-        f"QFrame#dialog_card {{ background-color: {C['bg_card']};"
-        f" border: 1px solid {C['border']}; border-left: 3px solid {accent}; border-radius: 9px; }}"
+        f"QFrame#dialog_card {{ "
+        f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #33{tint}, stop:1 {C['bg_card']}); "
+        f"border: 1px solid {C['border']}; border-left: 3px solid {accent}; border-radius: 9px; }}"
     )
     hl = QHBoxLayout(bar)
     hl.setContentsMargins(12, 9, 12, 9)
@@ -239,12 +241,16 @@ def make_buttons(parent: QDialog, ok_text: str, accent: str, on_ok, ok_icon: str
     ok.setIconSize(QSize(14, 14))
     ok.setFixedHeight(34)
     ok.setMinimumWidth(104)
+    tint = accent.lstrip("#")
     ok.setStyleSheet(
-        f"QPushButton {{ background-color: {accent}; color: {C['text_inverse']}; "
-        f"border: 1px solid {accent}; border-radius: 8px; padding: 0 18px; "
-        f"font-size: 12px; font-weight: 900; }}"
-        f"QPushButton:hover {{ background-color: {accent}dd; }}"
-        f"QPushButton:pressed {{ background-color: {accent}bb; }}"
+        f"QPushButton {{ "
+        f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
+        f"color: {C['text_inverse']}; border: 1px solid #99{tint}; "
+        f"border-radius: 8px; padding: 0 18px; font-size: 12px; font-weight: 900; }}"
+        f"QPushButton:hover {{ "
+        f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {accent}, stop:1 #000000); "
+        f"border-color: {accent}; }}"
+        f"QPushButton:pressed {{ background: #55{tint}; }}"
     )
     ok.clicked.connect(on_ok)
 

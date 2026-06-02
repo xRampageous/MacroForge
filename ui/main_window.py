@@ -518,19 +518,33 @@ class MainWindow(QMainWindow):
         tl.addStretch()
 
         up_btn = QPushButton()
-        up_btn.setObjectName("top_icon_btn")
-        up_btn.setIcon(icon("update", 15, C["text_dim"]))
+        up_btn.setObjectName("update_top_btn")
+        up_btn.setIcon(icon("update", 16, C["accent"]))
+        up_btn.setIconSize(QSize(16, 16))
         up_btn.setToolTip("Check for updates")
-        up_btn.setFixedSize(34, 34)
+        up_btn.setFixedSize(32, 32)
+        up_btn.setStyleSheet(
+            f"QPushButton#update_top_btn {{ background-color: {C['bg_tertiary']}; color: {C['accent']}; "
+            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 0; }}"
+            f"QPushButton#update_top_btn:hover {{ border-color: {C['accent']}; background-color: {C['bg_secondary']}; }}"
+            f"QPushButton#update_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
+        )
         up_btn.clicked.connect(self._check_update_manual)
         tl.addWidget(up_btn)
         tl.addSpacing(6)
 
         gear = QPushButton()
-        gear.setObjectName("top_icon_btn")
-        gear.setIcon(icon("menu", 15, C["text_dim"]))
+        gear.setObjectName("menu_top_btn")
+        gear.setIcon(icon("menu", 16, C["text"]))
+        gear.setIconSize(QSize(16, 16))
         gear.setToolTip("Menu")
-        gear.setFixedSize(34, 34)
+        gear.setFixedSize(32, 32)
+        gear.setStyleSheet(
+            f"QPushButton#menu_top_btn {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 0; }}"
+            f"QPushButton#menu_top_btn:hover {{ border-color: {C['accent']}; color: {C['accent']}; background-color: {C['bg_secondary']}; }}"
+            f"QPushButton#menu_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
+        )
         gear.clicked.connect(self._show_action_menu)
         tl.addWidget(gear)
         tl.addSpacing(6)
@@ -617,7 +631,7 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(96)
+        panel.setFixedHeight(92)
 
         lo = QVBoxLayout(panel)
         lo.setContentsMargins(8, 0, 8, 6)
@@ -630,8 +644,8 @@ class MainWindow(QMainWindow):
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
         dlo = QHBoxLayout(dock)
-        dlo.setContentsMargins(8, 6, 8, 6)
-        dlo.setSpacing(7)
+        dlo.setContentsMargins(7, 6, 7, 6)
+        dlo.setSpacing(5)
 
         def section_title(txt):
             lbl = QLabel(txt)
@@ -657,7 +671,7 @@ class MainWindow(QMainWindow):
 
         # ── 1. Playback buttons ────────────────────────────
         play_section = QFrame()
-        play_section.setFixedWidth(140)
+        play_section.setFixedWidth(124)
         play_section.setStyleSheet("background: transparent; border: none;")
         play_lo = QVBoxLayout(play_section)
         play_lo.setContentsMargins(0, 0, 0, 0)
@@ -721,7 +735,7 @@ class MainWindow(QMainWindow):
 
         # ── 2. Playback options ────────────────────────────
         options_section = QFrame()
-        options_section.setFixedWidth(172)
+        options_section.setFixedWidth(132)
         options_section.setStyleSheet("background: transparent; border: none;")
         opt_lo = QVBoxLayout(options_section)
         opt_lo.setContentsMargins(0, 0, 0, 0)
@@ -802,12 +816,12 @@ class MainWindow(QMainWindow):
         opt_lo.addStretch()
         dlo.addWidget(options_section)
         dlo.addWidget(vline())
-        dlo.addStretch(1)
+        dlo.addStretch(0)
 
         # ── 3. Progress + stats ────────────────────────────
         progress_section = QFrame()
         progress_section.setStyleSheet("background: transparent; border: none;")
-        progress_section.setFixedWidth(260)
+        progress_section.setFixedWidth(244)
         ps_lo = QVBoxLayout(progress_section)
         ps_lo.setContentsMargins(0, 0, 0, 0)
         ps_lo.setSpacing(5)
@@ -858,7 +872,7 @@ class MainWindow(QMainWindow):
         stats_row.addStretch()
         ps_lo.addLayout(stats_row)
 
-        dlo.addWidget(progress_section, stretch=0)
+        dlo.addWidget(progress_section, stretch=0, alignment=Qt.AlignmentFlag.AlignRight)
         lo.addWidget(dock, stretch=1)
         return panel
 
@@ -873,12 +887,12 @@ class MainWindow(QMainWindow):
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
             f"QFrame#mf2_stat_chip:hover {{ border-color: {color}; }}"
         )
-        chip.setFixedWidth({"Played": 52, "Loops": 52, "Seq": 66, "Time": 82}.get(title, 54))
+        chip.setFixedWidth({"Played": 44, "Loops": 44, "Seq": 60, "Time": 72}.get(title, 46))
         chip.setFixedHeight(28)
 
         lo = QHBoxLayout(chip)
-        lo.setContentsMargins(5, 3, 5, 3)
-        lo.setSpacing(4)
+        lo.setContentsMargins(4, 3, 4, 3)
+        lo.setSpacing(3)
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -888,7 +902,7 @@ class MainWindow(QMainWindow):
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        value_lbl.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 950; background: transparent;")
+        value_lbl.setStyleSheet(f"color: {C['text']}; font-size: 9px; font-weight: 950; background: transparent;")
         lo.addWidget(value_lbl, stretch=1)
         return chip, value_lbl
 
