@@ -7,6 +7,7 @@ from ui.icons import icon
 
 def dialog_stylesheet(accent: str) -> str:
     C = COLORS
+    tint = accent.lstrip("#")
     return f"""
         QDialog {{
             background-color: {C['bg']};
@@ -141,14 +142,20 @@ def dialog_stylesheet(accent: str) -> str:
         }}
 
         QPushButton#accent {{
-            background-color: {accent};
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000);
             color: {C['text_inverse']};
-            border-color: {accent};
+            border: 1px solid #99{tint};
+            border-radius: 8px;
             font-weight: 900;
         }}
 
         QPushButton#accent:hover {{
-            background-color: {accent}dd;
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {accent}, stop:1 #000000);
+            border-color: {accent};
+        }}
+
+        QPushButton#accent:pressed {{
+            background: #55{tint};
         }}
 
         QScrollArea {{
@@ -177,44 +184,31 @@ def dialog_stylesheet(accent: str) -> str:
 
 
 def make_header(title: str, accent: str, icon_name: str, subtitle: str = "") -> QFrame:
-    """Compact dark dialog header matching the main MacroForge UI."""
+    """Text-only centered dialog header. No icons; action name is the focus."""
     C = COLORS
+    tint = accent.lstrip("#")
+
     bar = QFrame()
     bar.setObjectName("dialog_card")
-    tint = accent.lstrip("#")
     bar.setStyleSheet(
         f"QFrame#dialog_card {{ "
         f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #33{tint}, stop:1 {C['bg_card']}); "
-        f"border: 1px solid {C['border']}; border-left: 3px solid {accent}; border-radius: 9px; }}"
+        f"border: 1px solid {C['border']}; border-bottom: 2px solid {accent}; border-radius: 9px; }}"
     )
-    hl = QHBoxLayout(bar)
+
+    hl = QVBoxLayout(bar)
     hl.setContentsMargins(12, 9, 12, 9)
-    hl.setSpacing(10)
+    hl.setSpacing(1)
 
-    ic = QLabel()
-    ic.setFixedSize(24, 24)
-    ic.setPixmap(icon(icon_name, 18, accent).pixmap(QSize(18, 18)))
-    ic.setStyleSheet(
-        f"background-color: {accent}18; border: 1px solid {accent}66;"
-        " border-radius: 6px; padding: 2px;"
-    )
-    ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    hl.addWidget(ic)
-
-    text_col = QVBoxLayout()
-    text_col.setSpacing(1)
-
-    t = QLabel(title)
+    t = QLabel(title.upper())
     t.setObjectName("dialog_title")
-    text_col.addWidget(t)
+    t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    t.setStyleSheet(
+        f"color: {accent}; font-size: 14px; font-weight: 950; "
+        "letter-spacing: 1.1px; background: transparent;"
+    )
+    hl.addWidget(t)
 
-    if subtitle:
-        st = QLabel(subtitle)
-        st.setObjectName("dialog_subtitle")
-        text_col.addWidget(st)
-
-    hl.addLayout(text_col)
-    hl.addStretch()
     return bar
 
 

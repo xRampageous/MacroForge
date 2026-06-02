@@ -1,6 +1,6 @@
 {
-  "version": "3.0.16",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.16/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.16/MacroForge-v3.0.16.zip",
-  "notes": "v3.0.16: Dialog gradient + default bottom panel fit + top button refresh - dialog primary buttons now use qlineargradient style, dialog headers use action accent colour, dialog header cards use subtle action-colour gradient, bottom panel resized for default window fit, progress/stats right-aligned without pushing off window, stats chips resized with clearer values, check update and menu buttons redesigned as 32px icon buttons with hover states."
+  "version": "3.0.17",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.17/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.17/MacroForge-v3.0.17.zip",
+  "notes": "v3.0.17: UI sanity pass - dialog header icons removed with centered text-only action names, dialog headers use matching action accent colour, dialog header cards keep subtle gradient and accent underline, dialog Apply/OK/accent buttons use same gradient as Add Action buttons, Image dialog Apply button inherits gradient via QPushButton#accent, bottom panel resized for default window fit, playback buttons/options/progress/stats tightened and aligned, stats chips resized for compact section, check update and menu buttons refreshed with compact icon-button styling."
 }
