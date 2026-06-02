@@ -1,6 +1,6 @@
 {
-  "version": "3.0.17",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.17/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.17/MacroForge-v3.0.17.zip",
-  "notes": "v3.0.17: UI sanity pass - dialog header icons removed with centered text-only action names, dialog headers use matching action accent colour, dialog header cards keep subtle gradient and accent underline, dialog Apply/OK/accent buttons use same gradient as Add Action buttons, Image dialog Apply button inherits gradient via QPushButton#accent, bottom panel resized for default window fit, playback buttons/options/progress/stats tightened and aligned, stats chips resized for compact section, check update and menu buttons refreshed with compact icon-button styling."
+  "version": "3.0.18",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.18/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.18/MacroForge-v3.0.18.zip",
+  "notes": "v3.0.18: Responsive timeline/bottom panel/side panel line pass - timeline active row uses action type colour, playing row fills with action-colour gradient, timeline progress bar expands/contracts with row/window width, timeline progress fill uses action type colours, bottom Progress + Stats section expands/contracts with window, bottom stat chips expand with available width, speed label made more readable, bottom panel separators shortened/centered, recorder/sidebar separator line handling softened."
 }

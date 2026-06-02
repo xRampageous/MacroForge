@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QGridLayout,
+    QGridLayout, QSizePolicy,
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
     QProgressBar, QFrame, QMenu,
     QSpinBox, QDoubleSpinBox,
@@ -200,7 +200,9 @@ class MainWindow(QMainWindow):
 
     def _hsep(self):
         sep = QFrame()
-        sep.setStyleSheet(f"background-color: {COLORS['border']}; min-height: 1px; max-height: 1px;")
+        sep.setFixedHeight(1)
+        sep.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        sep.setStyleSheet(f"background-color: {COLORS['border']}; border: none;")
         return sep
 
     def _build_ui(self):
@@ -263,14 +265,14 @@ class MainWindow(QMainWindow):
             f"QFrame#rec_card {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
-        rec_card.setFixedHeight(116)
+        rec_card.setFixedHeight(120)
         rc_lo = QVBoxLayout(rec_card)
         rc_lo.setContentsMargins(8, 7, 8, 7)
-        rc_lo.setSpacing(3)
+        rc_lo.setSpacing(5)
         rec_header = QWidget()
-        rec_header.setFixedHeight(28)
+        rec_header.setFixedHeight(30)
         rrow = QHBoxLayout(rec_header)
-        rrow.setContentsMargins(0, 0, 0, 0)
+        rrow.setContentsMargins(2, 0, 2, 0)
         self.rec_dot = StatusDot()
         self.rec_dot.set_color(C["playing"])
         rrow.addWidget(self.rec_dot)
@@ -285,7 +287,7 @@ class MainWindow(QMainWindow):
         self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 700;")
         rrow.addWidget(self.rec_actions)
         rc_lo.addWidget(rec_header)
-        rc_lo.addWidget(self._hsep())
+        rc_lo.addSpacing(2)
         brow = QHBoxLayout()
         brow.setSpacing(6)
         self.rec_btn = QPushButton("Rec")
@@ -382,7 +384,7 @@ class MainWindow(QMainWindow):
 
         # Inspector forms (vertical in sidebar)
         self._insp_lo = QVBoxLayout()
-        self._insp_lo.setSpacing(3)
+        self._insp_lo.setSpacing(5)
         self._insp_lo.setContentsMargins(0, 0, 0, 0)
 
         # Key inspector
@@ -447,7 +449,7 @@ class MainWindow(QMainWindow):
         self.insp_image = QWidget()
         ii_lo = QVBoxLayout(self.insp_image)
         ii_lo.setContentsMargins(0, 0, 0, 0)
-        ii_lo.setSpacing(3)
+        ii_lo.setSpacing(5)
         self.ii_sim = QLineEdit(); self.ii_sim.setText("0.8")
         self.ii_wait = QLineEdit(); self.ii_wait.setText("10.0")
         ii_lo.addWidget(QLabel("Similarity"))
@@ -626,12 +628,13 @@ class MainWindow(QMainWindow):
         main_lo.addWidget(content, stretch=1)
 
     def _make_playback_panel(self):
-        """Bottom-docked panel sanity pass: compact, aligned, and default-size safe."""
+        """Bottom-docked panel: fixed left controls, responsive progress/stats."""
         C = COLORS
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(90)
+        panel.setFixedHeight(92)
+        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         lo = QVBoxLayout(panel)
         lo.setContentsMargins(8, 0, 8, 6)
@@ -639,6 +642,7 @@ class MainWindow(QMainWindow):
 
         dock = QFrame()
         dock.setObjectName("mf2_playback_dock")
+        dock.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         dock.setStyleSheet(
             f"QFrame#mf2_playback_dock {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
@@ -646,7 +650,7 @@ class MainWindow(QMainWindow):
 
         dlo = QHBoxLayout(dock)
         dlo.setContentsMargins(7, 6, 7, 6)
-        dlo.setSpacing(4)
+        dlo.setSpacing(5)
 
         def section_title(txt):
             lbl = QLabel(txt)
@@ -659,15 +663,16 @@ class MainWindow(QMainWindow):
         def mini_label(txt):
             lbl = QLabel(txt)
             lbl.setStyleSheet(
-                f"color: {C['text_dim']}; font-size: 7px; font-weight: 800; "
+                f"color: {C['text_dim']}; font-size: 8px; font-weight: 850; "
                 "background: transparent;"
             )
             return lbl
 
         def vline():
             line = QFrame()
-            line.setFixedWidth(1)
-            line.setStyleSheet(f"background-color: {C['border']};")
+            line.setFixedSize(1, 58)
+            line.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            line.setStyleSheet(f"background-color: {C['border']}; border: none;")
             return line
 
         # ── 1. Playback buttons ────────────────────────────
@@ -732,11 +737,11 @@ class MainWindow(QMainWindow):
         play_lo.addLayout(play_row)
         play_lo.addStretch()
         dlo.addWidget(play_section)
-        dlo.addWidget(vline())
+        dlo.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
 
         # ── 2. Playback options ────────────────────────────
         options_section = QFrame()
-        options_section.setFixedWidth(116)
+        options_section.setFixedWidth(128)
         options_section.setStyleSheet("background: transparent; border: none;")
         opt_lo = QVBoxLayout(options_section)
         opt_lo.setContentsMargins(0, 0, 0, 0)
@@ -745,7 +750,7 @@ class MainWindow(QMainWindow):
 
         row_one = QHBoxLayout()
         row_one.setContentsMargins(0, 0, 0, 0)
-        row_one.setSpacing(4)
+        row_one.setSpacing(5)
 
         speed_box = QVBoxLayout()
         speed_box.setContentsMargins(0, 0, 0, 0)
@@ -755,7 +760,7 @@ class MainWindow(QMainWindow):
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
         self.speed_combo.setCurrentIndex(3)
         self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        self.speed_combo.setFixedSize(48, 22)
+        self.speed_combo.setFixedSize(52, 22)
         speed_box.addWidget(self.speed_combo)
         row_one.addLayout(speed_box)
 
@@ -808,19 +813,20 @@ class MainWindow(QMainWindow):
         opt_lo.addLayout(row_two)
         opt_lo.addStretch()
         dlo.addWidget(options_section)
-        dlo.addWidget(vline())
-        dlo.addStretch(1)
+        dlo.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        # ── 3. Progress + stats ────────────────────────────
+        # ── 3. Responsive Progress + stats ─────────────────
         progress_section = QFrame()
         progress_section.setStyleSheet("background: transparent; border: none;")
-        progress_section.setFixedWidth(208)
+        progress_section.setMinimumWidth(210)
+        progress_section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         ps_lo = QVBoxLayout(progress_section)
         ps_lo.setContentsMargins(0, 0, 0, 0)
         ps_lo.setSpacing(5)
 
         progress_wrap = QFrame()
         progress_wrap.setObjectName("progress_wrap")
+        progress_wrap.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         progress_wrap.setStyleSheet(
             f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
@@ -835,6 +841,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setFixedHeight(10)
+        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.progress_bar.setStyleSheet(
             f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 5px; }}"
             f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 5px; }}"
@@ -856,29 +863,30 @@ class MainWindow(QMainWindow):
         self._stat_loops_w,   self._stat_loops   = self._make_stat_chip("loop", "Loops", "0", C["neon_purple"], "Completed loops")
         self._stat_seq_w,     self._stat_seq     = self._make_stat_chip("delay", "Seq", "44.0s", C["neon_gold"], "Estimated sequence duration")
         self._stat_time_w,    self._stat_time    = self._make_stat_chip("clock", "Time", "0:00:00", C["accent"], "Estimated session time")
-        stats_row.addWidget(self._stat_actions_w)
-        stats_row.addWidget(self._stat_loops_w)
-        stats_row.addWidget(self._stat_seq_w)
-        stats_row.addWidget(self._stat_time_w)
+        stats_row.addWidget(self._stat_actions_w, 1)
+        stats_row.addWidget(self._stat_loops_w, 1)
+        stats_row.addWidget(self._stat_seq_w, 2)
+        stats_row.addWidget(self._stat_time_w, 3)
         ps_lo.addLayout(stats_row)
 
-        dlo.addWidget(progress_section, stretch=0, alignment=Qt.AlignmentFlag.AlignRight)
+        dlo.addWidget(progress_section, stretch=1)
         lo.addWidget(dock, stretch=1)
         return panel
 
     def _make_stat_chip(self, icon_name, title, value, color, tooltip):
-        """Compact stat chip: crisp icon + value only, sized for the default panel."""
+        """Responsive compact stat chip: crisp icon + value only."""
         C = COLORS
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
+        chip.setMinimumWidth({"Played": 38, "Loops": 38, "Seq": 52, "Time": 62}.get(title, 40))
+        chip.setFixedHeight(27)
+        chip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
             f"QFrame#mf2_stat_chip:hover {{ border-color: {color}; }}"
         )
-        chip.setFixedWidth({"Played": 40, "Loops": 40, "Seq": 52, "Time": 64}.get(title, 42))
-        chip.setFixedHeight(27)
 
         lo = QHBoxLayout(chip)
         lo.setContentsMargins(4, 3, 4, 3)
@@ -892,6 +900,7 @@ class MainWindow(QMainWindow):
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        value_lbl.setMinimumWidth(12)
         value_lbl.setStyleSheet(
             f"color: {C['text']}; font-size: 9px; font-weight: 950; background: transparent;"
         )

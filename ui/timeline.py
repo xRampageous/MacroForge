@@ -159,16 +159,32 @@ class TimelineDelegate(QStyledItemDelegate):
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
             if selected:
-                bg = _mix(bg, COLORS["accent"], 0.15)
-            if playing:
-                bg = _mix(COLORS["bg_card"], COLORS["accent"], 0.2)
+                bg = _mix(bg, type_color, 0.12)
 
             border = COLORS["border"]
             if selected:
                 border = COLORS["border_light"]
             if playing:
-                border = COLORS["accent"]
-            self._rounded_rect(painter, outer, 8, bg, border, 1.2 if playing else 1)
+                border = type_color
+
+            # Active rows use the same left-to-dark color language as Add Action
+            # buttons, while inactive rows stay neutral.
+            if playing:
+                row_path = QPainterPath()
+                row_path.addRoundedRect(QRectF(outer), 8, 8)
+                row_grad = QLinearGradient(QPointF(outer.left(), outer.top()), QPointF(outer.right(), outer.top()))
+                active_col = QColor(type_color)
+                active_col.setAlpha(165)
+                mid_col = QColor(type_color)
+                mid_col.setAlpha(42)
+                row_grad.setColorAt(0.0, active_col)
+                row_grad.setColorAt(0.20, mid_col)
+                row_grad.setColorAt(1.0, QColor(COLORS["bg_card"]))
+                painter.setBrush(QBrush(row_grad))
+                painter.setPen(QPen(QColor(border), 1.4))
+                painter.drawPath(row_path)
+            else:
+                self._rounded_rect(painter, outer, 8, bg, border, 1)
 
             # Compact-aware layout. The default app window is 780x780, so the
             # delegate intentionally collapses labels/status metadata before it
@@ -176,13 +192,31 @@ class TimelineDelegate(QStyledItemDelegate):
             compact = outer.width() < 760
             tiny = outer.width() < 600
 
-            # Left type accent stripe and active play marker.
+            # Left type accent stripe and active play marker. Active playback fills
+            # the row's left end with the action's own gradient colour.
+            if playing:
+                painter.save()
+                clip_path = QPainterPath()
+                clip_path.addRoundedRect(QRectF(outer), 8, 8)
+                painter.setClipPath(clip_path)
+                active_w = (96 if compact else 128)
+                active_rect = QRectF(outer.left(), outer.top(), active_w, outer.height())
+                left_grad = QLinearGradient(QPointF(active_rect.left(), active_rect.top()), QPointF(active_rect.right(), active_rect.top()))
+                left_col = QColor(type_color); left_col.setAlpha(225)
+                fade_col = QColor(type_color); fade_col.setAlpha(20)
+                left_grad.setColorAt(0.0, left_col)
+                left_grad.setColorAt(1.0, fade_col)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(left_grad))
+                painter.drawRect(active_rect)
+                painter.restore()
+
             stripe = QRectF(outer.left(), outer.top() + 1, 3.0, outer.height() - 2)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(type_color))
             painter.drawRoundedRect(stripe, 1.5, 1.5)
             if playing:
-                painter.setBrush(QColor(COLORS["accent"]))
+                painter.setBrush(QColor(type_color))
                 tri_x = outer.left() + (10 if compact else 14)
                 tri_y = outer.center().y()
                 painter.drawPolygon([
@@ -215,23 +249,27 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawPath(path)
             self._draw_type_icon(painter, icon_rect, kind, type_color)
 
-            # Right-side progress area.
-            menu_reserve = 22
-            pct_w = 38
-            chip_w = 0
-            bar_w = int(outer.width() * (0.20 if compact else 0.18))
-            bar_w = max(82 if compact else 152, min(190 if compact else 170, bar_w))
-            bar_x = outer.right() - (menu_reserve + pct_w + chip_w + bar_w + 14 if compact else 144 + bar_w)
-            min_bar_x = icon_rect.right() + 145
-            if bar_x < min_bar_x:
-                bar_w = max(72, int(outer.right() - menu_reserve - pct_w - chip_w - 14 - min_bar_x))
-                bar_x = outer.right() - menu_reserve - pct_w - chip_w - bar_w - 14
+            # Right-side progress area. Status/duration are fixed-size columns;
+            # only the progress rail itself expands/contracts with window width.
+            menu_reserve = 22 if compact else 26
+            pct_w = 38 if compact else 44
+            right_edge = outer.right() - menu_reserve - pct_w - 10
+
+            status_w = 14 if compact else 92
+            status_x = max(icon_rect.right() + 96, outer.left() + int(outer.width() * (0.52 if compact else 0.49)))
+            duration_w = 48 if compact else 56
+            bar_x = max(status_x + status_w + (42 if tiny else 62), outer.left() + int(outer.width() * (0.70 if compact else 0.66)))
+            if not tiny:
+                bar_x = max(bar_x, status_x + status_w + duration_w + 18)
+            bar_w = max(64 if compact else 96, int(right_edge - bar_x))
+            if bar_x + bar_w > right_edge:
+                bar_w = max(56, int(right_edge - bar_x))
 
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
             text_x = icon_rect.right() + 14
-            text_right = max(text_x + 84, bar_x - (84 if compact else 176))
-            text_w = max(82, text_right - text_x)
+            text_right = max(text_x + 72, status_x - 14)
+            text_w = max(72, text_right - text_x)
             title_rect = QRectF(text_x, outer.top() + (7 if compact else 9), text_w, 17)
             detail_rect = QRectF(text_x, outer.top() + (22 if compact else 26), text_w, 14)
             painter.setPen(QColor(COLORS["text"]))
@@ -243,35 +281,34 @@ class TimelineDelegate(QStyledItemDelegate):
             fm = painter.fontMetrics()
             painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
-            # Status chip.
+            # Status chip / dot. Its width is fixed; it does not resize with the row.
             if playing:
-                status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", COLORS["success"])
+                status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", type_color)
             elif progress >= 0.999:
                 status, status_col = "Completed", type_color
             else:
                 status, status_col = "Pending", COLORS["text_dim"]
 
-            status_x = bar_x - (90 if compact else 218)
             if compact:
                 painter.setBrush(QColor(status_col))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawEllipse(QRectF(status_x, outer.center().y() - 4, 8, 8))
             else:
-                status_rect = QRectF(status_x, outer.center().y() - 15, 92, 30)
+                status_rect = QRectF(status_x, outer.center().y() - 15, status_w, 30)
                 self._rounded_rect(painter, status_rect, 5, COLORS["bg"], status_col, 1)
                 painter.setPen(QColor(status_col))
                 painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
                 painter.drawText(status_rect, Qt.AlignmentFlag.AlignCenter, status)
 
-            # Duration metadata; hidden on tiny widths, kept compact otherwise.
+            # Duration metadata; fixed-size column before progress rail.
             if not tiny:
-                dur_x = bar_x - 62
-                dur_rect = QRectF(dur_x, outer.top(), 48, outer.height())
+                dur_x = bar_x - duration_w - 12
+                dur_rect = QRectF(dur_x, outer.top(), duration_w, outer.height())
                 painter.setPen(QColor(COLORS["text_dim"]))
                 painter.setFont(QFont("Segoe UI", 7 if compact else 8))
                 painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
 
-            # Per-action progress bar.
+            # Per-action progress bar. This is the responsive part of the row.
             bar_y = outer.center().y() - 3
             bar_h = 6 if compact else 7
             track = QRectF(bar_x, bar_y, bar_w, bar_h)
@@ -280,11 +317,11 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(track, bar_h / 2, bar_h / 2)
             if progress > 0:
                 fill = QRectF(bar_x, bar_y, bar_w * progress, bar_h)
-                painter.setBrush(QBrush(QColor(COLORS["accent"] if playing else type_color)))
+                painter.setBrush(QBrush(QColor(type_color)))
                 painter.drawRoundedRect(fill, bar_h / 2, bar_h / 2)
 
             pct = f"{int(round(progress * 100)):d}%"
-            pct_x = bar_x + bar_w + (8 if compact else 26)
+            pct_x = bar_x + bar_w + 8
             painter.setPen(QColor(COLORS["text_dim"] if progress < 1 else COLORS["text"]))
             painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold))
             painter.drawText(QRectF(pct_x, outer.top(), pct_w, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
