@@ -159,11 +159,11 @@ class TimelineDelegate(QStyledItemDelegate):
             outer = option.rect.adjusted(8, 4, -8, -4)
             bg = COLORS["bg_card"]
             if hovered:
-                bg = _mix(bg, COLORS["bg_hover"], 0.45)
+                bg = _mix(bg, COLORS["bg_hover"], 0.5)
             if selected:
-                bg = _mix(bg, COLORS["accent"], 0.11)
+                bg = _mix(bg, COLORS["accent"], 0.15)
             if playing:
-                bg = _mix(COLORS["bg_card"], COLORS["accent"], 0.16)
+                bg = _mix(COLORS["bg_card"], COLORS["accent"], 0.2)
 
             border = COLORS["border"]
             if selected:
@@ -211,11 +211,11 @@ class TimelineDelegate(QStyledItemDelegate):
             icon_size = 30 if compact else 36
             icon_left = outer.left() + (66 if compact else 90)
             icon_rect = QRectF(icon_left, outer.center().y() - icon_size / 2, icon_size, icon_size)
-            tile_col = _mix(type_color, COLORS["bg_secondary"], 0.45)
+            tile_col = _mix(type_color, COLORS["bg_secondary"], 0.5)
             gradient = QLinearGradient(icon_rect.topLeft(), icon_rect.bottomRight())
-            gradient.setColorAt(0, QColor(_mix(type_color, "#ffffff", 0.10)))
+            gradient.setColorAt(0, QColor(_mix(type_color, "#ffffff", 0.15)))
             gradient.setColorAt(1, QColor(tile_col))
-            path = QPainterPath(); path.addRoundedRect(icon_rect, 7, 7)
+            path = QPainterPath(); path.addRoundedRect(icon_rect, 8, 8)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(gradient))
             painter.drawPath(path)

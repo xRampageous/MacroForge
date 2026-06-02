@@ -8,62 +8,62 @@ gradient highlights, and smooth micro-interactions.
 #  COLOR PALETTE
 # ═══════════════════════════════════════════════════════
 COLORS = {
-    # ── Surfaces (deep indigo-black with subtle blue undertone) ──
-    "bg": "#050914",
-    "bg_secondary": "#08111f",
-    "bg_tertiary": "#101a2c",
-    "bg_card": "#101b2e",
-    "bg_hover": "#192743",
-    "bg_pressed": "#243456",
-    "bg_glass": "#ffffff06",
+    # ── Surfaces (dark grey-black from reference) ──
+    "bg": "#1a1a1a",
+    "bg_secondary": "#2d2d2d",
+    "bg_tertiary": "#3d3d3d",
+    "bg_card": "#2a2a2a",
+    "bg_hover": "#404040",
+    "bg_pressed": "#4d4d4d",
+    "bg_glass": "#ffffff08",
 
-    # ── Primary accent (electric cyan-blue) ──
-    "accent": "#4cc4ff",
-    "accent_secondary": "#2f95e0",
-    "accent_glow": "#4cc4ff22",
-    "accent_hover": "#7ad6ff",
-    "accent_dim": "#4cc4ff66",
+    # ── Primary accent (blue from reference) ──
+    "accent": "#3b82f6",
+    "accent_secondary": "#2563eb",
+    "accent_glow": "#3b82f622",
+    "accent_hover": "#60a5fa",
+    "accent_dim": "#3b82f666",
 
     # ── Semantic ──
-    "error": "#ff5c79",
-    "error_bg": "#ff5c7918",
-    "warning": "#ffb13d",
-    "warning_bg": "#ffb13d18",
-    "success": "#3fe08a",
-    "success_bg": "#3fe08a18",
-    "info": "#4cc4ff",
-    "info_bg": "#4cc4ff18",
+    "error": "#ef4444",
+    "error_bg": "#ef444418",
+    "warning": "#f59e0b",
+    "warning_bg": "#f59e0b18",
+    "success": "#22c55e",
+    "success_bg": "#22c55e18",
+    "info": "#3b82f6",
+    "info_bg": "#3b82f618",
 
     # ── Text ──
-    "text": "#e6e8f5",
-    "text_dim": "#8b91b5",
-    "text_dark": "#42445f",
-    "text_inverse": "#06070d",
+    "text": "#ffffff",
+    "text_dim": "#9ca3af",
+    "text_dark": "#6b7280",
+    "text_inverse": "#ffffff",
     "btn_text": "#ffffff",
 
     # ── Borders ──
-    "border": "#20304d",
-    "border_light": "#31476e",
-    "border_accent": "#4cc4ff44",
+    "border": "#404040",
+    "border_light": "#525252",
+    "border_accent": "#3b82f644",
 
-    # ── Action-type accents (vibrant, distinct) ──
-    "key": "#4cc4ff",       # cyan
-    "click": "#ff5c79",     # rose
-    "image": "#ffcc4d",     # amber
-    "pause": "#9aa6c4",     # slate
-    "condition": "#c77dff", # violet
+    # ── Action-type accents (from reference) ──
+    "key": "#3b82f6",       # blue
+    "click": "#ef4444",     # red
+    "image": "#f59e0b",     # amber
+    "pause": "#9ca3af",     # grey
+    "condition": "#8b5cf6", # violet
 
     # ── Playback ──
-    "playing": "#3fe08a",
-    "playing_glow": "#3fe08a22",
-    "lane": "#17243a",
+    "playing": "#22c55e",
+    "playing_glow": "#22c55e22",
+    "lane": "#2d2d2d",
 
     # ── Neon highlights ──
-    "neon_blue": "#4cc4ff",
-    "neon_purple": "#c77dff",
-    "neon_gold": "#ffcc4d",
-    "neon_green": "#3fe08a",
-    "neon_rose": "#ff5c79",
+    "neon_blue": "#3b82f6",
+    "neon_purple": "#8b5cf6",
+    "neon_gold": "#f59e0b",
+    "neon_green": "#22c55e",
+    "neon_rose": "#ef4444",
 }
 
 TYPE_COLORS = {
@@ -262,8 +262,8 @@ def build_stylesheet() -> str:
     QPushButton#add_key {{
         background-color: {C['key']};
         color: #ffffff; border: none;
-        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
-        margin-bottom: 2px;
+        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        margin-bottom: 4px;
     }}
     QPushButton#add_key:hover {{ background-color: {C['accent_hover']}; }}
     QPushButton#add_key:pressed {{ background-color: {C['accent_secondary']}; }}
@@ -271,29 +271,29 @@ def build_stylesheet() -> str:
     QPushButton#add_click {{
         background-color: {C['click']};
         color: #ffffff; border: none;
-        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
-        margin-bottom: 2px;
+        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        margin-bottom: 4px;
     }}
-    QPushButton#add_click:hover {{ background-color: #ff7a92; }}
-    QPushButton#add_click:pressed {{ background-color: #e0445f; }}
+    QPushButton#add_click:hover {{ background-color: #f87171; }}
+    QPushButton#add_click:pressed {{ background-color: #dc2626; }}
 
     QPushButton#add_image {{
         background-color: {C['image']};
-        color: #0d0d14; border: none;
-        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
-        margin-bottom: 2px;
+        color: #000000; border: none;
+        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        margin-bottom: 4px;
     }}
-    QPushButton#add_image:hover {{ background-color: #ffe066; }}
-    QPushButton#add_image:pressed {{ background-color: #e6b030; }}
+    QPushButton#add_image:hover {{ background-color: #fbbf24; }}
+    QPushButton#add_image:pressed {{ background-color: #d97706; }}
 
     QPushButton#add_pause {{
         background-color: {C['pause']};
         color: #ffffff; border: none;
-        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
-        margin-bottom: 2px;
+        border-radius: 8px; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600;
+        margin-bottom: 4px;
     }}
-    QPushButton#add_pause:hover {{ background-color: #b0bcd9; }}
-    QPushButton#add_pause:pressed {{ background-color: #7a869f; }}
+    QPushButton#add_pause:hover {{ background-color: #a1a1aa; }}
+    QPushButton#add_pause:pressed {{ background-color: #71717a; }}
 
     QPushButton#add_condition {{
         background-color: {C['condition']};

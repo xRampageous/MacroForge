@@ -1,6 +1,6 @@
 {
-  "version": "2.1.1",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v2.1.1/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v2.1.1/MacroForge-v2.1.1.zip",
-  "notes": "v2.1.1: Compact UI fix - addressed layout issues and improved compact mode for better usability on smaller screens."
+  "version": "3.0.0",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.0/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.0/MacroForge-v3.0.0.zip",
+  "notes": "v3.0.0: Complete UI redesign - updated color scheme to match reference design with dark grey-black surfaces, blue accent color, improved button styling with rounded corners, and enhanced timeline visuals."
 }
