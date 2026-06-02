@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog,
     QDialog
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QModelIndex
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut, QIcon
 
 from engine import ExecutionEngine
@@ -133,7 +133,13 @@ class MainWindow(QMainWindow):
         self.active_index = -1
         self.clipboard = None
         self.auto_save_enabled = True
-        self._save_session_after = None
+        self._save_session_timer = QTimer(self)
+        self._save_session_timer.setSingleShot(True)
+        self._save_session_timer.setInterval(500)
+        self._save_session_timer.timeout.connect(self._do_save_session)
+        self._update_check_timer = QTimer(self)
+        self._update_check_timer.setInterval(60 * 1000)
+        self._update_check_timer.timeout.connect(self._check_update_silent)
         self.history = HistoryManager()
         self.actions_played = 0
         self.session_elapsed_time = 0.0
@@ -180,9 +186,7 @@ class MainWindow(QMainWindow):
         self._check_update_silent()
         self.load_last_session()
         self._restore_window_geometry()
-        # Periodic update check every 1 minute
-        QTimer.singleShot(60 * 1000, self._check_update_silent)
-        QTimer.singleShot(60 * 1000, lambda: QTimer.singleShot(60 * 1000, self._check_update_silent))
+        self._update_check_timer.start()
 
     # ═══════════════════════════════════════════════════════
     #  UI CONSTRUCTION
@@ -800,9 +804,7 @@ class MainWindow(QMainWindow):
     def save_session(self):
         if not self.auto_save_enabled:
             return
-        if self._save_session_after:
-            self._save_session_after.stop()
-        self._save_session_after = QTimer.singleShot(500, self._do_save_session)
+        self._save_session_timer.start()
 
     def _do_save_session(self):
         settings = {
@@ -814,7 +816,6 @@ class MainWindow(QMainWindow):
         }
         self.session_manager.save_profile(self.action_model.actions(), settings)
         self._save_window_geometry()
-        self._save_session_after = None
 
     def _save_window_geometry(self):
         """Persist window geometry GLOBALLY (independent of profile)."""
@@ -1026,9 +1027,7 @@ class MainWindow(QMainWindow):
         self.history.push(self.action_model.actions())
         action = deepcopy(self.action_model.get(index))
         insert_at = index + 1
-        self.action_model.beginInsertRows(QModelIndex(), insert_at, insert_at)
-        self.action_model._actions.insert(insert_at, action)
-        self.action_model.endInsertRows()
+        self.action_model.insert_action(insert_at, action)
         self.active_index = index + 1
         self.refresh()
         self.update_statistics()
@@ -1042,10 +1041,7 @@ class MainWindow(QMainWindow):
         if new_index < 0 or new_index >= self.action_model.rowCount():
             return
         self.history.push(self.action_model.actions())
-        self.action_model.beginResetModel()
-        action = self.action_model._actions.pop(index)
-        self.action_model._actions.insert(new_index, action)
-        self.action_model.endResetModel()
+        self.action_model.move_action(index, new_index)
         self.active_index = new_index
         self.refresh()
         self.save_session()
@@ -1057,10 +1053,7 @@ class MainWindow(QMainWindow):
         if target_index < 0 or target_index >= self.action_model.rowCount():
             return
         self.history.push(self.action_model.actions())
-        self.action_model.beginResetModel()
-        action = self.action_model._actions.pop(index)
-        self.action_model._actions.insert(target_index, action)
-        self.action_model.endResetModel()
+        self.action_model.move_action(index, target_index)
         self.active_index = target_index
         self.refresh()
         self.update_statistics(immediate=True)
@@ -1084,9 +1077,7 @@ class MainWindow(QMainWindow):
             insert_at = self.active_index + 1
         else:
             insert_at = self.action_model.rowCount()
-        self.action_model.beginInsertRows(QModelIndex(), insert_at, insert_at)
-        self.action_model._actions.insert(insert_at, new_action)
-        self.action_model.endInsertRows()
+        self.action_model.insert_action(insert_at, new_action)
         self.active_index = insert_at
         self.refresh()
         self.update_statistics()
@@ -2038,38 +2029,6 @@ class MainWindow(QMainWindow):
         except Exception:
             logger.exception("_open_image_dialog crashed")
 
-    def _open_capture_dialog(self):
-        try:
-            logger.info("_open_capture_dialog: START")
-            from ui.dialogs.image_dialog import ImageDialog
-            logger.info("_open_capture_dialog: imported")
-            dlg = ImageDialog(self)
-            logger.info("_open_capture_dialog: dialog created")
-            rc = dlg.exec()
-            logger.info(f"_open_capture_dialog: dialog returned rc={rc}")
-            if rc:
-                logger.info("_open_capture_dialog: calling get_action")
-                act = dlg.get_action()
-                logger.info(f"_open_capture_dialog: get_action done act={act is not None}")
-                if act:
-                    logger.info("_open_capture_dialog: pushing history")
-                    self.history.push(self.action_model.actions())
-                    logger.info("_open_capture_dialog: adding action to model")
-                    self.action_model.add_action(act)
-                    self.active_index = self.action_model.rowCount() - 1
-                    logger.info("_open_capture_dialog: calling refresh")
-                    self.refresh()
-                    logger.info("_open_capture_dialog: calling ensure_visible")
-                    self.timeline.ensure_visible(self.active_index)
-                    logger.info("_open_capture_dialog: calling save_session")
-                    self.save_session()
-                    self.status("Added captured image search")
-                    logger.info("_open_capture_dialog: DONE")
-            else:
-                logger.info("_open_capture_dialog: dialog cancelled/rejected")
-        except Exception:
-            logger.exception("_open_capture_dialog crashed")
-
     def _open_key_editor(self, index):
         from ui.dialogs.key_dialog import KeyDialog
         dlg = KeyDialog(self, existing=self.action_model.get(index))
@@ -2216,4 +2175,3 @@ class HistoryManager:
         self._undo.append([a.to_dict() for a in current_actions])
         data = self._redo.pop()
         return [Action.from_dict(d) for d in data]
-

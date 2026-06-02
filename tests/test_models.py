@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Action, HistoryManager, ProfileManager
+from models import Action, ActionListModel, HistoryManager, ProfileManager
 
 
 class TestAction(unittest.TestCase):
@@ -58,6 +58,19 @@ class TestHistoryManager(unittest.TestCase):
         for i in range(5):
             h.push([Action(str(i), 0.1)])
         self.assertEqual(len(h.undo_stack), 3)
+
+
+class TestActionListModel(unittest.TestCase):
+    def test_insert_action_uses_requested_position(self):
+        model = ActionListModel([Action("a", 0.1), Action("c", 0.1)])
+        row = model.insert_action(1, Action("b", 0.1))
+        self.assertEqual(row, 1)
+        self.assertEqual([action.key for action in model.actions()], ["a", "b", "c"])
+
+    def test_move_action_reorders_backing_list(self):
+        model = ActionListModel([Action("a", 0.1), Action("b", 0.1), Action("c", 0.1)])
+        self.assertTrue(model.move_action(0, 2))
+        self.assertEqual([action.key for action in model.actions()], ["b", "c", "a"])
 
 
 class TestProfileManager(unittest.TestCase):

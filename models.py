@@ -156,10 +156,14 @@ class ActionListModel(QAbstractListModel):
     # API (REACTIVE UPDATES)
     # -------------------------
     def add_action(self, action):
-        row = len(self._actions)
+        self.insert_action(len(self._actions), action)
+
+    def insert_action(self, row, action):
+        row = max(0, min(row, len(self._actions)))
         self.beginInsertRows(QModelIndex(), row, row)
-        self._actions.append(action)
+        self._actions.insert(row, action)
         self.endInsertRows()
+        return row
 
     def remove_action(self, row):
         if 0 <= row < len(self._actions):
