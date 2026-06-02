@@ -151,7 +151,8 @@ class TimelineDelegate(QStyledItemDelegate):
             kind = _action_kind(action)
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
 
-            outer = option.rect.adjusted(24, 4, -38, -4)
+            narrow = option.rect.width() < 700
+            outer = option.rect.adjusted(10, 3, -12, -3) if narrow else option.rect.adjusted(24, 4, -38, -4)
             bg = COLORS["bg_card"]
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
@@ -313,7 +314,8 @@ class TimelineDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         view = option.widget
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
-        height = max(66, int(86 * zoom))
+        base_height = 72 if getattr(option.widget, "width", lambda: 999)() < 700 else 86
+        height = max(62, int(base_height * zoom))
         return QSize(100, height)
 
 

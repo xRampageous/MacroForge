@@ -583,10 +583,10 @@ def build_stylesheet() -> str:
         border: 1px solid {C['border']};
         border-radius: 12px;
         padding: 0;
-        min-width: 56px;
-        max-width: 56px;
-        min-height: 34px;
-        max-height: 34px;
+        min-width: 40px;
+        max-width: 40px;
+        min-height: 28px;
+        max-height: 28px;
     }}
     QPushButton#view_toggle:hover {{
         background-color: {C['bg_hover']};
@@ -647,10 +647,10 @@ def build_stylesheet() -> str:
         border: 1px solid {C['border']};
         border-radius: 10px;
         padding: 4px;
-        min-width: 50px;
-        max-width: 50px;
-        min-height: 44px;
-        max-height: 44px;
+        min-width: 36px;
+        max-width: 36px;
+        min-height: 36px;
+        max-height: 36px;
     }}
     QPushButton#top_icon_btn:hover {{
         background-color: {C['bg_hover']};
