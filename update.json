@@ -1,5 +1,6 @@
 {
-  "version": "3.0.4",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.4/MacroForge-v3.0.4.zip",
-  "notes": "Release v3.0.4"
+  "version": "3.0.5",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.5/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.5/MacroForge-v3.0.5.zip",
+  "notes": "v3.0.5: Compact sidebar and header update - reduced sidebar width to 186px, smaller margins and spacing, reduced brand font size to 16px, and optimized layout for a more compact UI."
 }
