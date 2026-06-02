@@ -381,12 +381,12 @@ class ExecutionEngine:
                             if 0 <= jnf < len(self.actions):
                                 i = jnf
                                 continue
-                        # loop_until_found: restart sequence without incrementing loop count
+                        # loop_until_found: finish the current timeline pass, then
+                        # restart the sequence without incrementing loop count.
                         if actual_action.loop_until_found and self.running:
                             if not self._last_image_found:
-                                self.status("Image not found — looping sequence...")
+                                self.status("Image not found — looping sequence after remaining actions...")
                                 _restart_loop = True
-                                break
                         i += 1
                         continue
 

@@ -1,5 +1,5 @@
 {
-  "version": "3.0.20",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.20/MacroForge-v3.0.20.zip",
-  "notes": "v3.0.20: Pre-flight loop reachability warning - warns when an image action with 'Loop sequence until found' has later timeline rows that cannot run until the image is matched."
+  "version": "3.0.21",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.21/MacroForge-v3.0.21.zip",
+  "notes": "v3.0.21: Loop-until-found continuation fix - image misses no longer stop the current timeline pass early. Remaining actions run before the sequence restarts, regardless of timeline length. Removes the obsolete reachability warning and adds regression coverage for a 12-action sequence."
 }

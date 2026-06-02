@@ -1474,12 +1474,6 @@ class MainWindow(QMainWindow):
                     ok, reason = self._validate_key_name(getattr(action, "on_found_key", ""))
                     if not ok:
                         errors.append(f"{prefix}: image on-found key is invalid: {reason}.")
-                if getattr(action, "loop_until_found", False) and idx < total:
-                    blocked = f"row {idx + 1}" if idx + 1 == total else f"rows {idx + 1}-{total}"
-                    warnings.append(
-                        f"{prefix}: 'Loop sequence until found' can restart at row 1 while the image is missing; "
-                        f"{blocked} will not run until it matches."
-                    )
                 for attr, label in (("jump_to_on_found", "found jump"), ("jump_to_on_not_found", "not-found jump")):
                     target = int(getattr(action, attr, -1) or -1)
                     if target >= total:

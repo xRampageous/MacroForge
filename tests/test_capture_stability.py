@@ -15,7 +15,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QDialog
 
 from debugger import DebugLogger
-from models import Action, ActionListModel
+from models import ActionListModel
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
 from ui.timeline import TimelineView
@@ -111,35 +111,6 @@ class TestOwnedTimers(QtTestCase):
             window.save_session()
             self.assertTrue(window._save_session_timer.isActive())
             window._save_session_timer.stop()
-            window._update_check_timer.stop()
-            window.deleteLater()
-
-
-class TestPreflightWarnings(QtTestCase):
-    def test_loop_until_found_warns_when_later_rows_can_be_unreachable(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            profile_manager = SimpleNamespace(base_dir=tmpdir)
-            with (
-                patch.object(MainWindow, "_check_update_silent"),
-                patch.object(MainWindow, "load_last_session"),
-                patch.object(MainWindow, "_restore_window_geometry"),
-                patch.object(MainWindow, "_setup_tray"),
-            ):
-                window = MainWindow(profile_manager=profile_manager)
-
-            window.action_model.set_actions([
-                Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1, loop_until_found=True),
-                Action("enter", 0.1),
-                Action("space", 0.1),
-            ])
-
-            self.assertTrue(window.run_preflight_check(show_success=False, allow_warning_prompt=False))
-            self.assertIn(
-                "Row 1: 'Loop sequence until found' can restart at row 1 while the image is missing; "
-                "rows 2-3 will not run until it matches.",
-                window._last_preflight["warnings"],
-            )
-
             window._update_check_timer.stop()
             window.deleteLater()
 
