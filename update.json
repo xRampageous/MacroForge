@@ -1,6 +1,6 @@
 {
-  "version": "3.1.5",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.5/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.5/MacroForge-v3.1.5.zip",
-  "notes": "v3.1.5: Refines the compact 760x1050 UI with a centered, more readable status pill, top-right update/menu controls, clearer recorder/inspector panels, a larger pinned playback panel, and regression coverage for the target layout."
+  "version": "3.1.6",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.6/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.6/MacroForge-v3.1.6.zip",
+  "notes": "v3.1.6: Feature upgrade - macro editor mode, group/loop/condition block rows, image confidence preview dialog, macro health pre-flight report, crash recovery snapshots, undo/redo safety improvements, .macroforge import/export envelope, screen-size metadata and coordinate scaling helper."
 }

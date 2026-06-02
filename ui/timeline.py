@@ -75,7 +75,25 @@ def _action_text(action):
         return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
 
     if kind == "image":
-        return label or "Image", "Template.png"
+        conf = float(getattr(action, "similarity", 0.95) or 0.95) * 100
+        timeout = float(getattr(action, "wait_timeout", 0.0) or 0.0)
+        detail = f"Template.png · confidence ≥ {conf:.0f}%"
+        if timeout > 0:
+            detail += f" · wait {timeout:.1f}s"
+        return label or "Image", detail
+
+    if kind == "group":
+        name = getattr(action, "group_name", "") or label or "Group"
+        collapsed = "Collapsed" if bool(getattr(action, "group_collapsed", False)) else "Folder"
+        return name, collapsed
+
+    if kind == "loop":
+        count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)
+        target = int(getattr(action, "loop_target", -1) or -1)
+        detail = f"Repeat x{count}"
+        if target >= 0:
+            detail += f" · back to row {target + 1}"
+        return label or "Loop block", detail
 
     if kind == "condition":
         ctype = getattr(action, "condition_type", "none") or "none"
@@ -130,6 +148,14 @@ class TimelineDelegate(QStyledItemDelegate):
                 QPointF(x + w * 0.50, y + h * 0.18), QPointF(x + w * 0.82, y + h * 0.50),
                 QPointF(x + w * 0.50, y + h * 0.82), QPointF(x + w * 0.18, y + h * 0.50),
             ])
+        elif kind == "group":
+            painter.drawRoundedRect(QRectF(x + w * 0.18, y + h * 0.34, w * 0.64, h * 0.40), 3, 3)
+            painter.drawLine(int(x + w * 0.25), int(y + h * 0.34), int(x + w * 0.36), int(y + h * 0.25))
+            painter.drawLine(int(x + w * 0.36), int(y + h * 0.25), int(x + w * 0.54), int(y + h * 0.25))
+        elif kind == "loop":
+            painter.drawArc(int(x + w * 0.22), int(y + h * 0.24), int(w * 0.56), int(h * 0.52), 35 * 16, 285 * 16)
+            painter.drawLine(int(x + w * 0.70), int(y + h * 0.30), int(x + w * 0.82), int(y + h * 0.30))
+            painter.drawLine(int(x + w * 0.82), int(y + h * 0.30), int(x + w * 0.77), int(y + h * 0.42))
         else:
             painter.drawRoundedRect(QRectF(x + w * 0.18, y + h * 0.28, w * 0.64, h * 0.44), 3, 3)
             for px in (0.30, 0.46, 0.62):
@@ -154,12 +180,17 @@ class TimelineDelegate(QStyledItemDelegate):
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
+            enabled = bool(getattr(action, "enabled", True))
+            if not enabled:
+                type_color = _mix(type_color, COLORS["text_dark"], 0.62)
 
             narrow = option.rect.width() < 700
             # Compact timeline treatment: tighter outer padding keeps more rows
             # visible at once without changing the overall layout structure.
             outer = option.rect.adjusted(8, 2, -8, -2) if narrow else option.rect.adjusted(14, 3, -20, -3)
             bg = COLORS["bg_card"]
+            if not enabled:
+                bg = _mix(bg, COLORS["bg"], 0.72)
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
             if selected and hovered:
@@ -181,6 +212,10 @@ class TimelineDelegate(QStyledItemDelegate):
                 border = _mix(COLORS["border_light"], type_color, 0.55)
             if playing:
                 border = type_color
+
+            if kind == "group" and not playing:
+                bg = _mix(COLORS["bg_card"], type_color, 0.14)
+                border = _mix(COLORS["border_light"], type_color, 0.45)
 
             # Active rows use a richer action-colour gradient: strong left block,
             # soft centre glow, and dark right fade. This keeps the action colour
@@ -308,12 +343,13 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
-            text_x = icon_rect.right() + 14
+            depth = max(0, int(getattr(action, "block_depth", 0) or 0))
+            text_x = icon_rect.right() + 14 + min(depth, 4) * 12
             text_right = max(text_x + 72, status_x - 14)
             text_w = max(72, text_right - text_x)
             title_rect = QRectF(text_x, outer.center().y() - 13, text_w, 17)
             detail_rect = QRectF(text_x, outer.center().y() + 3, text_w, 14)
-            title_color = "#000000" if playing else COLORS["text"]
+            title_color = "#000000" if playing else (COLORS["text_dark"] if not enabled else COLORS["text"])
             painter.setPen(QColor(title_color))
             painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
             fm = painter.fontMetrics()
@@ -338,8 +374,30 @@ class TimelineDelegate(QStyledItemDelegate):
                     painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                     painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, match_state)
 
+                # Confidence threshold preview for image actions. This is static
+                # metadata, while the match-state badge above reflects runtime.
+                conf = int(round(float(getattr(action, "similarity", 0.95) or 0.95) * 100))
+                conf_rect = QRectF(max(text_x, text_right - (48 if compact else 58)), outer.center().y() + 7, 48 if compact else 58, 14)
+                self._rounded_rect(painter, conf_rect, 4, COLORS["bg"], type_color, 1)
+                painter.setPen(QColor(type_color))
+                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
+                painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
+
+            if not enabled:
+                disabled_rect = QRectF(text_x, outer.center().y() + 7, 54 if compact else 64, 14)
+                self._rounded_rect(painter, disabled_rect, 4, COLORS["bg"], COLORS["text_dark"], 1)
+                painter.setPen(QColor(COLORS["text_dark"]))
+                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
+                painter.drawText(disabled_rect, Qt.AlignmentFlag.AlignCenter, "DISABLED")
+
             # Status chip. Its width is fixed and never collapses into a dot.
-            if playing:
+            if not enabled:
+                status, status_col = "Disabled", COLORS["text_dark"]
+            elif kind == "group":
+                status, status_col = "Folder", type_color
+            elif kind == "loop":
+                status, status_col = "Loop", type_color
+            elif playing:
                 status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", type_color)
             elif progress >= 0.999:
                 status, status_col = "Completed", type_color

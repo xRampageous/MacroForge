@@ -68,8 +68,11 @@ def build_main_layout(window):
     self._add_btn("Click", self._open_click_dialog, C["click"], sb_lo, "click")
     self._add_btn("Delay", self._open_pause_dialog, C["pause"], sb_lo, "delay")
     self._add_btn("Image", self._open_image_dialog, C["image"], sb_lo, "image")
+    self._add_btn("Condition", self._open_condition_dialog, C["condition"], sb_lo, "condition")
+    self._add_btn("Loop", self._open_loop_dialog, C.get("loop", C["success"]), sb_lo, "loop")
+    self._add_btn("Group", self._open_group_dialog, C.get("group", C["neon_purple"]), sb_lo, "folder")
 
-    sb_lo.addSpacing(14)
+    sb_lo.addSpacing(10)
 
     # ── Recorder ──
     rec_lbl = QLabel("RECORDER  ˅")
@@ -192,7 +195,6 @@ def build_main_layout(window):
         row.setSpacing(5)
         row.setContentsMargins(0, 0, 0, 0)
     for idx, (name, slot, tip, clr) in enumerate([("check", self._apply_inspector, "Apply", C["success"]),
-                      ("play", self.test_selected_action, "Test selected action", C["success"]),
                       ("cross", self._cancel_inspector, "Cancel", C["error"]),
                       ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
                       ("duplicate", self._duplicate_inspector, "Duplicate", C["accent"]),
@@ -507,6 +509,32 @@ def build_main_layout(window):
     header_stack.addWidget(self.macro_summary)
     tl_hl.addLayout(header_stack)
     tl_hl.addStretch()
+
+    self.editor_mode_btn = QPushButton("Editor")
+    self.editor_mode_btn.setObjectName("editor_mode_btn")
+    self.editor_mode_btn.setIcon(icon("edit", 15, C["accent"]))
+    self.editor_mode_btn.setToolTip("Open macro editor mode")
+    self.editor_mode_btn.setFixedHeight(26)
+    self.editor_mode_btn.setStyleSheet(
+        f"QPushButton#editor_mode_btn {{ background-color: {C['bg_card']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 800; }}"
+        f"QPushButton#editor_mode_btn:hover {{ border-color: {C['accent']}; color: {C['accent']}; background-color: {C['bg_tertiary']}; }}"
+    )
+    self.editor_mode_btn.clicked.connect(self.open_macro_editor)
+    tl_hl.addWidget(self.editor_mode_btn)
+
+    self.preflight_btn = QPushButton("Health")
+    self.preflight_btn.setObjectName("preflight_btn")
+    self.preflight_btn.setIcon(icon("check", 15, C["success"]))
+    self.preflight_btn.setToolTip("Run macro health / pre-flight checker")
+    self.preflight_btn.setFixedHeight(26)
+    self.preflight_btn.setStyleSheet(
+        f"QPushButton#preflight_btn {{ background-color: {C['bg_card']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 800; }}"
+        f"QPushButton#preflight_btn:hover {{ border-color: {C['success']}; color: {C['success']}; background-color: {C['bg_tertiary']}; }}"
+    )
+    self.preflight_btn.clicked.connect(self.open_preflight_report)
+    tl_hl.addWidget(self.preflight_btn)
 
     self.compact_view_btn = QPushButton()
     self.compact_view_btn.setObjectName("view_toggle")

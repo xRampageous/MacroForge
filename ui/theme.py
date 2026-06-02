@@ -52,6 +52,8 @@ COLORS = {
     "image": "#FFD000",
     "pause": "#B9B9B9",
     "condition": "#D932FF",
+    "group": "#8B5CF6",
+    "loop": "#00E5A8",
     "pause_cyan": "#00C8FF",
 
     # ── Playback ──
@@ -73,6 +75,8 @@ TYPE_COLORS = {
     "image": COLORS["image"],
     "click": COLORS["click"],
     "condition": COLORS["condition"],
+    "group": COLORS["group"],
+    "loop": COLORS["loop"],
 }
 
 TYPE_GLOW = {
@@ -81,6 +85,8 @@ TYPE_GLOW = {
     "image": "#FFD000",
     "click": "#FF2330",
     "condition": "#D932FF",
+    "group": "#8B5CF6",
+    "loop": "#00E5A8",
 }
 
 

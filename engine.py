@@ -73,6 +73,7 @@ class ExecutionEngine:
         self.input = PlatformInput()    # Fast Windows SendInput backend
         self.ai_matcher = None          # Lazy-load AIImageMatcher when first image search uses it
         self._img_template_cache = {}   # action_b64_key -> [PIL.Image, ...]
+        self._loop_counters = {}        # runtime loop-block counters keyed by row index
         self.loops = 1
 
     def start(self):
@@ -356,6 +357,7 @@ class ExecutionEngine:
         self.loops_completed_count = 0
         _completed_naturally = False
         self._img_template_cache.clear()
+        self._loop_counters.clear()
  
         self.status("Running...")
  
@@ -379,6 +381,44 @@ class ExecutionEngine:
                         break
 
                     action = self.actions[i]
+
+                    # Editor-only/non-runtime rows stay visible in the timeline but
+                    # do not deploy input. Disabled rows are skipped the same way.
+                    if not bool(getattr(action, "enabled", True)):
+                        self.status(f"Skipped disabled row {i + 1}")
+                        loop_actions_executed += 1
+                        if self.total_actions > 0:
+                            self.progress_cb((loop_actions_executed / self.total_actions) * 100)
+                        i += 1
+                        continue
+
+                    if getattr(action, "action_type", "key") == "group":
+                        self.status(getattr(action, "group_name", "") or getattr(action, "label", "Group"))
+                        loop_actions_executed += 1
+                        if self.total_actions > 0:
+                            self.progress_cb((loop_actions_executed / self.total_actions) * 100)
+                        i += 1
+                        continue
+
+                    if getattr(action, "action_type", "key") == "loop":
+                        target = int(getattr(action, "loop_target", -1) or -1)
+                        count = max(1, int(getattr(action, "loop_count", getattr(action, "repeat_count", 1)) or 1))
+                        if 0 <= target < i and count > 1:
+                            remaining = self._loop_counters.get(i, count - 1)
+                            if remaining > 0:
+                                self._loop_counters[i] = remaining - 1
+                                self.status(f"Loop row {i + 1}: jumping to row {target + 1} ({remaining} left)")
+                                i = target
+                                continue
+                            self._loop_counters.pop(i, None)
+                        else:
+                            self.status(f"Loop row {i + 1}: no valid earlier target")
+                        loop_actions_executed += 1
+                        if self.total_actions > 0:
+                            self.progress_cb((loop_actions_executed / self.total_actions) * 100)
+                        i += 1
+                        continue
+
                     actual_action = self.apply_randomization(action)
 
                     self.current_action_index = i

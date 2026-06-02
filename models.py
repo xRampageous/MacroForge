@@ -53,9 +53,28 @@ class Action:
     condition_var_value: str = ""     # expected variable value
     condition_jump_true: int = -1     # jump index if condition is true (-1 = fall through)
     condition_jump_false: int = -1    # jump index if condition is false (-1 = fall through)
+    # Editor / premium timeline fields
+    enabled: bool = True              # disabled actions remain in the timeline but are skipped at runtime
+    group_name: str = ""             # folder/group header display name
+    group_collapsed: bool = False     # reserved for future collapsed rendering
+    loop_count: int = 2               # loop block repeat count
+    loop_target: int = -1             # row index to jump back to when this loop block runs
+    block_depth: int = 0              # visual indent level for groups/blocks
+    screen_width: int = 0             # source screen width when coordinate action was recorded/created
+    screen_height: int = 0            # source screen height when coordinate action was recorded/created
+    anchor_mode: str = "absolute"    # "absolute" | "scaled" reserved for screen adaptation
 
     def is_condition(self):
         return self.action_type == "condition"
+
+    def is_group(self) -> bool:
+        return self.action_type == "group"
+
+    def is_loop(self) -> bool:
+        return self.action_type == "loop"
+
+    def is_runnable(self) -> bool:
+        return bool(self.enabled) and not (self.is_group() or self.is_loop())
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -100,6 +119,15 @@ class Action:
             d.get("condition_var_value", ""),
             d.get("condition_jump_true", -1),
             d.get("condition_jump_false", -1),
+            d.get("enabled", True),
+            d.get("group_name", ""),
+            d.get("group_collapsed", False),
+            d.get("loop_count", 2),
+            d.get("loop_target", -1),
+            d.get("block_depth", 0),
+            d.get("screen_width", 0),
+            d.get("screen_height", 0),
+            d.get("anchor_mode", "absolute"),
         )
 
     def is_pause(self) -> bool:

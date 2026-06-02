@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
         self._single_test_active = False
         self._single_test_index = -1
         self._run_from_index = 0
+        self._run_index_map = []
         self._last_preflight = {"errors": [], "warnings": []}
 
         # Recorder state
@@ -154,6 +155,7 @@ class MainWindow(QMainWindow):
 
         self._check_update_silent()
         self.load_last_session()
+        self._check_recovery_snapshot()
         self._restore_window_geometry()
         self._update_check_timer.start()
 
@@ -211,7 +213,8 @@ class MainWindow(QMainWindow):
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):
         type_map = {"key": "add_key", "click": "add_click", "delay": "add_pause",
-                    "image": "add_image", "condition": "add_condition"}
+                    "image": "add_image", "condition": "add_condition",
+                    "loop": "add_loop", "folder": "add_group"}
         obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(text)
         btn.setObjectName(obj)
@@ -250,7 +253,12 @@ class MainWindow(QMainWindow):
                 "click": self.insp_click,
                 "image": self.insp_image,
             }
-            mapping.get(action_type, self.insp_key).setVisible(True)
+            pane = mapping.get(action_type)
+            if pane is not None:
+                pane.setVisible(True)
+            else:
+                self.insp_empty.setText("Use Edit for this block")
+                self.insp_empty.setVisible(True)
 
     # ═══════════════════════════════════════════════════════
     #  KEYBOARD SHORTCUTS
@@ -268,6 +276,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+S"), self, lambda: (self._do_save_session(), self.status("Session saved")))
         QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.timeline.setFocus())
         QShortcut(QKeySequence("Ctrl+Enter"), self, self.test_from_selected_row)
+        QShortcut(QKeySequence("Ctrl+E"), self, self.open_macro_editor)
+        QShortcut(QKeySequence("Ctrl+Shift+P"), self, self.open_preflight_report)
 
     def _deselect(self):
         self.select(-1)
@@ -300,8 +310,10 @@ class MainWindow(QMainWindow):
         """)
         m.addAction("Edit", lambda: self._open_active_dialog(index))
         m.addAction("Duplicate", lambda: self.duplicate_action(index))
+        m.addAction("Enable/Disable", lambda: self.toggle_action_enabled(index))
         m.addSeparator()
-        m.addAction("Test from selected row", self.test_from_selected_row)
+        m.addAction("Run from this row", self.test_from_selected_row)
+        m.addAction("Preview image confidence", lambda: self.open_image_confidence_preview(index))
         m.addSeparator()
         sorting_locked = self.engine.running or self.timeline.playing_index >= 0
         move_up = m.addAction("Move Up", lambda: self.move_action(index, -1))
@@ -372,6 +384,7 @@ class MainWindow(QMainWindow):
             "zoom": self.timeline.zoom,
         }
         self.session_manager.save_profile(self.action_model.actions(), settings)
+        self._write_recovery_snapshot(clean_shutdown=False)
         self._save_window_geometry()
 
     def _save_window_geometry(self):
@@ -506,6 +519,12 @@ class MainWindow(QMainWindow):
             self._open_click_editor(idx)
         elif action.action_type == "pause":
             self._open_pause_editor(idx)
+        elif action.action_type == "condition":
+            self._open_condition_editor(idx)
+        elif action.action_type == "loop":
+            self._open_loop_editor(idx)
+        elif action.action_type == "group":
+            self._open_group_editor(idx)
         else:
             self._open_key_editor(idx)
 
@@ -558,6 +577,17 @@ class MainWindow(QMainWindow):
         self.update_statistics()
         self.save_session()
         self.status("Duplicated action")
+
+    def toggle_action_enabled(self, index):
+        if index < 0 or index >= self.action_model.rowCount():
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        action = self.action_model.get(index)
+        action.enabled = not bool(getattr(action, "enabled", True))
+        self.refresh()
+        self.update_statistics()
+        self.save_session()
+        self.status("Enabled action" if action.enabled else "Disabled action")
 
     def move_action(self, index, direction):
         if self.engine.running or self.timeline.playing_index >= 0:
@@ -724,6 +754,24 @@ class MainWindow(QMainWindow):
 
             kind = getattr(action, "action_type", "key") or "key"
 
+            if not bool(getattr(action, "enabled", True)):
+                warnings.append(f"{prefix}: action is disabled and will be skipped.")
+                continue
+
+            if getattr(action, "action_type", "") == "group":
+                if not (getattr(action, "group_name", "") or getattr(action, "label", "")):
+                    warnings.append(f"{prefix}: group has no name.")
+                continue
+
+            if getattr(action, "action_type", "") == "loop":
+                target = int(getattr(action, "loop_target", -1) or -1)
+                count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 1)) or 1)
+                if count < 2:
+                    errors.append(f"{prefix}: loop count must be 2 or higher.")
+                if not (0 <= target < idx - 1):
+                    errors.append(f"{prefix}: loop target must be an earlier row.")
+                continue
+
             if action.is_pause():
                 if duration <= 0:
                     warnings.append(f"{prefix}: delay duration is 0 seconds.")
@@ -738,6 +786,16 @@ class MainWindow(QMainWindow):
                     errors.append(f"{prefix}: unsupported click coordinate mode '{mode}'.")
                 if int(getattr(action, "click_rand_radius", 0) or 0) < 0:
                     errors.append(f"{prefix}: click random radius cannot be negative.")
+                sw, sh = self._current_screen_size()
+                if mode == "absolute" and sw and sh:
+                    x = int(getattr(action, "click_x", 0) or 0)
+                    y = int(getattr(action, "click_y", 0) or 0)
+                    if x < 0 or y < 0 or x >= sw or y >= sh:
+                        warnings.append(f"{prefix}: click coordinate {x},{y} is outside the current primary screen ({sw}×{sh}).")
+                    saved_w = int(getattr(action, "screen_width", 0) or 0)
+                    saved_h = int(getattr(action, "screen_height", 0) or 0)
+                    if saved_w and saved_h and (saved_w != sw or saved_h != sh):
+                        warnings.append(f"{prefix}: created on {saved_w}×{saved_h}, current screen is {sw}×{sh}; use screen adaptation if needed.")
                 continue
 
             if action.is_image():
@@ -765,6 +823,11 @@ class MainWindow(QMainWindow):
                     target = int(getattr(action, attr, -1) or -1)
                     if target >= total:
                         errors.append(f"{prefix}: {label} target {target + 1} is outside the timeline.")
+                saved_w = int(getattr(action, "screen_width", 0) or 0)
+                saved_h = int(getattr(action, "screen_height", 0) or 0)
+                sw, sh = self._current_screen_size()
+                if saved_w and saved_h and sw and sh and (saved_w != sw or saved_h != sh):
+                    warnings.append(f"{prefix}: image template was captured on {saved_w}×{saved_h}, current screen is {sw}×{sh}.")
                 continue
 
             if action.is_condition():
@@ -820,6 +883,250 @@ class MainWindow(QMainWindow):
         self.status("Pre-flight check passed" if not warnings else f"Pre-flight passed with {len(warnings)} warning(s)")
         return True
 
+
+    def _current_screen_size(self):
+        try:
+            screen = QApplication.primaryScreen()
+            geo = screen.geometry() if screen is not None else None
+            if geo is not None:
+                return int(geo.width()), int(geo.height())
+        except Exception:
+            pass
+        return 0, 0
+
+    def _stamp_action_environment(self, action):
+        """Attach source screen metadata for coordinate-sensitive actions."""
+        if action is None:
+            return action
+        try:
+            if getattr(action, "action_type", "key") in {"click", "image"}:
+                sw, sh = self._current_screen_size()
+                if sw and sh:
+                    action.screen_width = sw
+                    action.screen_height = sh
+                    if not getattr(action, "anchor_mode", ""):
+                        action.anchor_mode = "absolute"
+        except Exception:
+            pass
+        return action
+
+    def open_preflight_report(self):
+        """Show the macro health checker without asking to continue playback."""
+        self.run_preflight_check(show_success=False, allow_warning_prompt=False)
+        report = self._format_preflight_report(
+            self._last_preflight.get("errors", []),
+            self._last_preflight.get("warnings", []),
+        )
+        C = COLORS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Macro Health / Pre-flight")
+        dlg.resize(620, 460)
+        dlg.setStyleSheet(
+            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
+            f"QPlainTextEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 9px; padding: 10px; font-family: Consolas, monospace; font-size: 11px; }}"
+            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 7px 12px; font-weight: 800; }}"
+            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+        )
+        lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(14, 14, 14, 14)
+        title = QLabel("Macro Health / Pre-flight")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 950;")
+        lo.addWidget(title)
+        summary = QLabel(f"{self.action_model.rowCount()} rows · {len(self._last_preflight.get('errors', []))} errors · {len(self._last_preflight.get('warnings', []))} warnings")
+        summary.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        lo.addWidget(summary)
+        edit = QPlainTextEdit(report)
+        edit.setReadOnly(True)
+        lo.addWidget(edit, 1)
+        row = QHBoxLayout()
+        row.addStretch()
+        scale_btn = QPushButton("Scale coordinates to screen")
+        scale_btn.clicked.connect(lambda: (self.scale_actions_to_current_screen(), dlg.accept()))
+        row.addWidget(scale_btn)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.accept)
+        row.addWidget(close_btn)
+        lo.addLayout(row)
+        dlg.exec()
+
+    def open_macro_editor(self):
+        from ui.macro_editor import MacroEditorDialog
+        dlg = MacroEditorDialog(self)
+        dlg.exec()
+        self.refresh()
+
+    def open_image_confidence_preview(self, index=None):
+        idx = self.active_index if index is None else index
+        if idx is None or idx < 0 or idx >= self.action_model.rowCount():
+            self.status("Select an image action first")
+            return
+        action = self.action_model.get(idx)
+        if not action.is_image():
+            self.status("Selected row is not an image action")
+            return
+        C = COLORS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Image Confidence Preview")
+        dlg.resize(420, 460)
+        dlg.setStyleSheet(
+            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
+            f"QLabel {{ background: transparent; }}"
+            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 7px 12px; }}"
+            f"QPushButton:hover {{ border-color: {C['image']}; color: {C['image']}; }}"
+        )
+        lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(14, 14, 14, 14)
+        title = QLabel("Image Confidence Preview")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 950;")
+        lo.addWidget(title)
+        meta = QLabel(
+            f"Row {idx + 1} · threshold ≥ {float(getattr(action, 'similarity', 0.95) or 0.95) * 100:.0f}% · "
+            f"timeout {float(getattr(action, 'wait_timeout', 0.0) or 0.0):.1f}s"
+        )
+        meta.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        lo.addWidget(meta)
+        preview = QLabel("No template image stored")
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setMinimumHeight(260)
+        preview.setStyleSheet(f"background-color: {C['bg_card']}; border: 1px solid {C['border']}; border-radius: 10px; color: {C['text_dim']};")
+        try:
+            import base64
+            raw = base64.b64decode(getattr(action, "image_data", "") or "")
+            from PyQt6.QtGui import QPixmap
+            pix = QPixmap()
+            if raw and pix.loadFromData(raw):
+                preview.setPixmap(pix.scaled(360, 260, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        except Exception:
+            pass
+        lo.addWidget(preview, 1)
+        extras = len([x for x in (getattr(action, "extra_images", "") or "").split("|") if x])
+        screen = f"{getattr(action, 'screen_width', 0)}×{getattr(action, 'screen_height', 0)}" if getattr(action, 'screen_width', 0) else "not stored"
+        info = QLabel(f"Extra templates: {extras} · Capture screen: {screen}")
+        info.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        lo.addWidget(info)
+        close = QPushButton("Close")
+        close.clicked.connect(dlg.accept)
+        lo.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+        dlg.exec()
+
+    def run_selected_actions(self, rows):
+        if self.engine.running:
+            self.status("Stop playback before running selected block")
+            return
+        rows = sorted(r for r in set(rows or []) if 0 <= r < self.action_model.rowCount())
+        if not rows:
+            self.status("No selected actions to run")
+            return
+        self._single_test_active = False
+        self._single_test_index = -1
+        self._run_from_index = 0
+        self._run_index_map = rows
+        self.engine.actions = [deepcopy(self.action_model.get(r)) for r in rows]
+        # Validate the whole macro first so references are still caught.
+        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
+            self._run_index_map = []
+            return
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = time.time()
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self.timeline.clear_image_states()
+        self.start_btn.setEnabled(False)
+        self.pause_btn.setEnabled(True)
+        self.stop_btn.setEnabled(True)
+        self.status_dot.set_color(COLORS["playing"], glow=True)
+        self.status_text.setText("Running block")
+        self.engine.infinite_loop = False
+        self.engine.loops = 1
+        self.engine.simulation_mode = self.sim_check.isChecked()
+        self.engine.human_curve = self.human_check.isChecked()
+        self.engine.focus_lock = self.focus_check.isChecked()
+        try:
+            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
+        except ValueError:
+            self.engine.speed = 1.0
+        self._diag(f"[PLAY] Running selected block: rows {', '.join(str(r + 1) for r in rows)}")
+        self.engine.start()
+
+    def scale_actions_to_current_screen(self):
+        sw, sh = self._current_screen_size()
+        if not sw or not sh:
+            self.status("Current screen size unavailable")
+            return
+        changed = 0
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        for action in self.action_model.actions():
+            old_w = int(getattr(action, "screen_width", 0) or 0)
+            old_h = int(getattr(action, "screen_height", 0) or 0)
+            if not old_w or not old_h or (old_w == sw and old_h == sh):
+                continue
+            if action.is_click() and getattr(action, "click_coord_mode", "absolute") == "absolute":
+                action.click_x = int(round(action.click_x * sw / old_w))
+                action.click_y = int(round(action.click_y * sh / old_h))
+                action.screen_width = sw
+                action.screen_height = sh
+                action.anchor_mode = "scaled"
+                changed += 1
+            elif action.is_image() and getattr(action, "search_region", ""):
+                try:
+                    x, y, w, h = [int(v.strip()) for v in action.search_region.split(",")]
+                    action.search_region = f"{round(x * sw / old_w)},{round(y * sh / old_h)},{round(w * sw / old_w)},{round(h * sh / old_h)}"
+                    action.screen_width = sw
+                    action.screen_height = sh
+                    action.anchor_mode = "scaled"
+                    changed += 1
+                except Exception:
+                    pass
+        self.refresh()
+        self.save_session()
+        self.status(f"Scaled {changed} coordinate action(s) to {sw}×{sh}")
+
+    def _recovery_path(self):
+        base = getattr(self.session_manager, "base_dir", os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(base, "recovery")
+        os.makedirs(path, exist_ok=True)
+        return os.path.join(path, "last_session.json")
+
+    def _write_recovery_snapshot(self, clean_shutdown=False):
+        try:
+            payload = self._macro_export_payload()
+            payload["clean_shutdown"] = bool(clean_shutdown)
+            payload["active_profile"] = self.session_manager.active
+            with open(self._recovery_path(), "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+        except Exception:
+            pass
+
+    def _check_recovery_snapshot(self):
+        try:
+            path = self._recovery_path()
+            if not os.path.exists(path):
+                return
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if payload.get("clean_shutdown", True):
+                return
+            actions = payload.get("actions", [])
+            if not actions:
+                return
+            reply = QMessageBox.question(
+                self,
+                "Recover unsaved macro?",
+                f"MacroForge found an autosaved recovery snapshot with {len(actions)} action(s). Restore it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
+                self.action_model.set_actions([Action.from_dict(d) for d in actions])
+                self.refresh()
+                self.save_session()
+                self.status("Recovered autosaved macro")
+            self._write_recovery_snapshot(clean_shutdown=True)
+        except Exception as e:
+            logger.debug(f"recovery check failed: {e}")
+
     # ═══════════════════════════════════════════════════════
     #  PLAYBACK
     # ═══════════════════════════════════════════════════════
@@ -837,6 +1144,7 @@ class MainWindow(QMainWindow):
         self._single_test_active = False
         self._single_test_index = -1
         self._run_from_index = 0
+        self._run_index_map = []
         # Always sync the execution engine from the visible timeline/model
         # immediately before playback. This prevents stale engine lists from
         # looping visually while not deploying the edited/current actions.
@@ -871,6 +1179,7 @@ class MainWindow(QMainWindow):
         self._single_test_active = False
         self._single_test_index = -1
         self._run_from_index = 0
+        self._run_index_map = []
         self.engine.stop()
         self.timeline.clear_playing()
         self.start_btn.setEnabled(True)
@@ -891,7 +1200,10 @@ class MainWindow(QMainWindow):
         self._play_action.emit(idx, dur)
 
     def _do_play_cb(self, idx, dur):
-        display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+        if self._run_index_map and 0 <= idx < len(self._run_index_map):
+            display_idx = self._run_index_map[idx]
+        else:
+            display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
         self.playing_index = display_idx
         self.actions_played += 1
         speed = max(self.engine.speed_multiplier, 0.01)
@@ -904,7 +1216,10 @@ class MainWindow(QMainWindow):
         self._image_match_state.emit(idx, state)
 
     def _do_image_match_state(self, idx, state):
-        display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+        if self._run_index_map and 0 <= idx < len(self._run_index_map):
+            display_idx = self._run_index_map[idx]
+        else:
+            display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
         self.timeline.set_image_state(display_idx, state)
 
     def _pause_cb(self, paused):
@@ -939,6 +1254,7 @@ class MainWindow(QMainWindow):
         self._single_test_active = False
         self._single_test_index = -1
         self._run_from_index = 0
+        self._run_index_map = []
         if self.session_start_time:
             self.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
@@ -1553,34 +1869,61 @@ class MainWindow(QMainWindow):
     #  FILE OPERATIONS
     # ═══════════════════════════════════════════════════════
 
+    def _macro_export_payload(self):
+        sw, sh = self._current_screen_size()
+        return {
+            "format": "macroforge.macro",
+            "format_version": 2,
+            "app_version": VERSION,
+            "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "screen": {"width": sw, "height": sh},
+            "profile": self.session_manager.active,
+            "actions": [a.to_dict() for a in self.action_model.actions()],
+        }
+
     def save(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Export Macro", "", "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Macro", "", "MacroForge Macro (*.macroforge);;JSON (*.json)")
         if path:
             try:
-                with open(path, "w") as f:
-                    json.dump([a.to_dict() for a in self.action_model.actions()], f, indent=2)
+                if path.lower().endswith(".json"):
+                    payload = [a.to_dict() for a in self.action_model.actions()]
+                else:
+                    if not path.lower().endswith(".macroforge"):
+                        path += ".macroforge"
+                    payload = self._macro_export_payload()
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, indent=2)
                 self.status(f"Exported {self.action_model.rowCount()} actions")
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
 
     def load(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import Macro", "", "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Import Macro", "", "MacroForge Macro (*.macroforge);;JSON (*.json)")
         if path:
             try:
-                with open(path, "r") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.history.push(self.action_model.actions())
+                actions_data = data.get("actions", []) if isinstance(data, dict) else data
+                if not isinstance(actions_data, list):
+                    raise ValueError("Unsupported macro file format")
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
                 self.action_model.clear()
-                for action_data in data:
+                for action_data in actions_data:
                     self.action_model.add_action(Action.from_dict(action_data))
                 self.active_index = -1
                 self.timeline.refresh()
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
-                self.status(f"Imported {len(data)} actions")
+                self.status(f"Imported {len(actions_data)} actions")
             except Exception as e:
                 QMessageBox.critical(self, "Import Error", str(e))
+
+    def export_macroforge(self):
+        self.save()
+
+    def import_macroforge(self):
+        self.load()
 
     def export_csv(self):
         if not self.action_model.rowCount():
@@ -1853,7 +2196,11 @@ class MainWindow(QMainWindow):
         logger.info(msg)
 
     def _invalidate_seq_dur(self):
-        self._seq_dur_cache = sum(a.duration for a in self.engine.actions)
+        self._seq_dur_cache = sum(
+            float(getattr(a, "duration", 0.0) or 0.0)
+            for a in self.action_model.actions()
+            if bool(getattr(a, "enabled", True)) and not (a.is_group() or a.is_loop() or a.is_condition())
+        )
         self._update_macro_summary()
 
     def _update_macro_summary(self):
@@ -1861,10 +2208,19 @@ class MainWindow(QMainWindow):
             return
         actions = self.action_model.actions()
         image_checks = sum(1 for action in actions if action.is_image())
-        duration = sum(float(getattr(action, "duration", 0.0) or 0.0) for action in actions)
+        groups = sum(1 for action in actions if action.is_group())
+        loops = sum(1 for action in actions if action.is_loop())
+        disabled = sum(1 for action in actions if not bool(getattr(action, "enabled", True)))
+        duration = sum(
+            float(getattr(action, "duration", 0.0) or 0.0)
+            for action in actions
+            if bool(getattr(action, "enabled", True)) and not (action.is_group() or action.is_loop() or action.is_condition())
+        )
         duration_text = f"{duration:.0f}s" if abs(duration - round(duration)) < 0.1 else f"{duration:.1f}s"
-        check_label = "image check" if image_checks == 1 else "image checks"
-        self.macro_summary.setText(f"{len(actions)} actions · {image_checks} {check_label} · ~{duration_text}")
+        parts = [f"{len(actions)} rows", f"{image_checks} image", f"{groups} groups", f"{loops} loops", f"~{duration_text}"]
+        if disabled:
+            parts.insert(-1, f"{disabled} disabled")
+        self.macro_summary.setText(" · ".join(parts))
 
     def _set_playback_collapsed(self, collapsed):
         collapsed = bool(collapsed)
@@ -1966,6 +2322,7 @@ class MainWindow(QMainWindow):
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 act = dlg.get_action()
                 if act:
+                    self._stamp_action_environment(act)
                     self.history.push(self.action_model.actions())
                     self.action_model.add_action(act)
                     self.active_index = len(self.action_model.actions()) - 1
@@ -1983,6 +2340,7 @@ class MainWindow(QMainWindow):
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 act = dlg.get_action()
                 if act:
+                    self._stamp_action_environment(act)
                     self.history.push(self.action_model.actions())
                     self.action_model.add_action(act)
                     self.active_index = len(self.action_model.actions()) - 1
@@ -2000,6 +2358,7 @@ class MainWindow(QMainWindow):
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 act = dlg.get_action()
                 if act:
+                    self._stamp_action_environment(act)
                     self.history.push(self.action_model.actions())
                     self.action_model.add_action(act)
                     self.active_index = len(self.action_model.actions()) - 1
@@ -2024,6 +2383,7 @@ class MainWindow(QMainWindow):
                 act = dlg.get_action()
                 logger.info(f"_open_image_dialog: get_action done act={act is not None}")
                 if act is not None:
+                    self._stamp_action_environment(act)
                     logger.info("_open_image_dialog: pushing history")
                     self.history.push(self.action_model.actions())
                     logger.info("_open_image_dialog: adding action to model")
@@ -2046,6 +2406,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
+                self._stamp_action_environment(act)
                 self.history.push(self.action_model.actions())
                 self.action_model.replace_action(index, act)
                 self.refresh()
@@ -2058,6 +2419,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
+                self._stamp_action_environment(act)
                 self.history.push(self.action_model.actions())
                 self.action_model.replace_action(index, act)
                 self.refresh()
@@ -2070,6 +2432,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
+                self._stamp_action_environment(act)
                 self.history.push(self.action_model.actions())
                 self.action_model.replace_action(index, act)
                 self.refresh()
@@ -2082,15 +2445,107 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
             if act:
+                self._stamp_action_environment(act)
                 self.history.push(self.action_model.actions())
                 self.action_model.replace_action(index, act)
                 self.refresh()
                 self.save_session()
                 self.status("Image action updated")
 
+
+    def _open_condition_dialog(self):
+        try:
+            from ui.dialogs.condition_dialog import ConditionDialog
+            dlg = ConditionDialog(self, row_count=self.action_model.rowCount())
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.action_model.actions(), self._timeline_history_state())
+                    self.action_model.add_action(act)
+                    self.active_index = len(self.action_model.actions()) - 1
+                    self.timeline.ensure_visible(self.active_index)
+                    self.refresh()
+                    self.save_session()
+                    self.status("Added condition block")
+        except Exception:
+            logger.exception("_open_condition_dialog crashed")
+
+    def _open_loop_dialog(self):
+        try:
+            from ui.dialogs.loop_dialog import LoopDialog
+            current = self.active_index if self.active_index >= 0 else self.action_model.rowCount()
+            dlg = LoopDialog(self, row_count=max(1, self.action_model.rowCount() + 1), current_index=current)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.action_model.actions(), self._timeline_history_state())
+                    self.action_model.add_action(act)
+                    self.active_index = len(self.action_model.actions()) - 1
+                    self.timeline.ensure_visible(self.active_index)
+                    self.refresh()
+                    self.save_session()
+                    self.status("Added loop block")
+        except Exception:
+            logger.exception("_open_loop_dialog crashed")
+
+    def _open_group_dialog(self):
+        try:
+            from ui.dialogs.group_dialog import GroupDialog
+            dlg = GroupDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                act = dlg.get_action()
+                if act:
+                    self.history.push(self.action_model.actions(), self._timeline_history_state())
+                    insert_at = self.active_index if 0 <= self.active_index < self.action_model.rowCount() else self.action_model.rowCount()
+                    self.action_model.insert_action(insert_at, act)
+                    self.active_index = insert_at
+                    self.timeline.ensure_visible(self.active_index)
+                    self.refresh()
+                    self.save_session()
+                    self.status("Added action group")
+        except Exception:
+            logger.exception("_open_group_dialog crashed")
+
+    def _open_condition_editor(self, index):
+        from ui.dialogs.condition_dialog import ConditionDialog
+        dlg = ConditionDialog(self, existing=deepcopy(self.action_model.get(index)), row_count=self.action_model.rowCount())
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
+                self.action_model.replace_action(index, act)
+                self.refresh()
+                self.save_session()
+                self.status("Condition block updated")
+
+    def _open_loop_editor(self, index):
+        from ui.dialogs.loop_dialog import LoopDialog
+        dlg = LoopDialog(self, existing=deepcopy(self.action_model.get(index)), row_count=self.action_model.rowCount(), current_index=index)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
+                self.action_model.replace_action(index, act)
+                self.refresh()
+                self.save_session()
+                self.status("Loop block updated")
+
+    def _open_group_editor(self, index):
+        from ui.dialogs.group_dialog import GroupDialog
+        dlg = GroupDialog(self, existing=deepcopy(self.action_model.get(index)))
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            act = dlg.get_action()
+            if act:
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
+                self.action_model.replace_action(index, act)
+                self.refresh()
+                self.save_session()
+                self.status("Action group updated")
+
     def _real_exit(self):
         try:
             self._do_save_session()
+            self._write_recovery_snapshot(clean_shutdown=True)
         except Exception:
             pass
         # try:
@@ -2115,6 +2570,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._do_save_session()
+        self._write_recovery_snapshot(clean_shutdown=True)
         # try:
         #     stop_hotkeys()
         # except Exception:
@@ -2125,7 +2581,7 @@ class MainWindow(QMainWindow):
         if not self.history.can_undo():
             self.status("Nothing to undo")
             return
-        result = self.history.undo(self.engine.actions, self._timeline_history_state())
+        result = self.history.undo(self.action_model.actions(), self._timeline_history_state())
         if result is None:
             return
         actions, timeline_state = result
@@ -2144,7 +2600,7 @@ class MainWindow(QMainWindow):
         if not self.history.can_redo():
             self.status("Nothing to redo")
             return
-        result = self.history.redo(self.engine.actions, self._timeline_history_state())
+        result = self.history.redo(self.action_model.actions(), self._timeline_history_state())
         if result is None:
             return
         actions, timeline_state = result
