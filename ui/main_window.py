@@ -611,12 +611,12 @@ class MainWindow(QMainWindow):
         main_lo.addWidget(content, stretch=1)
 
     def _make_playback_panel(self):
-        """Ultra-compact bottom-docked panel sized like the design preview."""
+        """Bottom-docked compact panel that fits the 760px-wide layout cleanly."""
         C = COLORS
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(84)
+        panel.setFixedHeight(94)
 
         lo = QVBoxLayout(panel)
         lo.setContentsMargins(8, 0, 8, 6)
@@ -628,9 +628,10 @@ class MainWindow(QMainWindow):
             f"QFrame#mf2_playback_dock {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
+        dock.setMinimumHeight(82)
         dlo = QHBoxLayout(dock)
-        dlo.setContentsMargins(8, 6, 8, 6)
-        dlo.setSpacing(8)
+        dlo.setContentsMargins(7, 6, 7, 6)
+        dlo.setSpacing(6)
 
         def section_title(txt):
             lbl = QLabel(txt)
@@ -640,18 +641,10 @@ class MainWindow(QMainWindow):
             )
             return lbl
 
-        def small_label(txt):
-            w = QLabel(txt)
-            w.setStyleSheet(f"color: {C['text_dim']}; font-size: 8px; font-weight: 700; background: transparent;")
-            return w
-
-        def field_box(label_text, widget):
-            box = QVBoxLayout()
-            box.setContentsMargins(0, 0, 0, 0)
-            box.setSpacing(2)
-            box.addWidget(small_label(label_text))
-            box.addWidget(widget)
-            return box
+        def mini_label(txt):
+            lbl = QLabel(txt)
+            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 7px; font-weight: 800; background: transparent;")
+            return lbl
 
         def vline():
             line = QFrame()
@@ -659,8 +652,9 @@ class MainWindow(QMainWindow):
             line.setStyleSheet(f"background-color: {C['border']};")
             return line
 
-        # 1) Playback buttons
+        # ── 1. Playback buttons ────────────────────────────
         play_section = QFrame()
+        play_section.setFixedWidth(140)
         play_section.setStyleSheet("background: transparent; border: none;")
         play_lo = QVBoxLayout(play_section)
         play_lo.setContentsMargins(0, 0, 0, 0)
@@ -673,27 +667,27 @@ class MainWindow(QMainWindow):
 
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("play_btn")
-        self.start_btn.setIcon(icon("play", 14, C["text"]))
-        self.start_btn.setIconSize(QSize(14, 14))
+        self.start_btn.setIcon(icon("play", 13, C["text"]))
+        self.start_btn.setIconSize(QSize(13, 13))
         self.start_btn.setToolTip("Start playback (F9)")
-        self.start_btn.setFixedSize(68, 34)
+        self.start_btn.setFixedSize(56, 34)
         self.start_btn.setStyleSheet(
             f"QPushButton#play_btn {{ background-color: #063c1f; color: {C['text']}; "
-            f"border: 1px solid {C['success']}; border-radius: 7px; font-size: 11px; font-weight: 900; padding: 0 8px; }}"
+            f"border: 1px solid {C['success']}; border-radius: 7px; font-size: 10px; font-weight: 900; padding: 0 6px; }}"
             f"QPushButton#play_btn:hover {{ background-color: #07562b; border-color: {C['success']}; }}"
         )
         self.start_btn.clicked.connect(self.start)
         play_row.addWidget(self.start_btn)
 
-        self.pause_btn = QPushButton("Pause")
+        self.pause_btn = QPushButton()
         self.pause_btn.setObjectName("pause_btn")
-        self.pause_btn.setIcon(icon("pause", 13, C["pause_cyan"]))
-        self.pause_btn.setIconSize(QSize(13, 13))
+        self.pause_btn.setIcon(icon("pause", 14, C["pause_cyan"]))
+        self.pause_btn.setIconSize(QSize(14, 14))
         self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-        self.pause_btn.setFixedSize(56, 34)
+        self.pause_btn.setFixedSize(36, 34)
         self.pause_btn.setStyleSheet(
             f"QPushButton#pause_btn {{ background-color: {C['bg_tertiary']}; color: {C['pause_cyan']}; "
-            f"border: 1px solid {C['border_light']}; border-radius: 7px; font-size: 10px; font-weight: 800; padding: 0 6px; }}"
+            f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
             f"QPushButton#pause_btn:hover {{ border-color: {C['pause_cyan']}; }}"
             f"QPushButton#pause_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
         )
@@ -701,90 +695,103 @@ class MainWindow(QMainWindow):
         self.pause_btn.clicked.connect(self.engine.toggle_pause)
         play_row.addWidget(self.pause_btn)
 
-        self.stop_btn = QPushButton("Stop")
+        self.stop_btn = QPushButton()
         self.stop_btn.setObjectName("stop_btn")
         self.stop_btn.setIcon(icon("stop", 13, C["error"]))
         self.stop_btn.setIconSize(QSize(13, 13))
         self.stop_btn.setToolTip("Stop playback")
-        self.stop_btn.setFixedSize(52, 34)
+        self.stop_btn.setFixedSize(34, 34)
         self.stop_btn.setStyleSheet(
             f"QPushButton#stop_btn {{ background-color: {C['bg_tertiary']}; color: {C['error']}; "
-            f"border: 1px solid {C['border_light']}; border-radius: 7px; font-size: 10px; font-weight: 800; padding: 0 6px; }}"
+            f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
             f"QPushButton#stop_btn:hover {{ border-color: {C['error']}; }}"
             f"QPushButton#stop_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
         )
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop)
         play_row.addWidget(self.stop_btn)
+
         play_lo.addLayout(play_row)
-        dlo.addWidget(play_section, 0)
+        play_lo.addStretch()
+        dlo.addWidget(play_section)
         dlo.addWidget(vline())
 
-        # 2) Playback options
+        # ── 2. Playback options ────────────────────────────
         options_section = QFrame()
+        options_section.setFixedWidth(170)
         options_section.setStyleSheet("background: transparent; border: none;")
         opt_lo = QVBoxLayout(options_section)
         opt_lo.setContentsMargins(0, 0, 0, 0)
-        opt_lo.setSpacing(4)
+        opt_lo.setSpacing(3)
         opt_lo.addWidget(section_title("PLAYBACK OPTIONS"))
 
-        controls_row = QHBoxLayout()
-        controls_row.setContentsMargins(0, 0, 0, 0)
-        controls_row.setSpacing(6)
+        opt_grid = QGridLayout()
+        opt_grid.setContentsMargins(0, 0, 0, 0)
+        opt_grid.setHorizontalSpacing(5)
+        opt_grid.setVerticalSpacing(2)
 
         self.speed_combo = QComboBox()
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
         self.speed_combo.setCurrentIndex(3)
         self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        self.speed_combo.setFixedSize(54, 24)
-        controls_row.addLayout(field_box("Speed", self.speed_combo))
+        self.speed_combo.setFixedSize(52, 23)
 
-        loop_pair = QFrame(); loop_pair.setStyleSheet("background: transparent; border: none;")
+        loop_pair = QFrame()
+        loop_pair.setStyleSheet("background: transparent; border: none;")
         loop_pair_lo = QHBoxLayout(loop_pair)
         loop_pair_lo.setContentsMargins(0, 0, 0, 0)
         loop_pair_lo.setSpacing(2)
         self.loops_spin = QSpinBox()
         self.loops_spin.setRange(1, 9999)
         self.loops_spin.setValue(1)
-        self.loops_spin.setFixedSize(32, 24)
+        self.loops_spin.setFixedSize(30, 23)
         loop_pair_lo.addWidget(self.loops_spin)
         self.inf_check = QCheckBox("∞")
         self.inf_check.setObjectName("pill_check")
         self.inf_check.setToolTip("Infinite loop")
-        self.inf_check.setFixedSize(24, 24)
+        self.inf_check.setFixedSize(22, 23)
         loop_pair_lo.addWidget(self.inf_check)
-        controls_row.addLayout(field_box("Loops", loop_pair))
-
-        mode_pair = QFrame(); mode_pair.setStyleSheet("background: transparent; border: none;")
-        mode_lo = QHBoxLayout(mode_pair)
-        mode_lo.setContentsMargins(0, 0, 0, 0)
-        mode_lo.setSpacing(2)
-        self.sim_check = QCheckBox("Sim")
-        self.sim_check.setObjectName("pill_check")
-        self.sim_check.setToolTip("Simulation mode")
-        self.sim_check.setFixedSize(38, 24)
-        mode_lo.addWidget(self.sim_check)
-        self.human_check = QCheckBox("Hum")
-        self.human_check.setObjectName("pill_check")
-        self.human_check.setToolTip("Humanized movement curve")
-        self.human_check.setFixedSize(40, 24)
-        self.human_check.setChecked(True)
-        mode_lo.addWidget(self.human_check)
-        controls_row.addLayout(field_box("Mode", mode_pair))
 
         self.focus_check = QCheckBox("Lock")
         self.focus_check.setObjectName("pill_check")
         self.focus_check.setToolTip("Keep playback targeted to the captured window")
-        self.focus_check.setFixedSize(44, 24)
-        controls_row.addLayout(field_box("Focus", self.focus_check))
+        self.focus_check.setFixedSize(46, 23)
 
-        opt_lo.addLayout(controls_row)
-        dlo.addWidget(options_section, 0)
+        mode_pair = QFrame()
+        mode_pair.setStyleSheet("background: transparent; border: none;")
+        mode_lo = QHBoxLayout(mode_pair)
+        mode_lo.setContentsMargins(0, 0, 0, 0)
+        mode_lo.setSpacing(3)
+        self.sim_check = QCheckBox("Sim")
+        self.sim_check.setObjectName("pill_check")
+        self.sim_check.setToolTip("Simulation mode")
+        self.sim_check.setFixedSize(38, 23)
+        mode_lo.addWidget(self.sim_check)
+        self.human_check = QCheckBox("Hum")
+        self.human_check.setObjectName("pill_check")
+        self.human_check.setToolTip("Humanized movement curve")
+        self.human_check.setFixedSize(40, 23)
+        self.human_check.setChecked(True)
+        mode_lo.addWidget(self.human_check)
+
+        opt_grid.addWidget(mini_label("Speed"), 0, 0)
+        opt_grid.addWidget(mini_label("Loops"), 0, 1)
+        opt_grid.addWidget(mini_label("Focus"), 0, 2)
+        opt_grid.addWidget(self.speed_combo, 1, 0)
+        opt_grid.addWidget(loop_pair, 1, 1)
+        opt_grid.addWidget(self.focus_check, 1, 2)
+        opt_grid.addWidget(mini_label("Mode"), 2, 0)
+        opt_grid.addWidget(mode_pair, 2, 1, 1, 2)
+
+        opt_lo.addLayout(opt_grid)
+        opt_lo.addStretch()
+        dlo.addWidget(options_section)
         dlo.addWidget(vline())
 
-        # 3) Progress + stats
+        # ── 3. Progress + stats ────────────────────────────
         progress_section = QFrame()
         progress_section.setStyleSheet("background: transparent; border: none;")
+        progress_section.setMinimumWidth(210)
         ps_lo = QVBoxLayout(progress_section)
         ps_lo.setContentsMargins(0, 0, 0, 0)
         ps_lo.setSpacing(5)
@@ -795,12 +802,14 @@ class MainWindow(QMainWindow):
             f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
         )
+        progress_wrap.setFixedHeight(30)
         pw_lo = QHBoxLayout(progress_wrap)
-        pw_lo.setContentsMargins(8, 5, 8, 5)
+        pw_lo.setContentsMargins(7, 4, 7, 4)
         pw_lo.setSpacing(6)
 
         pw_icon = QLabel()
-        pw_icon.setPixmap(icon("play", 14, C["accent"]).pixmap(18, 18))
+        pw_icon.setFixedSize(14, 14)
+        pw_icon.setPixmap(icon("play", 14, C["accent"]).pixmap(14, 14))
         pw_lo.addWidget(pw_icon)
 
         pw_label = QLabel("PROGRESS")
@@ -825,7 +834,7 @@ class MainWindow(QMainWindow):
 
         stats_row = QHBoxLayout()
         stats_row.setContentsMargins(0, 0, 0, 0)
-        stats_row.setSpacing(6)
+        stats_row.setSpacing(5)
         self._stat_actions_w, self._stat_actions = self._make_stat_chip("bolt", "Played", "0", C["success"], "Actions played this run")
         self._stat_loops_w,   self._stat_loops   = self._make_stat_chip("loop", "Loops", "0", C["neon_purple"], "Completed loops")
         self._stat_seq_w,     self._stat_seq     = self._make_stat_chip("delay", "Seq", "44.0s", C["neon_gold"], "Estimated sequence duration")
@@ -834,14 +843,15 @@ class MainWindow(QMainWindow):
         stats_row.addWidget(self._stat_loops_w)
         stats_row.addWidget(self._stat_seq_w)
         stats_row.addWidget(self._stat_time_w)
+        stats_row.addStretch()
         ps_lo.addLayout(stats_row)
 
-        dlo.addWidget(progress_section, 1)
-        lo.addWidget(dock, 1)
+        dlo.addWidget(progress_section, stretch=1)
+        lo.addWidget(dock, stretch=1)
         return panel
 
     def _make_stat_chip(self, icon_name, title, value, color, tooltip):
-        """Sharper compact stat chip: clean icon + value only."""
+        """Compact stat chip: crisp icon + value only."""
         C = COLORS
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
@@ -851,25 +861,23 @@ class MainWindow(QMainWindow):
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
             f"QFrame#mf2_stat_chip:hover {{ border-color: {color}; }}"
         )
-        chip.setFixedWidth({"Played": 44, "Loops": 44, "Seq": 58, "Time": 70}.get(title, 46))
-        chip.setFixedHeight(28)
+        chip.setFixedWidth({"Played": 42, "Loops": 42, "Seq": 54, "Time": 68}.get(title, 44))
+        chip.setFixedHeight(27)
 
         lo = QHBoxLayout(chip)
-        lo.setContentsMargins(6, 3, 6, 3)
-        lo.setSpacing(5)
+        lo.setContentsMargins(5, 3, 5, 3)
+        lo.setSpacing(4)
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(16, 16)
-        ico.setPixmap(icon(icon_name, 18, color).pixmap(18, 18))
+        ico.setFixedSize(15, 15)
+        ico.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 11px; font-weight: 900; background: transparent;"
-        )
-        lo.addWidget(value_lbl, 1)
+        value_lbl.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 900; background: transparent;")
+        lo.addWidget(value_lbl, stretch=1)
         return chip, value_lbl
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):

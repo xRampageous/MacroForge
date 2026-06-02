@@ -6,10 +6,15 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush, QFont, QIcon
 
 
 def _make_pixmap(size, draw_fn):
-    scale = 2
+    """Render icons safely at high resolution, then downsample.
+
+    This keeps small icons sharp without using devicePixelRatio tricks that can
+    make QIcon/QPixmap render clipped or offset on some Windows/Qt setups.
+    """
+    scale = 3
     pm = QPixmap(size * scale, size * scale)
     pm.fill(Qt.GlobalColor.transparent)
-    pm.setDevicePixelRatio(scale)
+
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
@@ -17,12 +22,18 @@ def _make_pixmap(size, draw_fn):
     p.scale(scale, scale)
     draw_fn(p, size)
     p.end()
-    return pm
+
+    return pm.scaled(
+        size,
+        size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
 
 
 def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
     c = QColor(color)
-    pen_w = max(1.8, size * 0.12)
+    pen_w = 1.8 if size <= 18 else max(1.8, size * 0.10)
     pen = QPen(c, pen_w, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     brush = QBrush(c)
 

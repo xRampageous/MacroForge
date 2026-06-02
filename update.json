@@ -1,6 +1,6 @@
 {
-  "version": "3.0.10",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.10/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.10/MacroForge-v3.0.10.zip",
-  "notes": "v3.0.10: Compact playback panel and crisp stat icons - reworked bottom panel to tighter compact size, reduced panel height and spacing, slimmed playback buttons, improved stat icon sharpness with HiDPI pixmaps and smoother vector drawing."
+  "version": "3.0.11",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.11/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.11/MacroForge-v3.0.11.zip",
+  "notes": "v3.0.11: Compact panel rescale and icon fix - rescaled bottom panel to fit 760px-wide layout, fixed section widths for Playback and Playback Options, icon-only Pause/Stop buttons, compact grid for Playback Options, and fixed icon renderer to avoid clipped/off-center icons."
 }
