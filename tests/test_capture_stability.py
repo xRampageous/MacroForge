@@ -232,6 +232,26 @@ class TestOwnedTimers(QtTestCase):
             window._update_check_timer.stop()
             window.deleteLater()
 
+    def test_app_diagnostics_lines_include_release_context(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_manager = SimpleNamespace(base_dir=tmpdir)
+            with (
+                patch.object(MainWindow, "_check_update_silent"),
+                patch.object(MainWindow, "load_last_session"),
+                patch.object(MainWindow, "_restore_window_geometry"),
+                patch.object(MainWindow, "_setup_tray"),
+            ):
+                window = MainWindow(profile_manager=profile_manager)
+
+            text = "\n".join(window._app_diagnostics_lines())
+            self.assertIn("Version:", text)
+            self.assertIn("Update URL:", text)
+            self.assertIn("Log path:", text)
+            self.assertIn("Update health file:", text)
+            window._save_session_timer.stop()
+            window._update_check_timer.stop()
+            window.deleteLater()
+
     def test_main_window_owns_debounce_and_repeating_update_timers(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             profile_manager = SimpleNamespace(base_dir=tmpdir)

@@ -21,12 +21,14 @@ def main():
         pass
 
     from version import VERSION
+    import update_health
     app = QApplication(sys.argv)
     app.setApplicationName("MacroForge")
     app.setApplicationVersion(VERSION)
     app.setStyle("Fusion")
 
     logger.info("MacroForge PyQt6 starting")
+    update_health.mark_startup(VERSION)
     window = MainWindow()
     window.show()
 

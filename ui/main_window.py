@@ -8,7 +8,6 @@ import queue
 import ctypes
 import threading
 from copy import deepcopy
-from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -16,18 +15,18 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
     QProgressBar, QFrame, QMenu,
     QSpinBox, QDoubleSpinBox,
-    QFileDialog, QMessageBox, QInputDialog,
+    QFileDialog, QMessageBox,
     QDialog, QPlainTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QColor, QPen, QAction, QKeySequence, QShortcut, QIcon
+from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon
 
 from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager, ActionListModel, HistoryManager
 from updater import check_update, perform_update, get_last_update_error
-from version import VERSION, UPDATE_URL
+from version import VERSION
 # from hotkeys import start_hotkeys, stop_hotkeys  # DISABLED — pynput causes Qt dialog crashes
-from debugger import logger, DebugViewer, get_log_path
+from debugger import logger, DebugViewer
 from ui.theme import build_stylesheet, COLORS
 from ui.status_dot import StatusDot
 from ui.timeline import TimelineView
@@ -399,61 +398,24 @@ class MainWindow(QMainWindow):
             self.profile_btn.setText(f"{self.session_manager.active}  \u25be")
 
     def _show_profile_menu(self):
-        C = COLORS
-        m = QMenu(self)
-        m.setStyleSheet(
-            f"QMenu {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }} "
-            f"QMenu::item {{ padding: 6px 18px; border-radius: 6px; }} "
-            f"QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }} "
-            f"QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}"
-        )
-        active = self.session_manager.active
-        for name in self.session_manager.list_profiles():
-            label = f"\u2713  {name}" if name == active else f"     {name}"
-            act = m.addAction(label)
-            act.triggered.connect(lambda checked, n=name: self._switch_profile(n))
-        m.addSeparator()
-        m.addAction(icon("plus", 14, C["accent"]), "New profile\u2026", self._new_profile_dialog)
-        m.addAction(icon("edit", 14, C["accent"]), "Rename\u2026", self._rename_profile_dialog)
-        m.addAction(icon("trash", 14, C["error"]), "Delete", self._delete_profile_confirm)
-        m.exec(self.profile_btn.mapToGlobal(self.profile_btn.rect().bottomLeft()))
+        from ui.main_window_menus import show_profile_menu
+        show_profile_menu(self)
 
     def _switch_profile(self, name):
-        self._do_save_session()
-        self.session_manager.switch_profile(name)
-        self.load_last_session()
-        self._refresh_profile_btn()
-        self.status(f"Switched to '{name}'")
+        from ui.main_window_menus import switch_profile
+        switch_profile(self, name)
 
     def _new_profile_dialog(self):
-        name, ok = QInputDialog.getText(self, "New Profile", "Profile name:")
-        if ok and name.strip():
-            name = name.strip()
-            self.session_manager.save_profile([], {}, name)
-            self._switch_profile(name)
+        from ui.main_window_menus import new_profile_dialog
+        new_profile_dialog(self)
 
     def _rename_profile_dialog(self):
-        old = self.session_manager.active
-        name, ok = QInputDialog.getText(self, "Rename Profile", "New name:", text=old)
-        if ok and name.strip() and name != old:
-            self.session_manager.rename_profile(old, name.strip())
-            self._switch_profile(name.strip())
+        from ui.main_window_menus import rename_profile_dialog
+        rename_profile_dialog(self)
 
     def _delete_profile_confirm(self):
-        name = self.session_manager.active
-        reply = QMessageBox.question(self, "Delete Profile",
-            f"Delete profile '{name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            self.session_manager.delete_profile(name)
-            profiles = self.session_manager.list_profiles()
-            if profiles:
-                self._switch_profile(profiles[0])
-            else:
-                self.session_manager.active = "Default"
-                self.action_model.clear()
-                self.refresh()
+        from ui.main_window_menus import delete_profile_confirm
+        delete_profile_confirm(self)
 
     # ═══════════════════════════════════════════════════════
     #  SELECTION & EDITING
@@ -1102,50 +1064,25 @@ class MainWindow(QMainWindow):
         dlg.finished.connect(lambda _=0: setattr(self, "_diag_edit", None))
         dlg.show()
 
+    def _app_diagnostics_lines(self):
+        from ui.diagnostics_panel import app_diagnostics_lines
+        return app_diagnostics_lines(self)
+
+    def _export_support_bundle(self, edit=None):
+        from ui.diagnostics_panel import export_support_bundle
+        export_support_bundle(self, edit)
+
+    def _clear_update_health(self, edit):
+        from ui.diagnostics_panel import clear_update_health
+        clear_update_health(self, edit)
+
+    def _validate_updater_now(self, edit):
+        from ui.diagnostics_panel import validate_updater_now
+        validate_updater_now(self, edit)
+
     def open_app_diagnostics(self):
-        C = COLORS
-        last_update_error = get_last_update_error() or "None"
-        preflight = self._last_preflight or {"errors": [], "warnings": []}
-        lines = [
-            f"Version: {VERSION}",
-            f"Update URL: {UPDATE_URL or 'Not configured'}",
-            f"Profile: {getattr(self.session_manager, 'active', 'unknown')}",
-            f"Profile directory: {getattr(self.session_manager, 'profiles_dir', 'unknown')}",
-            f"Settings file: {getattr(self.session_manager, 'settings_file', 'unknown')}",
-            f"Log path: {get_log_path()}",
-            f"Last update error: {last_update_error}",
-            f"Preflight errors: {len(preflight.get('errors', []))}",
-            f"Preflight warnings: {len(preflight.get('warnings', []))}",
-        ]
-        dlg = QDialog(self)
-        dlg.setWindowTitle("MacroForge Diagnostics")
-        dlg.resize(560, 320)
-        dlg.setStyleSheet(
-            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
-            f"QPlainTextEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 8px; "
-            "font-family: Consolas, monospace; font-size: 11px; }}"
-            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 7px 12px; }}"
-            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
-        )
-        lo = QVBoxLayout(dlg)
-        lo.setContentsMargins(12, 12, 12, 12)
-        title = QLabel("MacroForge Diagnostics")
-        title.setStyleSheet(f"color: {C['text']}; font-size: 15px; font-weight: 800;")
-        lo.addWidget(title)
-        edit = QPlainTextEdit()
-        edit.setReadOnly(True)
-        edit.setPlainText("\n".join(lines))
-        lo.addWidget(edit, stretch=1)
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dlg.close)
-        btns = QHBoxLayout()
-        btns.addStretch()
-        btns.addWidget(close_btn)
-        lo.addLayout(btns)
-        self._app_diag_dialog = dlg
-        dlg.show()
+        from ui.diagnostics_panel import show_app_diagnostics
+        show_app_diagnostics(self)
 
     def test_selected_action(self):
         if self.engine.running:
@@ -1609,46 +1546,8 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _show_action_menu(self):
-        m = QMenu(self)
-        C = COLORS
-        m.setStyleSheet(f"""
-            QMenu {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }}
-            QMenu::item {{ padding: 6px 18px; border-radius: 6px; }}
-            QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}
-            QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}
-        """)
-        active = self.session_manager.active
-        profiles_menu = QMenu("Profiles", self)
-        profiles_menu.setStyleSheet(m.styleSheet())
-        for name in self.session_manager.list_profiles():
-            a = QAction(f"  {'>' if name == active else ' '}  {name}", self)
-            a.triggered.connect(lambda checked, n=name: self._switch_profile(n))
-            profiles_menu.addAction(a)
-        profiles_menu.addSeparator()
-        profiles_menu.addAction("New profile…", self._new_profile_dialog)
-        profiles_menu.addAction("Rename…", self._rename_profile_dialog)
-        profiles_menu.addAction("Delete", self._delete_profile_confirm)
-        m.addMenu(profiles_menu)
-        m.addSeparator()
-        m.addAction("Save     Ctrl+S", lambda: (self._do_save_session(), self.status(f"Profile '{self.session_manager.active}' saved")))
-        m.addAction("Export JSON…", self.save)
-        m.addAction("Import JSON…", self.load)
-        m.addAction("Export CSV…", self.export_csv)
-        m.addAction("Import CSV…", self.import_csv)
-        m.addSeparator()
-        m.addAction("Run pre-flight check…", lambda: self.run_preflight_check(show_success=True, allow_warning_prompt=False))
-        m.addAction("Test selected action", self.test_selected_action)
-        m.addAction("Test from selected row     Ctrl+Enter", self.test_from_selected_row)
-        m.addAction("Playback diagnostics…", self.open_playback_diagnostics)
-        m.addAction("App diagnostics…", self.open_app_diagnostics)
-        m.addSeparator()
-        m.addAction("Reset statistics", self.reset_stats)
-        m.addAction("Clear all actions", self.clear_all)
-        m.addSeparator()
-        m.addAction("Settings", self.open_settings_dialog)
-        m.addAction("Debug log", self.open_debug_viewer)
-        m.addAction("Check for Updates", self._check_update_manual)
-        m.exec(self.sender().mapToGlobal(self.sender().rect().bottomLeft()))
+        from ui.main_window_menus import show_action_menu
+        show_action_menu(self)
 
     # ═══════════════════════════════════════════════════════
     #  FILE OPERATIONS

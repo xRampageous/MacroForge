@@ -5,7 +5,11 @@ import json
 import os
 import re
 import sys
+import hashlib
+import socket
+import subprocess
 import zipfile
+from datetime import datetime, timezone
 
 
 def get_version() -> str:
@@ -37,6 +41,7 @@ def write_update_json(version: str) -> None:
 
 
 ARCHIVE_SUFFIXES = (".zip", ".7z", ".rar")
+ARTIFACT_MANIFEST = "artifact_manifest.json"
 
 
 def release_notes_from_git(version: str) -> str:
@@ -75,6 +80,53 @@ def clean_release_zips(dist_dir: str = "dist", keep: str | None = None) -> list[
     return removed
 
 
+def git_commit() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def write_artifact_manifest(version: str, src_dir: str, zip_name: str) -> str:
+    """Write build metadata into the app folder before ZIP creation."""
+    manifest = {
+        "version": version,
+        "commit": git_commit(),
+        "build_time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "build_host": socket.gethostname(),
+        "zip_name": os.path.basename(zip_name),
+        "zip_sha256": None,
+        "zip_sha256_note": "See the adjacent .sha256 sidecar. Embedding a final ZIP digest inside the ZIP would change the digest.",
+    }
+    path = os.path.join(src_dir, ARTIFACT_MANIFEST)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+        f.write("\n")
+    return path
+
+
+def sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_zip_digest(zip_name: str) -> str:
+    digest = sha256_file(zip_name)
+    sidecar = f"{zip_name}.sha256"
+    with open(sidecar, "w", encoding="utf-8") as f:
+        f.write(f"{digest}  {os.path.basename(zip_name)}\n")
+    return digest
+
+
 def create_update_zip(version: str, clean_release: bool = True) -> None:
     """Create ZIP of dist/MacroForge for full _internal + exe replacement."""
     src_dir = "dist/MacroForge"
@@ -84,6 +136,7 @@ def create_update_zip(version: str, clean_release: bool = True) -> None:
         return
     if clean_release:
         clean_release_zips(os.path.dirname(zip_name), keep=zip_name)
+    write_artifact_manifest(version, src_dir, zip_name)
     count = 0
     with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, _dirs, files in os.walk(src_dir):
@@ -95,7 +148,9 @@ def create_update_zip(version: str, clean_release: bool = True) -> None:
                 arcname = os.path.relpath(fpath, src_dir)
                 zf.write(fpath, arcname)
                 count += 1
+    digest = write_zip_digest(zip_name)
     print(f"  {zip_name}  ({count} files)")
+    print(f"  {zip_name}.sha256  ({digest})")
 
 
 if __name__ == "__main__":

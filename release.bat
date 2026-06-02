@@ -130,7 +130,22 @@ if %errorlevel% neq 0 (
     echo [ERROR] Asset upload failed.
     pause & exit /b 1
 )
+if exist "dist\MacroForge-v!VER!.zip.sha256" (
+    gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge-v!VER!.zip.sha256" >nul 2>&1
+    if %errorlevel% neq 0 (
+        del /f /q _release_notes.txt >nul 2>&1
+        echo [ERROR] Digest upload failed.
+        pause & exit /b 1
+    )
+)
 del /f /q _release_notes.txt >nul 2>&1
+
+echo        Verifying published release...
+python post_release_verify.py !VER!
+if %errorlevel% neq 0 (
+    echo [ERROR] Post-release verification failed.
+    pause & exit /b 1
+)
 
 echo        Release v!VER! published.
 

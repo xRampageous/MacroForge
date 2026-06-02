@@ -35,10 +35,15 @@ jobs:
           models.py
           updater.py
           build_helper.py
+          post_release_verify.py
           release_notes.py
           release_preflight.py
+          support_bundle.py
+          update_health.py
+          ui/diagnostics_panel.py
           ui/main_window.py
           ui/status_dot.py
+          ui/main_window_menus.py
           ui/timeline.py
 
       - name: Report release ZIP artifacts

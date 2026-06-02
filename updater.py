@@ -18,6 +18,7 @@ from pathlib import Path
 
 from version import VERSION, VERSION_TUPLE, UPDATE_URL
 from debugger import logger
+import update_health
 
 MANIFEST_TIMEOUT = 3  # seconds
 DOWNLOAD_TIMEOUT = 120  # seconds (ZIPs are larger)
@@ -48,6 +49,43 @@ def validate_manifest(manifest: dict, require_notes: bool = True) -> list[str]:
     if require_notes and not str(manifest.get("notes", "")).strip():
         errors.append("manifest notes must not be empty")
     return errors
+
+
+def updater_dry_run(manifest: dict) -> dict:
+    """Validate updater readiness without downloading or modifying update files."""
+    errors = validate_manifest(manifest, require_notes=False)
+    download_url = ""
+    if isinstance(manifest, dict):
+        zip_url = str(manifest.get("zip_url", "")).strip()
+        exe_url = str(manifest.get("url", "")).strip()
+        download_url = zip_url or exe_url
+        if download_url and not download_url.lower().startswith(("https://", "http://")):
+            errors.append("download URL must be http(s)")
+    try:
+        work = _work_dir()
+        work.mkdir(parents=True, exist_ok=True)
+        test_file = work / ".write_test"
+        test_file.write_text("test", encoding="utf-8")
+        test_file.unlink()
+    except Exception as exc:
+        errors.append(f"install directory is not writable: {exc}")
+    result = {
+        "ready": not errors,
+        "errors": errors,
+        "download_url": download_url,
+        "work_dir": str(_work_dir()),
+        "current_version": VERSION,
+        "target_version": manifest.get("version") if isinstance(manifest, dict) else None,
+    }
+    update_health.record(
+        "dry_run_ready" if result["ready"] else "dry_run_failed",
+        status="ready" if result["ready"] else "failed",
+        current_version=VERSION,
+        remote_version=result["target_version"],
+        download_url=download_url,
+        errors=errors,
+    )
+    return result
 
 
 def _safe_extract_zip(zf: zipfile.ZipFile, extract_dir: Path) -> None:
@@ -91,6 +129,7 @@ def check_update(silent: bool = True) -> dict | None:
     logger.info(f"check_update: UPDATE_URL={UPDATE_URL!r}, VERSION={VERSION!r}, TUPLE={VERSION_TUPLE}")
     if not UPDATE_URL.strip():
         logger.warning("check_update: UPDATE_URL is empty — skipping")
+        update_health.record("check_skipped", status="skipped", current_version=VERSION, error="UPDATE_URL is empty")
         return None
 
     try:
@@ -107,9 +146,11 @@ def check_update(silent: bool = True) -> dict | None:
         )
         with urllib.request.urlopen(req, timeout=MANIFEST_TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+        update_health.record("check_success", status="fetched", current_version=VERSION, update_url=UPDATE_URL)
     except Exception as e:
         _last_error = str(e)
         logger.error(f"check_update: request failed: {e}")
+        update_health.record("check_failed", status="failed", current_version=VERSION, update_url=UPDATE_URL, error=str(e))
         if not silent:
             # Raise so the UI can display the error
             raise
@@ -119,11 +160,20 @@ def check_update(silent: bool = True) -> dict | None:
     if errors:
         _last_error = "; ".join(errors)
         logger.error(f"check_update: invalid manifest: {_last_error}")
+        update_health.record("manifest_invalid", status="invalid", current_version=VERSION, errors=errors)
         if not silent:
             raise ValueError(_last_error)
         return None
 
     remote_ver = data.get("version", "").strip()
+    update_health.record(
+        "manifest_valid",
+        status="valid",
+        current_version=VERSION,
+        remote_version=remote_ver,
+        zip_url=data.get("zip_url", ""),
+        url=data.get("url", ""),
+    )
     logger.info(f"check_update: remote_ver={remote_ver!r}")
     if not remote_ver:
         logger.info("check_update: remote version empty")
@@ -141,8 +191,10 @@ def check_update(silent: bool = True) -> dict | None:
     logger.info(f"check_update: compare {VERSION_TUPLE} vs {remote_tuple}")
     if remote_tuple > VERSION_TUPLE:
         logger.info(f"Update available: {VERSION} -> {remote_ver}")
+        update_health.record("check_update_available", status="available", current_version=VERSION, remote_version=remote_ver)
         return data
     logger.info(f"check_update: no update ({VERSION} >= {remote_ver})")
+    update_health.record("check_no_update", status="current", current_version=VERSION, remote_version=remote_ver)
     return None
 
 
@@ -263,6 +315,12 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     errors = validate_manifest(manifest, require_notes=False)
     if errors:
         logger.error("Invalid update manifest: " + "; ".join(errors))
+        update_health.record("manifest_invalid", status="invalid", current_version=VERSION, errors=errors)
+        return False
+
+    dry_run = updater_dry_run(manifest)
+    if not dry_run["ready"]:
+        logger.error("Updater dry-run failed: " + "; ".join(dry_run["errors"]))
         return False
 
     zip_url = manifest.get("zip_url", "").strip()
@@ -270,6 +328,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     download_url = zip_url or exe_url
     if not download_url:
         logger.error("Update manifest missing 'zip_url' or 'url'")
+        update_health.record("manifest_invalid", status="invalid", current_version=VERSION, error="missing download URL")
         return False
 
     current = _exe_path()
@@ -288,6 +347,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
         test_file.unlink()
     except Exception as e:
         logger.error(f"Cannot write to work directory: {e}")
+        update_health.record("handoff_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), error=f"Cannot write to work directory: {e}")
         return False
 
     # Clean up any leftover temp from previous failed attempts
@@ -323,8 +383,18 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
                     if progress_cb:
                         progress_cb(downloaded, total or 0)
         logger.info(f"Saved to {zip_file}")
+        update_health.record(
+            "download_success",
+            status="success",
+            from_version=VERSION,
+            to_version=manifest.get("version"),
+            download_url=download_url,
+            bytes_downloaded=downloaded,
+            total_bytes=total or 0,
+        )
     except Exception as e:
         logger.error(f"Download failed: {e}")
+        update_health.record("download_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), download_url=download_url, error=str(e))
         return False
 
     # Extract ZIP
@@ -333,8 +403,10 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
         with zipfile.ZipFile(zip_file, "r") as zf:
             _safe_extract_zip(zf, extract_dir)
         logger.info("ZIP extracted successfully")
+        update_health.record("extract_success", status="success", from_version=VERSION, to_version=manifest.get("version"), extract_dir=str(extract_dir))
     except Exception as e:
         logger.error(f"ZIP extraction failed: {e}")
+        update_health.record("extract_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), error=str(e))
         return False
 
     # Verify extracted exe exists (handle both flat and subfolder layouts)
@@ -344,6 +416,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
         extracted_exe = extract_dir / "MacroForge" / "MacroForge.exe"
         if not extracted_exe.exists():
             logger.error(f"Extracted MacroForge.exe not found in {extract_dir}")
+            update_health.record("extract_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), error="Extracted MacroForge.exe not found")
             return False
         # Flatten: move contents of subfolder up to extract_dir root
         subdir = extract_dir / "MacroForge"
@@ -362,6 +435,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     bat = _write_batch_updater(work, current, extract_dir, zip_file)
     if not bat.exists():
         logger.error(f"Updater batch not found: {bat}")
+        update_health.record("handoff_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), error=f"Updater batch not found: {bat}")
         return False
     logger.info(f"Updater batch written: {bat}")
 
@@ -372,7 +446,9 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         logger.info("Updater launched — exiting for replacement.")
+        update_health.record("handoff_started", status="started", from_version=VERSION, to_version=manifest.get("version"), batch=str(bat), zip_file=str(zip_file))
         return True
     except Exception as e:
         logger.error(f"Failed to launch updater: {e}")
+        update_health.record("handoff_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), error=str(e))
         return False

@@ -30,6 +30,7 @@ debug.log
 macroforge_session.json
 settings.json
 profiles/
+MacroForge/
 
 # IDE
 .vscode/

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from pathlib import Path
 
 
 ARCHIVE_SUFFIXES = (".zip", ".7z", ".rar")
+ZIP_SIZE_WARNING_BYTES = 120 * 1024 * 1024
 
 
 def read_version(root: Path) -> str:
@@ -59,11 +61,27 @@ def validate_release(root: Path, require_clean: bool = True) -> tuple[list[str],
     if not zip_path.exists():
         errors.append(f"release ZIP missing: {zip_path}")
     else:
+        zip_size = zip_path.stat().st_size
+        if zip_size > ZIP_SIZE_WARNING_BYTES:
+            warnings.append(
+                f"release ZIP is large: {zip_size / (1024 * 1024):.1f} MB "
+                f"(warning threshold {ZIP_SIZE_WARNING_BYTES / (1024 * 1024):.0f} MB)"
+            )
+        digest_path = Path(f"{zip_path}.sha256")
+        if not digest_path.exists():
+            errors.append(f"release ZIP digest sidecar missing: {digest_path}")
+        else:
+            actual = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+            recorded = digest_path.read_text(encoding="utf-8").split()[0]
+            if recorded != actual:
+                errors.append("release ZIP digest sidecar does not match ZIP contents")
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 names = zf.namelist()
                 if "MacroForge.exe" not in names:
                     errors.append("release ZIP does not contain MacroForge.exe at the root")
+                if "artifact_manifest.json" not in names:
+                    errors.append("release ZIP does not contain artifact_manifest.json")
                 if "_internal/" not in {name if name.endswith("/") else os.path.dirname(name) + "/" for name in names}:
                     warnings.append("release ZIP does not appear to contain an _internal folder")
                 nested = [name for name in names if name.lower().endswith(ARCHIVE_SUFFIXES)]
