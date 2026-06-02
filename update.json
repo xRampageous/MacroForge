@@ -1,5 +1,5 @@
 {
-  "version": "3.0.2",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.2/MacroForge-v3.0.2.zip",
-  "notes": "v3.0.2: Compact shell UI release. Fused the sidebar sections into a tighter dark rail, combined the profile and timeline controls into one rounded header dock, merged playback controls, run settings, sequence progress, and statistics into one bottom-pinned compact panel, added dark action-colored gradients for sidebar and playback controls, and preserved the image capture stability fixes."
+  "version": "3.0.3",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.3/MacroForge-v3.0.3.zip",
+  "notes": "Release v3.0.3"
 }
