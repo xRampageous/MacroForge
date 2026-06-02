@@ -1,6 +1,6 @@
 {
-  "version": "3.0.14",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.14/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.14/MacroForge-v3.0.14.zip",
-  "notes": "v3.0.14: Dialog redesign + right anchored bottom panel stats - redesigned shared action dialog styling to match dark compact UI, updated Key, Click, Delay, Image, and Settings dialogs, improved global QMessageBox/QInputDialog/QFileDialog styling, restyled debug log viewer, anchored bottom progress/stats section to right side, widened stat chips for clearer values."
+  "version": "3.0.15",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.15/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.15/MacroForge-v3.0.15.zip",
+  "notes": "v3.0.15: Theme dialog stylesheet brace fix - fixed NameError: name 'background' is not defined in ui/theme.py, escapes CSS braces correctly inside build_stylesheet's f-string, keeps dialog/message box dark styling from previous patch."
 }
