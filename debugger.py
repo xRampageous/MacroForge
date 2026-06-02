@@ -7,6 +7,7 @@ import os
 import sys
 import time
 from datetime import datetime
+import traceback
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QCheckBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
@@ -56,17 +57,27 @@ class DebugLogger:
 
     # ── public API ──────────────────────────────────────────
 
-    def debug(self, msg: str):
-        self._log("DEBUG", msg)
+    def debug(self, msg: str, *args):
+        self._log("DEBUG", msg, *args)
 
-    def info(self, msg: str):
-        self._log("INFO", msg)
+    def info(self, msg: str, *args):
+        self._log("INFO", msg, *args)
 
-    def warn(self, msg: str):
-        self._log("WARN", msg)
+    def warning(self, msg: str, *args):
+        self._log("WARN", msg, *args)
 
-    def error(self, msg: str):
-        self._log("ERROR", msg)
+    def warn(self, msg: str, *args):
+        self.warning(msg, *args)
+
+    def error(self, msg: str, *args):
+        self._log("ERROR", msg, *args)
+
+    def exception(self, msg: str, *args):
+        trace = traceback.format_exc().strip()
+        details = self._format_message(msg, *args)
+        if trace and trace != "NoneType: None":
+            details = f"{details}\n{trace}"
+        self._log("ERROR", details)
 
     def get_entries(self):
         """Return list of (ts, level, msg) tuples."""
@@ -84,7 +95,17 @@ class DebugLogger:
 
     # ── internals ───────────────────────────────────────────
 
-    def _log(self, level: str, msg: str):
+    @staticmethod
+    def _format_message(msg, *args):
+        if not args:
+            return str(msg)
+        try:
+            return str(msg) % args
+        except Exception:
+            return " ".join([str(msg), *(repr(arg) for arg in args)])
+
+    def _log(self, level: str, msg: str, *args):
+        msg = self._format_message(msg, *args)
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         line = f"[{ts}] {level:5s} | {msg}"
         self._entries.append((ts, level, msg))

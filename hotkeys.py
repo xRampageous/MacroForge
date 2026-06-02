@@ -9,8 +9,8 @@ try:
     from pynput import keyboard
     _PYNPUT = True
 except Exception as e:
-    logger.warning(f"pynput not available: {e}")
     _PYNPUT = False
+    _PYNPUT_ERR = e
 
 _listener = None
 _callbacks = {}
@@ -40,6 +40,7 @@ def start_hotkeys(mapping: dict):
     stop_hotkeys()
     _callbacks = {k.lower(): v for k, v in mapping.items()}
     if not _PYNPUT:
+        logger.warning(f"pynput not available: {_PYNPUT_ERR}")
         return
     _listener = keyboard.Listener(on_press=_on_press)
     _listener.start()

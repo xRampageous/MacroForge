@@ -7,14 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Config, Action, HistoryManager, ProfileManager
-
-
-class TestConfig(unittest.TestCase):
-    def test_default_colors(self):
-        c = Config()
-        self.assertIn("bg", c.colors)
-        self.assertEqual(c.colors["accent"], "#20b87e")
+from models import Action, HistoryManager, ProfileManager
 
 
 class TestAction(unittest.TestCase):

@@ -15,7 +15,7 @@ A Windows macro automation tool with a modern dark UI, system tray integration, 
 ## Tech Stack
 
 - Python 3.x
-- Tkinter (custom dark theme)
+- PyQt6 (modern dark theme)
 - PIL / OpenCV for image matching
 - pynput for global hotkeys and recording
 - pyautogui for input simulation

@@ -258,46 +258,60 @@ def build_stylesheet() -> str:
         border-color: {C['accent']};
     }}
 
-    /* ── Colorful per-action-type add buttons (filled) ── */
+    /* ── Colorful per-action-type add buttons (flat solid full-color) ── */
     QPushButton#add_key {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['key']}, stop:1 {C['key']}cc);
+        background-color: {C['key']};
         color: #ffffff; border: none;
-        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        margin-bottom: 2px;
     }}
-    QPushButton#add_key:hover {{ background: {C['key']}; }}
-    QPushButton#add_key:pressed {{ background: {C['key']}cc; }}
+    QPushButton#add_key:hover {{ background-color: {C['accent_hover']}; }}
+    QPushButton#add_key:pressed {{ background-color: {C['accent_secondary']}; }}
 
     QPushButton#add_click {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['click']}, stop:1 {C['click']}cc);
+        background-color: {C['click']};
         color: #ffffff; border: none;
-        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        margin-bottom: 2px;
     }}
-    QPushButton#add_click:hover {{ background: {C['click']}; }}
-    QPushButton#add_click:pressed {{ background: {C['click']}cc; }}
+    QPushButton#add_click:hover {{ background-color: #ff7a92; }}
+    QPushButton#add_click:pressed {{ background-color: #e0445f; }}
 
     QPushButton#add_image {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['image']}, stop:1 {C['image']}cc);
-        color: #ffffff; border: none;
-        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        background-color: {C['image']};
+        color: #0d0d14; border: none;
+        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        margin-bottom: 2px;
     }}
-    QPushButton#add_image:hover {{ background: {C['image']}; }}
-    QPushButton#add_image:pressed {{ background: {C['image']}cc; }}
+    QPushButton#add_image:hover {{ background-color: #ffe066; }}
+    QPushButton#add_image:pressed {{ background-color: #e6b030; }}
 
     QPushButton#add_pause {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['pause']}, stop:1 {C['pause']}cc);
+        background-color: {C['pause']};
         color: #ffffff; border: none;
-        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        margin-bottom: 2px;
     }}
-    QPushButton#add_pause:hover {{ background: {C['pause']}; }}
-    QPushButton#add_pause:pressed {{ background: {C['pause']}cc; }}
+    QPushButton#add_pause:hover {{ background-color: #b0bcd9; }}
+    QPushButton#add_pause:pressed {{ background-color: #7a869f; }}
 
     QPushButton#add_condition {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C['condition']}, stop:1 {C['condition']}cc);
+        background-color: {C['condition']};
         color: #ffffff; border: none;
-        border-radius: 8px; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        margin-bottom: 2px;
     }}
-    QPushButton#add_condition:hover {{ background: {C['condition']}; }}
-    QPushButton#add_condition:pressed {{ background: {C['condition']}cc; }}
+    QPushButton#add_condition:hover {{ background-color: #da9aff; }}
+    QPushButton#add_condition:pressed {{ background-color: #a855f7; }}
+
+    QPushButton#add_capture {{
+        background-color: {C['accent']};
+        color: #ffffff; border: none;
+        border-radius: 4px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700;
+        margin-bottom: 2px;
+    }}
+    QPushButton#add_capture:hover {{ background-color: {C['accent_hover']}; }}
+    QPushButton#add_capture:pressed {{ background-color: {C['accent_secondary']}; }}
 
     /* ── Circular playback control buttons ── */
     QPushButton#play_btn {{
@@ -332,58 +346,6 @@ def build_stylesheet() -> str:
         padding: 4px; min-width: 28px; min-height: 28px;
     }}
     QPushButton#icon_btn:hover {{ background-color: {C['bg_hover']}; }}
-
-    /* ── Form widgets for inspector readability ── */
-    QLineEdit {{
-        background-color: {C['bg_secondary']};
-        color: {C['text']};
-        border: 1px solid {C['border']};
-        border-radius: 6px;
-        padding: 4px 8px;
-        font-size: 12px;
-    }}
-    QLineEdit:focus {{ border-color: {C['accent']}; }}
-    QLineEdit::placeholder {{ color: {C['text_dark']}; }}
-
-    QComboBox {{
-        background-color: {C['bg_secondary']};
-        color: {C['text']};
-        border: 1px solid {C['border']};
-        border-radius: 6px;
-        padding: 4px 8px;
-        font-size: 12px;
-    }}
-    QComboBox:focus {{ border-color: {C['accent']}; }}
-    QComboBox::drop-down {{ border: none; width: 24px; }}
-    QComboBox QAbstractItemView {{
-        background-color: {C['bg_tertiary']};
-        color: {C['text']};
-        border: 1px solid {C['border']};
-        selection-background-color: {C['accent_glow']};
-        selection-color: {C['accent']};
-    }}
-
-    QCheckBox {{ color: {C['text']}; font-size: 12px; spacing: 6px; }}
-    QCheckBox::indicator {{
-        width: 14px; height: 14px;
-        border-radius: 3px;
-        border: 1px solid {C['border_light']};
-        background-color: {C['bg_secondary']};
-    }}
-    QCheckBox::indicator:checked {{
-        background-color: {C['accent']};
-        border-color: {C['accent']};
-    }}
-
-    QSpinBox {{
-        background-color: {C['bg_secondary']};
-        color: {C['text']};
-        border: 1px solid {C['border']};
-        border-radius: 6px;
-        padding: 2px 4px;
-        font-size: 12px;
-    }}
-    QSpinBox:focus {{ border-color: {C['accent']}; }}
 
     QPushButton#compact {{
         background-color: {C['bg_tertiary']};

@@ -15,7 +15,7 @@ def _make_pixmap(size, draw_fn):
     return pm
 
 
-def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QPixmap:
+def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
     c = QColor(color)
     pen = QPen(c, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     brush = QBrush(c)

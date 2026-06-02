@@ -20,9 +20,10 @@ def main():
     except Exception:
         pass
 
+    from version import VERSION
     app = QApplication(sys.argv)
     app.setApplicationName("MacroForge")
-    app.setApplicationVersion("1.2.0")
+    app.setApplicationVersion(VERSION)
     app.setStyle("Fusion")
 
     logger.info("MacroForge PyQt6 starting")
