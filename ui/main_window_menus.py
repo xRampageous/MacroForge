@@ -87,7 +87,14 @@ def show_action_menu(window):
         QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}
         QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}
     """)
+    def add_heading(text):
+        action = QAction(text.upper(), self)
+        action.setEnabled(False)
+        menu.addAction(action)
+        return action
+
     active = self.session_manager.active
+    add_heading("Profiles")
     profiles_menu = QMenu("Profiles", self)
     profiles_menu.setStyleSheet(menu.styleSheet())
     for name in self.session_manager.list_profiles():
@@ -100,21 +107,29 @@ def show_action_menu(window):
     profiles_menu.addAction("Delete", self._delete_profile_confirm)
     menu.addMenu(profiles_menu)
     menu.addSeparator()
+
+    add_heading("Macro")
     menu.addAction("Save     Ctrl+S", lambda: (self._do_save_session(), self.status(f"Profile '{self.session_manager.active}' saved")))
     menu.addAction("Export JSON\u2026", self.save)
     menu.addAction("Import JSON\u2026", self.load)
     menu.addAction("Export CSV\u2026", self.export_csv)
     menu.addAction("Import CSV\u2026", self.import_csv)
     menu.addSeparator()
+
+    add_heading("Playback")
     menu.addAction("Run pre-flight check\u2026", lambda: self.run_preflight_check(show_success=True, allow_warning_prompt=False))
     menu.addAction("Test selected action", self.test_selected_action)
     menu.addAction("Test from selected row     Ctrl+Enter", self.test_from_selected_row)
-    menu.addAction("Playback diagnostics\u2026", self.open_playback_diagnostics)
-    menu.addAction("App diagnostics\u2026", self.open_app_diagnostics)
-    menu.addSeparator()
     menu.addAction("Reset statistics", self.reset_stats)
     menu.addAction("Clear all actions", self.clear_all)
     menu.addSeparator()
+
+    add_heading("Diagnostics")
+    menu.addAction("Playback diagnostics\u2026", self.open_playback_diagnostics)
+    menu.addAction("App diagnostics\u2026", self.open_app_diagnostics)
+    menu.addSeparator()
+
+    add_heading("App")
     menu.addAction("Settings", self.open_settings_dialog)
     menu.addAction("Debug log", self.open_debug_viewer)
     menu.addAction("Check for Updates", self._check_update_manual)

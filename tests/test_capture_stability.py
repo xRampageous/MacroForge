@@ -331,11 +331,36 @@ class TestPlaybackVisibility(QtTestCase):
 
             self.assertEqual(window.macro_summary.text(), "3 actions · 1 image check · ~48s")
             window._set_playback_collapsed(True)
-            self.assertEqual(window.playback_panel.height(), 31)
+            self.assertEqual(window.playback_panel.height(), 36)
             self.assertFalse(window.playback_dock.isVisible())
             self.assertFalse(window.playback_restore_btn.isHidden())
             window._set_playback_collapsed(False)
-            self.assertEqual(window.playback_panel.height(), 106)
+            self.assertEqual(window.playback_panel.height(), 118)
+            self._dispose_window(window)
+
+    def test_compact_layout_keeps_header_and_bottom_panel_readable_at_target_size(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.resize(760, 1050)
+            window.show()
+            self.app.processEvents()
+
+            topbar_center = window.header_topbar.mapToGlobal(window.header_topbar.rect().center()).x()
+            status_center = window.status_pill.mapToGlobal(window.status_pill.rect().center()).x()
+            self.assertLessEqual(abs(topbar_center - status_center), 3)
+
+            update_x = window.update_top_btn.mapToGlobal(window.update_top_btn.rect().topLeft()).x()
+            status_right = window.status_pill.mapToGlobal(window.status_pill.rect().topRight()).x()
+            menu_x = window.menu_top_btn.mapToGlobal(window.menu_top_btn.rect().topLeft()).x()
+            self.assertGreater(update_x, status_right)
+            self.assertGreater(menu_x, update_x)
+
+            self.assertEqual(window.status_pill.width(), 270)
+            self.assertEqual(window.playback_panel.height(), 118)
+            self.assertEqual(window.start_btn.width(), 68)
+            self.assertEqual(window.speed_combo.width(), 74)
+            self.assertEqual(window._stat_time_w.width(), 98)
+            window.hide()
             self._dispose_window(window)
 
     def test_from_selected_row_uses_remaining_actions_and_maps_timeline_index(self):

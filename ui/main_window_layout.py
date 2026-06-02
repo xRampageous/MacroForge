@@ -80,13 +80,14 @@ def build_main_layout(window):
     rec_card = QFrame()
     rec_card.setObjectName("rec_card")
     rec_card.setStyleSheet(
-        f"QFrame#rec_card {{ background-color: {C['bg_card']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; }}"
+        f"QFrame#rec_card {{ "
+        f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['bg_tertiary']}, stop:1 #020A13); "
+        f"border: 1px solid {C['border_light']}; border-radius: 8px; }}"
     )
-    rec_card.setFixedHeight(120)
+    rec_card.setFixedHeight(132)
     rc_lo = QVBoxLayout(rec_card)
-    rc_lo.setContentsMargins(8, 7, 8, 7)
-    rc_lo.setSpacing(5)
+    rc_lo.setContentsMargins(10, 8, 10, 9)
+    rc_lo.setSpacing(7)
     rec_header = QWidget()
     rec_header.setFixedHeight(30)
     rrow = QHBoxLayout(rec_header)
@@ -95,14 +96,14 @@ def build_main_layout(window):
     self.rec_dot.set_color(C["playing"])
     rrow.addWidget(self.rec_dot)
     self.rec_status = QLabel("IDLE")
-    self.rec_status.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 800; letter-spacing: .6px;")
+    self.rec_status.setStyleSheet(f"color: {C['text']}; font-size: 11px; font-weight: 900; letter-spacing: .7px;")
     rrow.addWidget(self.rec_status)
     rrow.addStretch()
     self.rec_time = QLabel("00:00:00")
-    self.rec_time.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 700;")
+    self.rec_time.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 850;")
     rrow.addWidget(self.rec_time)
     self.rec_actions = QLabel("0")
-    self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 700;")
+    self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 850;")
     rrow.addWidget(self.rec_actions)
     rc_lo.addWidget(rec_header)
     rc_lo.addSpacing(2)
@@ -112,10 +113,10 @@ def build_main_layout(window):
     self.rec_btn.setObjectName("rec_round_btn")
     self.rec_btn.setIcon(icon("record", 18, C["error"]))
     self.rec_btn.setIconSize(QSize(18, 18))
-    self.rec_btn.setFixedHeight(40)
+    self.rec_btn.setFixedHeight(42)
     self.rec_btn.setStyleSheet(
         f"QPushButton#rec_round_btn {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 10px; font-size: 11px; font-weight: 600; padding: 0 12px; }}"
+        f"border: 1px solid {C['border_light']}; border-radius: 9px; font-size: 11px; font-weight: 800; padding: 0 10px; }}"
         f"QPushButton#rec_round_btn:hover {{ border-color: {C['error']}; color: {C['error']}; background-color: {C['bg_hover']}; }}"
         f"QPushButton#rec_round_btn:pressed {{ background-color: {C['bg_pressed']}; }}"
     )
@@ -125,10 +126,10 @@ def build_main_layout(window):
     self.rec_pause_btn.setObjectName("rec_pause_btn")
     self.rec_pause_btn.setIcon(icon("pause", 18, C["text"]))
     self.rec_pause_btn.setIconSize(QSize(18, 18))
-    self.rec_pause_btn.setFixedHeight(40)
+    self.rec_pause_btn.setFixedHeight(42)
     self.rec_pause_btn.setStyleSheet(
         f"QPushButton#rec_pause_btn {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 10px; font-size: 11px; font-weight: 600; padding: 0 12px; }}"
+        f"border: 1px solid {C['border_light']}; border-radius: 9px; font-size: 11px; font-weight: 800; padding: 0 10px; }}"
         f"QPushButton#rec_pause_btn:hover {{ border-color: {C['pause_cyan']}; color: {C['pause_cyan']}; background-color: {C['bg_hover']}; }}"
         f"QPushButton#rec_pause_btn:pressed {{ background-color: {C['bg_pressed']}; }}"
         f"QPushButton#rec_pause_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
@@ -162,18 +163,21 @@ def build_main_layout(window):
     sb_lo.addSpacing(6)
     insp_card = QFrame()
     insp_card.setObjectName("insp_card")
-    insp_card.setStyleSheet("QFrame#insp_card { background: transparent; border: none; }")
+    insp_card.setStyleSheet(
+        f"QFrame#insp_card {{ background-color: {C['bg_card']}; "
+        f"border: 1px solid {C['border']}; border-radius: 8px; }}"
+    )
     icard_lo = QVBoxLayout(insp_card)
-    icard_lo.setContentsMargins(0, 0, 0, 0)
-    icard_lo.setSpacing(8)
+    icard_lo.setContentsMargins(8, 8, 8, 8)
+    icard_lo.setSpacing(7)
 
     self.inspector_selector = QComboBox()
     self.inspector_selector.addItem("Select an action")
     self.inspector_selector.setEnabled(False)
-    self.inspector_selector.setFixedHeight(40)
+    self.inspector_selector.setFixedHeight(36)
     self.inspector_selector.setStyleSheet(
         f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 8px; padding: 0 12px; font-size: 11px; }}"
+            f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0 10px; font-size: 11px; }}"
         f"QComboBox:hover {{ border-color: {C['accent']}; }}"
         f"QComboBox:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
         f"QComboBox::drop-down {{ border: none; }}"
@@ -183,29 +187,32 @@ def build_main_layout(window):
     icard_lo.addSpacing(8)
 
     # Toolbar (upgraded styling)
-    ibrow = QHBoxLayout()
-    ibrow.setSpacing(6)
-    for name, slot, tip, clr in [("check", self._apply_inspector, "Apply", C["success"]),
+    toolbar_rows = [QHBoxLayout(), QHBoxLayout()]
+    for row in toolbar_rows:
+        row.setSpacing(5)
+        row.setContentsMargins(0, 0, 0, 0)
+    for idx, (name, slot, tip, clr) in enumerate([("check", self._apply_inspector, "Apply", C["success"]),
                       ("play", self.test_selected_action, "Test selected action", C["success"]),
                       ("cross", self._cancel_inspector, "Cancel", C["error"]),
                       ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
                       ("duplicate", self._duplicate_inspector, "Duplicate", C["accent"]),
-                      ("edit", self._open_active_dialog, "Edit", C["accent"])]:
+                      ("edit", self._open_active_dialog, "Edit", C["accent"])]):
         b = QPushButton()
         b.setObjectName("icon_btn")
-        b.setIcon(icon(name, 16, clr))
+        b.setIcon(icon(name, 15, clr))
         b.setToolTip(tip)
-        b.setFixedSize(32, 32)
+        b.setFixedSize(42, 28)
         b.setStyleSheet(
-            f"QPushButton {{ padding: 0; background-color: {C['bg_card']}; border: 1px solid {C['border']}; border-radius: 8px; }}"
+            f"QPushButton {{ padding: 0; background-color: {C['bg_tertiary']}; border: 1px solid {C['border']}; border-radius: 7px; }}"
             f"QPushButton:hover {{ border-color: {clr}; background-color: {C['bg_hover']}; }}"
             f"QPushButton:pressed {{ background-color: {C['bg_pressed']}; }}"
         )
         if slot:
             b.clicked.connect(slot)
-        ibrow.addWidget(b)
-    ibrow.addStretch()
-    icard_lo.addLayout(ibrow)
+        toolbar_rows[idx // 3].addWidget(b)
+    for row in toolbar_rows:
+        row.addStretch()
+        icard_lo.addLayout(row)
 
     # Empty state
     self.insp_empty = QLabel("Select an action to inspect")
@@ -346,7 +353,7 @@ def build_main_layout(window):
 
     # ── Unified header dock ──
     header_shell = QFrame()
-    header_shell.setFixedHeight(84)
+    header_shell.setFixedHeight(86)
     header_shell.setStyleSheet(f"background-color: {C['bg']}; border: none;")
     shell_lo = QVBoxLayout(header_shell)
     shell_lo.setContentsMargins(8, 6, 8, 0)
@@ -359,15 +366,23 @@ def build_main_layout(window):
         f"border: 1px solid {C['border']}; border-radius: 12px; }}"
     )
     dock_lo = QVBoxLayout(header_dock)
-    dock_lo.setContentsMargins(10, 5, 10, 4)
+    dock_lo.setContentsMargins(10, 6, 10, 5)
     dock_lo.setSpacing(2)
 
     title = QFrame()
     title.setObjectName("topbar")
     title.setStyleSheet("QFrame#topbar { background: transparent; border: none; }")
+    self.header_topbar = title
     tl = QHBoxLayout(title)
     tl.setContentsMargins(0, 0, 0, 0)
     tl.setSpacing(0)
+
+    left_cluster = QFrame()
+    left_cluster.setStyleSheet("background: transparent; border: none;")
+    left_cluster.setFixedWidth(134)
+    left_lo = QHBoxLayout(left_cluster)
+    left_lo.setContentsMargins(0, 0, 0, 0)
+    left_lo.setSpacing(8)
 
     # Profile switcher (left)
     self.profile_btn = QPushButton("Default")
@@ -382,18 +397,61 @@ def build_main_layout(window):
         f"font-size: 13px; font-weight: 500; text-align: left; }} "
         f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
     )
-    self.profile_btn.setFixedSize(108, 34)
+    self.profile_btn.setFixedSize(118, 36)
     self.profile_btn.clicked.connect(self._show_profile_menu)
-    tl.addWidget(self.profile_btn)
-    tl.addSpacing(8)
+    left_lo.addWidget(self.profile_btn)
+    left_lo.addStretch()
+    tl.addWidget(left_cluster)
+    tl.addStretch()
 
-    # Check update button (upgraded, moved to left)
+    # Status indicator - centered, wider, larger font, with icon indicators
+    status_pill = QFrame()
+    status_pill.setObjectName("status_pill")
+    status_pill.setStyleSheet(
+        f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
+        f"border: 1px solid {C['border_light']}; border-radius: 8px; }}"
+    )
+    status_pill.setFixedSize(270, 44)
+    self.status_pill = status_pill
+    sp_lo = QHBoxLayout(status_pill)
+    sp_lo.setContentsMargins(16, 0, 16, 0)
+    sp_lo.setSpacing(10)
+    self.status_dot = StatusDot()
+    self.status_dot.set_color(C["playing"])
+    self.status_dot.setFixedSize(17, 17)
+    sp_lo.addWidget(self.status_dot)
+
+    # Status icon for different states
+    self.status_icon = QLabel()
+    self.status_icon.setPixmap(icon("check", 17, C["success"]).pixmap(17, 17))
+    self.status_icon.setFixedSize(20, 20)
+    self.status_icon.setScaledContents(True)
+    self.status_icon.setVisible(False)
+    sp_lo.addWidget(self.status_icon)
+
+    self.status_text = QLabel("Ready")
+    self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 14px; font-weight: 900; background: transparent;")
+    self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+    sp_lo.addWidget(self.status_text, stretch=1)
+    tl.addWidget(status_pill)
+    tl.addStretch()
+
+    right_cluster = QFrame()
+    right_cluster.setStyleSheet("background: transparent; border: none;")
+    right_cluster.setFixedWidth(134)
+    right_lo = QHBoxLayout(right_cluster)
+    right_lo.setContentsMargins(0, 0, 0, 0)
+    right_lo.setSpacing(8)
+    right_lo.addStretch()
+
+    # Check update button (top right)
     up_btn = QPushButton()
     up_btn.setObjectName("update_top_btn")
     up_btn.setIcon(icon("update", 18, C["accent"]))
     up_btn.setIconSize(QSize(18, 18))
     up_btn.setToolTip("Check for updates")
-    up_btn.setFixedSize(40, 40)
+    up_btn.setFixedSize(42, 40)
+    self.update_top_btn = up_btn
     up_btn.setStyleSheet(
         f"QPushButton#update_top_btn {{ background-color: {C['bg_card']}; color: {C['accent']}; "
         f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
@@ -402,16 +460,16 @@ def build_main_layout(window):
         f"QPushButton#update_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
     )
     up_btn.clicked.connect(self._check_update_manual)
-    tl.addWidget(up_btn)
-    tl.addSpacing(8)
+    right_lo.addWidget(up_btn)
 
-    # Menu button (upgraded, moved to left)
+    # Menu button (top right)
     gear = QPushButton()
     gear.setObjectName("menu_top_btn")
     gear.setIcon(icon("menu", 18, C["text_dim"]))
     gear.setIconSize(QSize(18, 18))
     gear.setToolTip("Menu")
-    gear.setFixedSize(40, 40)
+    gear.setFixedSize(42, 40)
+    self.menu_top_btn = gear
     gear.setStyleSheet(
         f"QPushButton#menu_top_btn {{ background-color: {C['bg_card']}; color: {C['text_dim']}; "
         f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
@@ -420,40 +478,8 @@ def build_main_layout(window):
         f"QPushButton#menu_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
     )
     gear.clicked.connect(self._show_action_menu)
-    tl.addWidget(gear)
-
-    tl.addStretch()
-
-    # Status indicator - centered, wider, larger font, with icon indicators
-    status_pill = QFrame()
-    status_pill.setObjectName("status_pill")
-    status_pill.setStyleSheet(
-        f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 8px; }}"
-    )
-    status_pill.setFixedSize(220, 44)
-    sp_lo = QHBoxLayout(status_pill)
-    sp_lo.setContentsMargins(14, 0, 14, 0)
-    sp_lo.setSpacing(10)
-    self.status_dot = StatusDot()
-    self.status_dot.set_color(C["playing"])
-    self.status_dot.setFixedSize(16, 16)
-    sp_lo.addWidget(self.status_dot)
-
-    # Status icon for different states
-    self.status_icon = QLabel()
-    self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
-    self.status_icon.setFixedSize(20, 20)
-    self.status_icon.setScaledContents(True)
-    self.status_icon.setVisible(False)
-    sp_lo.addWidget(self.status_icon)
-
-    self.status_text = QLabel("Ready")
-    self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 12px; font-weight: 600; background: transparent;")
-    sp_lo.addWidget(self.status_text)
-    tl.addWidget(status_pill)
-
-    tl.addStretch()
+    right_lo.addWidget(gear)
+    tl.addWidget(right_cluster)
     dock_lo.addWidget(title)
 
     dock_lo.addWidget(self._hsep())

@@ -1,6 +1,6 @@
 {
-  "version": "3.1.4",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.4/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.4/MacroForge-v3.1.4.zip",
-  "notes": "v3.1.4: Adds local update health tracking, updater dry-run validation, diagnostics support bundle export with active profile data, artifact manifest/sha256 release metadata, post-release verification, and additional release/update regression tests."
+  "version": "3.1.5",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.5/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.5/MacroForge-v3.1.5.zip",
+  "notes": "v3.1.5: Refines the compact 760x1050 UI with a centered, more readable status pill, top-right update/menu controls, clearer recorder/inspector panels, a larger pinned playback panel, and regression coverage for the target layout."
 }

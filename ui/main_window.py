@@ -182,8 +182,8 @@ class MainWindow(QMainWindow):
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 48, "Loops": 48, "Seq": 72, "Time": 88}.get(title, 50))
-        chip.setFixedHeight(32)
+        chip.setFixedWidth({"Played": 58, "Loops": 58, "Seq": 82, "Time": 98}.get(title, 60))
+        chip.setFixedHeight(36)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
@@ -197,14 +197,14 @@ class MainWindow(QMainWindow):
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(16, 16)
-        ico.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
+        ico.setFixedSize(18, 18)
+        ico.setPixmap(icon(icon_name, 17, color).pixmap(17, 17))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 11px; font-weight: 950; background: transparent;"
+            f"color: {C['text']}; font-size: 12px; font-weight: 950; background: transparent;"
         )
         lo.addWidget(value_lbl)
         return chip, value_lbl
@@ -1870,7 +1870,7 @@ class MainWindow(QMainWindow):
         collapsed = bool(collapsed)
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(31 if collapsed else 106)
+        self.playback_panel.setFixedHeight(36 if collapsed else 118)
 
     @staticmethod
     def _format_hms(seconds: float) -> str:
