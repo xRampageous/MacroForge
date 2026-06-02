@@ -13,12 +13,11 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QGridLayout, QSizePolicy,
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
     QProgressBar, QFrame, QMenu,
     QSpinBox, QDoubleSpinBox,
     QFileDialog, QMessageBox, QInputDialog,
-    QDialog, QPlainTextEdit
+    QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut, QIcon
@@ -90,8 +89,6 @@ class MainWindow(QMainWindow):
     _complete = pyqtSignal()
     _progress = pyqtSignal(float)
     _status_msg = pyqtSignal(str)
-    _diag_msg = pyqtSignal(str)
-    _image_match_state = pyqtSignal(int, str)
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -123,9 +120,6 @@ class MainWindow(QMainWindow):
             self._progress_cb
         )
         self.engine.pause_cb = self._pause_cb
-        self.engine.before_action_hook = self._before_action_diag
-        self.engine.after_action_hook = self._after_action_diag
-        self.engine.image_state_cb = self._image_match_cb
         self.engine.actions = self.action_model.actions()
 
         # State
@@ -144,15 +138,6 @@ class MainWindow(QMainWindow):
         self.session_elapsed_time = 0.0
         self.session_start_time = None
         self._seq_dur_cache = 0.0
-        self._diag_lines = []
-        self._diag_max_lines = 10000
-        self._diag_prune_count = 0
-        self._diag_dialog = None
-        self._diag_edit = None
-        self._single_test_active = False
-        self._single_test_index = -1
-        self._run_from_index = 0
-        self._last_preflight = {"errors": [], "warnings": []}
 
         # Recorder state
         self._recorder = {
@@ -190,8 +175,6 @@ class MainWindow(QMainWindow):
         self._complete.connect(self._do_complete_cb)
         self._progress.connect(self._do_progress_cb)
         self._status_msg.connect(self.status)
-        self._diag_msg.connect(self._append_diagnostic)
-        self._image_match_state.connect(self._do_image_match_state)
 
         self._check_update_silent()
         self.load_last_session()
@@ -204,9 +187,7 @@ class MainWindow(QMainWindow):
 
     def _hsep(self):
         sep = QFrame()
-        sep.setFixedHeight(1)
-        sep.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        sep.setStyleSheet(f"background-color: {COLORS['border']}; border: none;")
+        sep.setStyleSheet(f"background-color: {COLORS['border']}; min-height: 1px; max-height: 1px;")
         return sep
 
     def _build_ui(self):
@@ -269,14 +250,14 @@ class MainWindow(QMainWindow):
             f"QFrame#rec_card {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
-        rec_card.setFixedHeight(120)
+        rec_card.setFixedHeight(108)
         rc_lo = QVBoxLayout(rec_card)
         rc_lo.setContentsMargins(8, 7, 8, 7)
-        rc_lo.setSpacing(5)
+        rc_lo.setSpacing(3)
         rec_header = QWidget()
-        rec_header.setFixedHeight(30)
+        rec_header.setFixedHeight(28)
         rrow = QHBoxLayout(rec_header)
-        rrow.setContentsMargins(2, 0, 2, 0)
+        rrow.setContentsMargins(0, 0, 0, 0)
         self.rec_dot = StatusDot()
         self.rec_dot.set_color(C["playing"])
         rrow.addWidget(self.rec_dot)
@@ -291,39 +272,26 @@ class MainWindow(QMainWindow):
         self.rec_actions.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 700;")
         rrow.addWidget(self.rec_actions)
         rc_lo.addWidget(rec_header)
-        rc_lo.addSpacing(2)
+        rc_lo.addWidget(self._hsep())
         brow = QHBoxLayout()
-        brow.setSpacing(8)
-        self.rec_btn = QPushButton("Rec")
+        self.rec_btn = QPushButton()
         self.rec_btn.setObjectName("rec_round_btn")
-        self.rec_btn.setIcon(icon("record", 18, C["error"]))
-        self.rec_btn.setIconSize(QSize(18, 18))
-        self.rec_btn.setFixedHeight(40)
-        self.rec_btn.setStyleSheet(
-            f"QPushButton#rec_round_btn {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 10px; font-size: 11px; font-weight: 600; padding: 0 12px; }}"
-            f"QPushButton#rec_round_btn:hover {{ border-color: {C['error']}; color: {C['error']}; background-color: {C['bg_hover']}; }}"
-            f"QPushButton#rec_round_btn:pressed {{ background-color: {C['bg_pressed']}; }}"
-        )
+        self.rec_btn.setIcon(icon("record", 16, C["error"]))
+        self.rec_btn.setIconSize(QSize(16, 16))
+        self.rec_btn.setFixedSize(42, 42)
         self.rec_btn.setToolTip("Record (F7)")
         self.rec_btn.clicked.connect(self._toggle_record)
-        self.rec_pause_btn = QPushButton("Pause")
+        self.rec_pause_btn = QPushButton()
         self.rec_pause_btn.setObjectName("rec_pause_btn")
-        self.rec_pause_btn.setIcon(icon("pause", 18, C["text"]))
-        self.rec_pause_btn.setIconSize(QSize(18, 18))
-        self.rec_pause_btn.setFixedHeight(40)
-        self.rec_pause_btn.setStyleSheet(
-            f"QPushButton#rec_pause_btn {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 10px; font-size: 11px; font-weight: 600; padding: 0 12px; }}"
-            f"QPushButton#rec_pause_btn:hover {{ border-color: {C['pause_cyan']}; color: {C['pause_cyan']}; background-color: {C['bg_hover']}; }}"
-            f"QPushButton#rec_pause_btn:pressed {{ background-color: {C['bg_pressed']}; }}"
-            f"QPushButton#rec_pause_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
-        )
+        self.rec_pause_btn.setIcon(icon("pause", 14, C["text"]))
+        self.rec_pause_btn.setIconSize(QSize(14, 14))
+        self.rec_pause_btn.setFixedSize(42, 42)
         self.rec_pause_btn.setToolTip("Pause")
         self.rec_pause_btn.setEnabled(False)
         self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
-        brow.addWidget(self.rec_btn, 1)
-        brow.addWidget(self.rec_pause_btn, 1)
+        brow.addWidget(self.rec_btn)
+        brow.addWidget(self.rec_pause_btn)
+        brow.addStretch()
         rc_lo.addLayout(brow)
         sb_lo.addWidget(rec_card)
 
@@ -356,37 +324,24 @@ class MainWindow(QMainWindow):
         self.inspector_selector = QComboBox()
         self.inspector_selector.addItem("Select an action")
         self.inspector_selector.setEnabled(False)
-        self.inspector_selector.setFixedHeight(40)
-        self.inspector_selector.setStyleSheet(
-            f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 0 12px; font-size: 11px; }}"
-            f"QComboBox:hover {{ border-color: {C['accent']}; }}"
-            f"QComboBox:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
-            f"QComboBox::drop-down {{ border: none; }}"
-            f"QComboBox::down-arrow {{ width: 10px; height: 10px; }}"
-        )
+        self.inspector_selector.setFixedHeight(36)
         icard_lo.addWidget(self.inspector_selector)
         icard_lo.addSpacing(8)
 
-        # Toolbar (upgraded styling)
+        # Toolbar
         ibrow = QHBoxLayout()
-        ibrow.setSpacing(6)
+        ibrow.setSpacing(3)
         for name, slot, tip, clr in [("check", self._apply_inspector, "Apply", C["success"]),
-                          ("play", self.test_selected_action, "Test selected action", C["success"]),
                           ("cross", self._cancel_inspector, "Cancel", C["error"]),
                           ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
                           ("duplicate", self._duplicate_inspector, "Duplicate", C["accent"]),
                           ("edit", self._open_active_dialog, "Edit", C["accent"])]:
             b = QPushButton()
             b.setObjectName("icon_btn")
-            b.setIcon(icon(name, 16, clr))
+            b.setIcon(icon(name, 13, clr))
             b.setToolTip(tip)
-            b.setFixedSize(32, 32)
-            b.setStyleSheet(
-                f"QPushButton {{ padding: 0; background-color: {C['bg_card']}; border: 1px solid {C['border']}; border-radius: 8px; }}"
-                f"QPushButton:hover {{ border-color: {clr}; background-color: {C['bg_hover']}; }}"
-                f"QPushButton:pressed {{ background-color: {C['bg_pressed']}; }}"
-            )
+            b.setFixedSize(26, 26)
+            b.setStyleSheet("QPushButton { padding: 0; min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px; }")
             if slot:
                 b.clicked.connect(slot)
             ibrow.addWidget(b)
@@ -402,114 +357,77 @@ class MainWindow(QMainWindow):
 
         # Inspector forms (vertical in sidebar)
         self._insp_lo = QVBoxLayout()
-        self._insp_lo.setSpacing(5)
+        self._insp_lo.setSpacing(3)
         self._insp_lo.setContentsMargins(0, 0, 0, 0)
 
         # Key inspector
         self.insp_key = QWidget()
         ik_lo = QVBoxLayout(self.insp_key)
         ik_lo.setContentsMargins(0, 0, 0, 0)
-        ik_lo.setSpacing(5)
-        
-        def form_label(txt):
-            lbl = QLabel(txt)
-            lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 600; background: transparent;")
-            return lbl
-        
-        def form_input():
-            inp = QLineEdit()
-            inp.setStyleSheet(
-                f"QLineEdit {{ background-color: {C['bg_card']}; color: {C['text']}; "
-                f"border: 1px solid {C['border']}; border-radius: 6px; padding: 6px 10px; font-size: 10px; }}"
-                f"QLineEdit:hover {{ border-color: {C['accent']}; }}"
-                f"QLineEdit:focus {{ border-color: {C['accent']}; }}"
-            )
-            return inp
-        
-        self.ik_key = form_input()
-        self.ik_key.setPlaceholderText("key")
-        self.ik_dur = form_input()
-        self.ik_dur.setPlaceholderText("duration")
+        ik_lo.setSpacing(3)
+        self.ik_key = QLineEdit(); self.ik_key.setPlaceholderText("key")
+        self.ik_dur = QLineEdit(); self.ik_dur.setPlaceholderText("duration")
         self.ik_hold = QCheckBox("Hold mode")
-        self.ik_hold.setStyleSheet(f"color: {C['text']}; font-size: 10px; background: transparent;")
-        self.ik_repeat = form_input()
-        self.ik_repeat.setText("1")
-        self.ik_label = form_input()
-        self.ik_label.setPlaceholderText("label")
-        ik_lo.addWidget(form_label("Key"))
+        self.ik_repeat = QLineEdit(); self.ik_repeat.setText("1")
+        self.ik_label = QLineEdit(); self.ik_label.setPlaceholderText("label")
+        ik_lo.addWidget(QLabel("Key"))
         ik_lo.addWidget(self.ik_key)
-        ik_lo.addWidget(form_label("Duration"))
+        ik_lo.addWidget(QLabel("Duration"))
         ik_lo.addWidget(self.ik_dur)
         ik_lo.addWidget(self.ik_hold)
-        ik_lo.addWidget(form_label("Repeat"))
+        ik_lo.addWidget(QLabel("Repeat"))
         ik_lo.addWidget(self.ik_repeat)
-        ik_lo.addWidget(form_label("Label"))
+        ik_lo.addWidget(QLabel("Label"))
         ik_lo.addWidget(self.ik_label)
 
         # Pause inspector
         self.insp_pause = QWidget()
         ip_lo = QVBoxLayout(self.insp_pause)
         ip_lo.setContentsMargins(0, 0, 0, 0)
-        ip_lo.setSpacing(5)
-        self.ip_dur = form_input()
-        self.ip_dur.setPlaceholderText("duration")
-        self.ip_label = form_input()
-        self.ip_label.setPlaceholderText("label")
-        ip_lo.addWidget(form_label("Duration"))
+        ip_lo.setSpacing(3)
+        self.ip_dur = QLineEdit(); self.ip_dur.setPlaceholderText("duration")
+        self.ip_label = QLineEdit(); self.ip_label.setPlaceholderText("label")
+        ip_lo.addWidget(QLabel("Duration"))
         ip_lo.addWidget(self.ip_dur)
-        ip_lo.addWidget(form_label("Label"))
+        ip_lo.addWidget(QLabel("Label"))
         ip_lo.addWidget(self.ip_label)
 
         # Click inspector
         self.insp_click = QWidget()
         ic_lo = QVBoxLayout(self.insp_click)
         ic_lo.setContentsMargins(0, 0, 0, 0)
-        ic_lo.setSpacing(5)
-        self.ic_x = form_input()
-        self.ic_x.setPlaceholderText("x")
-        self.ic_y = form_input()
-        self.ic_y.setPlaceholderText("y")
+        ic_lo.setSpacing(3)
+        self.ic_x = QLineEdit(); self.ic_x.setPlaceholderText("x")
+        self.ic_y = QLineEdit(); self.ic_y.setPlaceholderText("y")
         self.ic_btn = QComboBox()
         self.ic_btn.addItems(["left", "right", "middle"])
-        self.ic_btn.setStyleSheet(
-            f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 6px 10px; font-size: 10px; }}"
-            f"QComboBox:hover {{ border-color: {C['accent']}; }}"
-            f"QComboBox::drop-down {{ border: none; }}"
-        )
-        self.ic_rand = form_input()
-        self.ic_rand.setPlaceholderText("rand")
-        self.ic_repeat = form_input()
-        self.ic_repeat.setText("1")
-        self.ic_label = form_input()
-        self.ic_label.setPlaceholderText("label")
-        ic_lo.addWidget(form_label("X, Y"))
+        self.ic_rand = QLineEdit(); self.ic_rand.setPlaceholderText("rand")
+        self.ic_repeat = QLineEdit(); self.ic_repeat.setText("1")
+        self.ic_label = QLineEdit(); self.ic_label.setPlaceholderText("label")
+        ic_lo.addWidget(QLabel("X, Y"))
         xy_row = QHBoxLayout()
-        xy_row.setSpacing(5)
         xy_row.addWidget(self.ic_x)
         xy_row.addWidget(self.ic_y)
         ic_lo.addLayout(xy_row)
-        ic_lo.addWidget(form_label("Button"))
+        ic_lo.addWidget(QLabel("Button"))
         ic_lo.addWidget(self.ic_btn)
-        ic_lo.addWidget(form_label("Randomness"))
+        ic_lo.addWidget(QLabel("Randomness"))
         ic_lo.addWidget(self.ic_rand)
-        ic_lo.addWidget(form_label("Repeat"))
+        ic_lo.addWidget(QLabel("Repeat"))
         ic_lo.addWidget(self.ic_repeat)
-        ic_lo.addWidget(form_label("Label"))
+        ic_lo.addWidget(QLabel("Label"))
         ic_lo.addWidget(self.ic_label)
 
         # Image inspector
         self.insp_image = QWidget()
         ii_lo = QVBoxLayout(self.insp_image)
         ii_lo.setContentsMargins(0, 0, 0, 0)
-        ii_lo.setSpacing(5)
-        self.ii_sim = form_input()
-        self.ii_sim.setText("0.8")
-        self.ii_wait = form_input()
-        self.ii_wait.setText("10.0")
-        ii_lo.addWidget(form_label("Similarity"))
+        ii_lo.setSpacing(3)
+        self.ii_sim = QLineEdit(); self.ii_sim.setText("0.8")
+        self.ii_wait = QLineEdit(); self.ii_wait.setText("10.0")
+        ii_lo.addWidget(QLabel("Similarity"))
         ii_lo.addWidget(self.ii_sim)
-        ii_lo.addWidget(form_label("Wait timeout"))
+        ii_lo.addWidget(QLabel("Wait timeout"))
         ii_lo.addWidget(self.ii_wait)
 
         self._insp_lo.addWidget(self.insp_key)
@@ -571,75 +489,45 @@ class MainWindow(QMainWindow):
         self.profile_btn.setFixedSize(108, 34)
         self.profile_btn.clicked.connect(self._show_profile_menu)
         tl.addWidget(self.profile_btn)
-        tl.addSpacing(8)
-
-        # Check update button (upgraded, moved to left)
-        up_btn = QPushButton()
-        up_btn.setObjectName("update_top_btn")
-        up_btn.setIcon(icon("update", 18, C["accent"]))
-        up_btn.setIconSize(QSize(18, 18))
-        up_btn.setToolTip("Check for updates")
-        up_btn.setFixedSize(40, 40)
-        up_btn.setStyleSheet(
-            f"QPushButton#update_top_btn {{ background-color: {C['bg_card']}; color: {C['accent']}; "
-            f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
-            f"QPushButton#update_top_btn:hover {{ border-color: {C['accent']}; background-color: {C['bg_tertiary']}; "
-            f"transform: scale(1.05); }}"
-            f"QPushButton#update_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
-        )
-        up_btn.clicked.connect(self._check_update_manual)
-        tl.addWidget(up_btn)
-        tl.addSpacing(8)
-
-        # Menu button (upgraded, moved to left)
-        gear = QPushButton()
-        gear.setObjectName("menu_top_btn")
-        gear.setIcon(icon("menu", 18, C["text_dim"]))
-        gear.setIconSize(QSize(18, 18))
-        gear.setToolTip("Menu")
-        gear.setFixedSize(40, 40)
-        gear.setStyleSheet(
-            f"QPushButton#menu_top_btn {{ background-color: {C['bg_card']}; color: {C['text_dim']}; "
-            f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
-            f"QPushButton#menu_top_btn:hover {{ border-color: {C['accent']}; color: {C['accent']}; "
-            f"background-color: {C['bg_tertiary']}; transform: scale(1.05); }}"
-            f"QPushButton#menu_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
-        )
-        gear.clicked.connect(self._show_action_menu)
-        tl.addWidget(gear)
 
         tl.addStretch()
 
-        # Status indicator - centered, wider, larger font, with icon indicators
+        up_btn = QPushButton()
+        up_btn.setObjectName("top_icon_btn")
+        up_btn.setIcon(icon("update", 15, C["text_dim"]))
+        up_btn.setToolTip("Check for updates")
+        up_btn.setFixedSize(34, 34)
+        up_btn.clicked.connect(self._check_update_manual)
+        tl.addWidget(up_btn)
+        tl.addSpacing(6)
+
+        gear = QPushButton()
+        gear.setObjectName("top_icon_btn")
+        gear.setIcon(icon("menu", 15, C["text_dim"]))
+        gear.setToolTip("Menu")
+        gear.setFixedSize(34, 34)
+        gear.clicked.connect(self._show_action_menu)
+        tl.addWidget(gear)
+        tl.addSpacing(6)
+
+        # Status indicator now lives at the far top-right after Check update and Menu.
         status_pill = QFrame()
         status_pill.setObjectName("status_pill")
         status_pill.setStyleSheet(
             f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
-            f"border: 1px solid {C['border']}; border-radius: 8px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 6px; }}"
         )
-        status_pill.setFixedSize(220, 44)
+        status_pill.setFixedSize(146, 34)
         sp_lo = QHBoxLayout(status_pill)
-        sp_lo.setContentsMargins(14, 0, 14, 0)
-        sp_lo.setSpacing(10)
+        sp_lo.setContentsMargins(9, 3, 9, 3)
+        sp_lo.setSpacing(7)
         self.status_dot = StatusDot()
         self.status_dot.set_color(C["playing"])
-        self.status_dot.setFixedSize(16, 16)
         sp_lo.addWidget(self.status_dot)
-        
-        # Status icon for different states
-        self.status_icon = QLabel()
-        self.status_icon.setPixmap(icon("check", 16, C["success"]))
-        self.status_icon.setFixedSize(20, 20)
-        self.status_icon.setScaledContents(True)
-        self.status_icon.setVisible(False)
-        sp_lo.addWidget(self.status_icon)
-        
         self.status_text = QLabel("Ready")
-        self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 12px; font-weight: 600; background: transparent;")
+        self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 9px; font-weight: 500; background: transparent;")
         sp_lo.addWidget(self.status_text)
         tl.addWidget(status_pill)
-
-        tl.addStretch()
         dock_lo.addWidget(title)
 
         dock_lo.addWidget(self._hsep())
@@ -662,9 +550,6 @@ class MainWindow(QMainWindow):
         hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 9px;")
         hints.setVisible(False)
         header_stack.addWidget(hints)
-        self.macro_summary = QLabel("0 actions · 0 image checks · ~0s")
-        self.macro_summary.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 600;")
-        header_stack.addWidget(self.macro_summary)
         tl_hl.addLayout(header_stack)
         tl_hl.addStretch()
 
@@ -697,297 +582,255 @@ class MainWindow(QMainWindow):
         self.timeline = TimelineView(model=self.action_model)
         content_lo.addWidget(self.timeline, stretch=1)
 
-        self.playback_panel = self._make_playback_panel()
-        content_lo.addWidget(self.playback_panel)
+        content_lo.addWidget(self._make_playback_panel())
 
         main_lo.addWidget(content, stretch=1)
 
     def _make_playback_panel(self):
-        """Bottom panel: fixed controls/options, expanding progress bar, static stats."""
+        """Unified compact playback dock with controls, progress, and stats."""
         C = COLORS
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(106)
-        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
+        panel.setFixedHeight(150)
         lo = QVBoxLayout(panel)
-        lo.setContentsMargins(8, 0, 8, 7)
+        lo.setContentsMargins(8, 0, 8, 8)
         lo.setSpacing(0)
 
         dock = QFrame()
         dock.setObjectName("mf2_playback_dock")
-        dock.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         dock.setStyleSheet(
             f"QFrame#mf2_playback_dock {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
-
         dlo = QVBoxLayout(dock)
         dlo.setContentsMargins(8, 6, 8, 6)
-        dlo.setSpacing(4)
+        dlo.setSpacing(3)
 
-        controls_row = QHBoxLayout()
-        controls_row.setContentsMargins(0, 0, 0, 0)
-        controls_row.setSpacing(6)
+        controls = QHBoxLayout()
+        controls.setSpacing(4)
 
-        def section_title(txt):
-            lbl = QLabel(txt)
-            lbl.setStyleSheet(
-                f"color: {C['text_dim']}; font-size: 8px; font-weight: 950; "
-                "letter-spacing: 0.75px; background: transparent;"
-            )
-            return lbl
-
-        def mini_label(txt):
-            lbl = QLabel(txt)
-            lbl.setStyleSheet(
-                f"color: {C['text_dim']}; font-size: 8px; font-weight: 900; "
-                "background: transparent;"
-            )
-            return lbl
-
-        def vline():
-            line = QFrame()
-            line.setFixedSize(1, 40)
-            line.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            line.setStyleSheet(f"background-color: {C['border']}; border: none;")
-            return line
-
-        # ── 1. Playback buttons ────────────────────────────
-        play_section = QFrame()
-        play_section.setFixedWidth(134)
-        play_section.setStyleSheet("background: transparent; border: none;")
-        play_lo = QVBoxLayout(play_section)
-        play_lo.setContentsMargins(0, 0, 0, 0)
-        play_lo.setSpacing(4)
-        play_lo.addWidget(section_title("PLAYBACK"))
-
-        play_row = QHBoxLayout()
-        play_row.setContentsMargins(0, 0, 0, 0)
-        play_row.setSpacing(5)
+        brand = QFrame()
+        brand.setFixedWidth(74)
+        brand_lo = QHBoxLayout(brand)
+        brand_lo.setContentsMargins(0, 0, 0, 0)
+        brand_lo.setSpacing(8)
+        brand_accent = QFrame()
+        brand_accent.setFixedSize(3, 34)
+        brand_accent.setStyleSheet(f"background-color: {C['accent']}; border-radius: 2px;")
+        brand_lo.addWidget(brand_accent)
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(0)
+        title = QLabel("PLAYBACK")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 11px; font-weight: 700; background: transparent;")
+        subtitle = QLabel("Controls and run state")
+        subtitle.setStyleSheet(f"color: {C['text_dark']}; font-size: 7px; background: transparent;")
+        brand_text.addWidget(title)
+        brand_text.addWidget(subtitle)
+        brand_lo.addLayout(brand_text)
+        controls.addWidget(brand)
 
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("play_btn")
-        self.start_btn.setIcon(icon("play", 13, C["text"]))
-        self.start_btn.setIconSize(QSize(13, 13))
+        self.start_btn.setIcon(icon("play", 15, C["text"]))
+        self.start_btn.setIconSize(QSize(15, 15))
         self.start_btn.setToolTip("Start playback (F9)")
-        self.start_btn.setFixedSize(58, 36)
-        self.start_btn.setStyleSheet(
-            f"QPushButton#play_btn {{ background-color: #063c1f; color: {C['text']}; "
-            f"border: 1px solid {C['success']}; border-radius: 7px; font-size: 10px; font-weight: 950; padding: 0 6px; }}"
-            f"QPushButton#play_btn:hover {{ background-color: #07562b; border-color: {C['success']}; }}"
-        )
+        self.start_btn.setFixedSize(68, 38)
         self.start_btn.clicked.connect(self.start)
-        play_row.addWidget(self.start_btn)
+        controls.addWidget(self.start_btn)
 
-        self.pause_btn = QPushButton()
+        self.pause_btn = QPushButton("Pause")
         self.pause_btn.setObjectName("pause_btn")
-        self.pause_btn.setIcon(icon("play", 13, C["text_dim"]))
-        self.pause_btn.setIconSize(QSize(13, 13))
+        self.pause_btn.setIcon(icon("pause", 15, C["pause_cyan"]))
+        self.pause_btn.setIconSize(QSize(14, 14))
         self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-        self.pause_btn.setFixedSize(34, 36)
-        self.pause_btn.setStyleSheet(
-            f"QPushButton#pause_btn {{ background-color: {C['bg_tertiary']}; color: {C['pause_cyan']}; "
-            f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
-            f"QPushButton#pause_btn:hover {{ border-color: {C['pause_cyan']}; }}"
-            f"QPushButton#pause_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
-        )
+        self.pause_btn.setFixedSize(60, 38)
         self.pause_btn.setEnabled(False)
         self.pause_btn.clicked.connect(self.engine.toggle_pause)
-        play_row.addWidget(self.pause_btn)
+        controls.addWidget(self.pause_btn)
 
-        self.stop_btn = QPushButton()
+        self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("stop_btn")
-        self.stop_btn.setIcon(icon("stop", 12, C["error"]))
-        self.stop_btn.setIconSize(QSize(12, 12))
+        self.stop_btn.setIcon(icon("stop", 17, C["error"]))
+        self.stop_btn.setIconSize(QSize(15, 15))
         self.stop_btn.setToolTip("Stop playback")
-        self.stop_btn.setFixedSize(34, 36)
-        self.stop_btn.setStyleSheet(
-            f"QPushButton#stop_btn {{ background-color: {C['bg_tertiary']}; color: {C['error']}; "
-            f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
-            f"QPushButton#stop_btn:hover {{ border-color: {C['error']}; }}"
-            f"QPushButton#stop_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
-        )
+        self.stop_btn.setFixedSize(58, 38)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop)
-        play_row.addWidget(self.stop_btn)
+        controls.addWidget(self.stop_btn)
 
-        play_lo.addLayout(play_row)
-        play_lo.addStretch()
-        controls_row.addWidget(play_section)
-        controls_row.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
+        divider = QFrame()
+        divider.setFixedSize(1, 34)
+        divider.setStyleSheet(f"background-color: {C['border']};")
+        controls.addWidget(divider)
+        controls.addStretch()
 
-        # ── 2. Playback options ────────────────────────────
-        options_section = QFrame()
-        options_section.setFixedWidth(254)
-        options_section.setStyleSheet("background: transparent; border: none;")
-        opt_lo = QVBoxLayout(options_section)
-        opt_lo.setContentsMargins(0, 0, 0, 0)
-        opt_lo.setSpacing(4)
-        opt_lo.addWidget(section_title("OPTIONS"))
+        settings = QFrame()
+        settings.setObjectName("mf2_run_settings")
+        settings.setStyleSheet("QFrame#mf2_run_settings { background: transparent; border: none; }")
+        slo = QVBoxLayout(settings)
+        slo.setContentsMargins(0, 0, 0, 0)
+        slo.setSpacing(0)
 
-        row_one = QHBoxLayout()
-        row_one.setContentsMargins(0, 0, 0, 0)
-        row_one.setSpacing(5)
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(6)
+
+        def label(text):
+            w = QLabel(text)
+            w.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 500; background: transparent;")
+            return w
 
         speed_box = QVBoxLayout()
-        speed_box.setContentsMargins(0, 0, 0, 0)
-        speed_box.setSpacing(2)
-        speed_box.addWidget(mini_label("Speed"))
+        speed_box.setSpacing(1)
+        speed_box.addWidget(label("Speed"))
         self.speed_combo = QComboBox()
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
         self.speed_combo.setCurrentIndex(3)
         self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        self.speed_combo.setFixedSize(66, 24)
+        self.speed_combo.setFixedSize(54, 26)
         speed_box.addWidget(self.speed_combo)
-        row_one.addLayout(speed_box)
+        controls_row.addLayout(speed_box)
 
-        loops_box = QVBoxLayout()
-        loops_box.setContentsMargins(0, 0, 0, 0)
-        loops_box.setSpacing(2)
-        loops_box.addWidget(mini_label("Loops"))
-        loop_pair = QFrame()
-        loop_pair.setStyleSheet("background: transparent; border: none;")
-        loop_pair_lo = QHBoxLayout(loop_pair)
-        loop_pair_lo.setContentsMargins(0, 0, 0, 0)
-        loop_pair_lo.setSpacing(3)
+        loop_box = QVBoxLayout()
+        loop_box.setSpacing(1)
+        loop_box.addWidget(label("Loops"))
+        loop_row = QHBoxLayout()
+        loop_row.setSpacing(3)
         self.loops_spin = QSpinBox()
         self.loops_spin.setRange(1, 9999)
         self.loops_spin.setValue(1)
-        self.loops_spin.setFixedSize(30, 24)
-        loop_pair_lo.addWidget(self.loops_spin)
+        self.loops_spin.setFixedSize(34, 26)
+        loop_row.addWidget(self.loops_spin)
         self.inf_check = QCheckBox("∞")
         self.inf_check.setObjectName("pill_check")
         self.inf_check.setToolTip("Infinite loop")
-        self.inf_check.setFixedSize(22, 24)
-        loop_pair_lo.addWidget(self.inf_check)
-        loops_box.addWidget(loop_pair)
-        row_one.addLayout(loops_box)
+        self.inf_check.setFixedSize(24, 26)
+        loop_row.addWidget(self.inf_check)
+        loop_box.addLayout(loop_row)
+        controls_row.addLayout(loop_box)
+
+        flags = QVBoxLayout()
+        flags.setSpacing(2)
+        mode_title = label("Mode")
+        flags.addWidget(mode_title)
+        mode_row = QHBoxLayout(); mode_row.setSpacing(3)
         self.sim_check = QCheckBox("Sim")
         self.sim_check.setObjectName("pill_check")
         self.sim_check.setToolTip("Simulation mode")
-        self.sim_check.setFixedSize(36, 23)
-        row_one.addWidget(self.sim_check, alignment=Qt.AlignmentFlag.AlignBottom)
-
-        self.human_check = QCheckBox("Hum")
+        self.sim_check.setFixedSize(38, 26)
+        mode_row.addWidget(self.sim_check)
+        self.human_check = QCheckBox("Human")
         self.human_check.setObjectName("pill_check")
         self.human_check.setToolTip("Humanized movement curve")
-        self.human_check.setFixedSize(38, 23)
+        self.human_check.setFixedSize(46, 26)
         self.human_check.setChecked(True)
-        row_one.addWidget(self.human_check, alignment=Qt.AlignmentFlag.AlignBottom)
+        mode_row.addWidget(self.human_check)
+        flags.addLayout(mode_row)
+        controls_row.addLayout(flags)
 
+        focus_box = QVBoxLayout()
+        focus_box.setSpacing(2)
+        focus_box.addWidget(label("Focus"))
         self.focus_check = QCheckBox("Lock")
         self.focus_check.setObjectName("pill_check")
         self.focus_check.setToolTip("Keep playback targeted to the captured window")
-        self.focus_check.setFixedSize(40, 23)
-        row_one.addWidget(self.focus_check, alignment=Qt.AlignmentFlag.AlignBottom)
-        row_one.addStretch()
-
-        opt_lo.addLayout(row_one)
-        opt_lo.addStretch()
-        controls_row.addWidget(options_section)
+        self.focus_check.setFixedSize(42, 26)
+        focus_box.addWidget(self.focus_check)
+        controls_row.addLayout(focus_box)
         controls_row.addStretch()
-        self.collapse_playback_btn = QPushButton("Collapse")
-        self.collapse_playback_btn.setToolTip("Collapse playback panel")
-        self.collapse_playback_btn.setFixedSize(58, 24)
-        self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))
-        controls_row.addWidget(self.collapse_playback_btn, alignment=Qt.AlignmentFlag.AlignTop)
-        dlo.addLayout(controls_row)
+        slo.addLayout(controls_row)
+        dlo.addLayout(controls)
+        dlo.addWidget(settings)
 
-        # ── 3. Progress expands; stat chips remain static ───
-        progress_row = QHBoxLayout()
-        progress_row.setContentsMargins(0, 0, 0, 0)
-        progress_row.setSpacing(6)
+        divider_h = QFrame()
+        divider_h.setFixedHeight(1)
+        divider_h.setStyleSheet(f"background-color: {C['border']};")
+        dlo.addWidget(divider_h)
 
+        rail = QHBoxLayout()
+        rail.setSpacing(8)
         progress_wrap = QFrame()
         progress_wrap.setObjectName("progress_wrap")
-        progress_wrap.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         progress_wrap.setStyleSheet(
             f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
         )
-        progress_wrap.setFixedHeight(32)
         pw_lo = QHBoxLayout(progress_wrap)
-        pw_lo.setContentsMargins(8, 6, 8, 6)
-        pw_lo.setSpacing(7)
-
+        pw_lo.setContentsMargins(8, 4, 8, 4)
+        pw_lo.setSpacing(6)
+        pw_icon = QLabel()
+        pw_icon.setPixmap(icon("play", 14, C["accent"]).pixmap(14, 14))
+        pw_lo.addWidget(pw_icon)
+        pw_stack = QVBoxLayout()
+        pw_stack.setContentsMargins(0, 0, 0, 0)
+        pw_stack.setSpacing(2)
+        pw_title = QLabel("PROGRESS")
+        pw_title.setStyleSheet(f"color: {C['text_dim']}; font-size: 7px; font-weight: 700; letter-spacing: 0.6px; background: transparent;")
+        pw_stack.addWidget(pw_title)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(11)
-        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.progress_bar.setFixedHeight(6)
         self.progress_bar.setStyleSheet(
             f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 5px; }}"
             f"QProgressBar::chunk {{ background-color: {C['accent']}; border-radius: 5px; }}"
         )
-        pw_lo.addWidget(self.progress_bar, stretch=1)
-
+        pw_stack.addWidget(self.progress_bar)
+        pw_lo.addLayout(pw_stack, stretch=1)
         self.progress_label = QLabel("0%")
-        self.progress_label.setStyleSheet(
-            f"color: {C['accent']}; font-size: 10px; font-weight: 950; "
-            "min-width: 34px; background: transparent;"
-        )
+        self.progress_label.setStyleSheet(f"color: {C['accent']}; font-size: 10px; font-weight: 900; min-width: 30px; background: transparent;")
         pw_lo.addWidget(self.progress_label)
-        progress_row.addWidget(progress_wrap, stretch=1)
+        rail.addWidget(progress_wrap, stretch=1)
 
-        stats_row = QHBoxLayout()
-        stats_row.setContentsMargins(0, 0, 0, 0)
-        stats_row.setSpacing(5)
         self._stat_actions_w, self._stat_actions = self._make_stat_chip("bolt", "Played", "0", C["success"], "Actions played this run")
         self._stat_loops_w,   self._stat_loops   = self._make_stat_chip("loop", "Loops", "0", C["neon_purple"], "Completed loops")
-        self._stat_seq_w,     self._stat_seq     = self._make_stat_chip("delay", "Seq", "44.0s", C["neon_gold"], "Estimated sequence duration")
+        self._stat_seq_w,     self._stat_seq     = self._make_stat_chip("delay", "Seq", "0.0s", C["neon_gold"], "Estimated sequence duration")
         self._stat_time_w,    self._stat_time    = self._make_stat_chip("clock", "Time", "0:00:00", C["accent"], "Estimated session time")
-        stats_row.addWidget(self._stat_actions_w)
-        stats_row.addWidget(self._stat_loops_w)
-        stats_row.addWidget(self._stat_seq_w)
-        stats_row.addWidget(self._stat_time_w)
-        stats_row.addStretch()
-        progress_row.addLayout(stats_row)
-        dlo.addLayout(progress_row)
+        rail.addWidget(self._stat_actions_w)
+        rail.addWidget(self._stat_loops_w)
+        rail.addWidget(self._stat_seq_w)
+        rail.addWidget(self._stat_time_w)
+        dlo.addLayout(rail)
         lo.addWidget(dock, stretch=1)
-        self.playback_dock = dock
-
-        self.playback_restore_btn = QPushButton("Show playback panel")
-        self.playback_restore_btn.setToolTip("Restore playback controls")
-        self.playback_restore_btn.setFixedHeight(24)
-        self.playback_restore_btn.clicked.connect(lambda: self._set_playback_collapsed(False))
-        self.playback_restore_btn.setVisible(False)
-        lo.addWidget(self.playback_restore_btn)
         return panel
 
     def _make_stat_chip(self, icon_name, title, value, color, tooltip):
-        """Static bottom-panel stat chip: clear icon + value only."""
         C = COLORS
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
-        chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 48, "Loops": 48, "Seq": 72, "Time": 88}.get(title, 50))
-        chip.setFixedHeight(32)
-        chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        chip.setToolTip(tooltip)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
-            f"QFrame#mf2_stat_chip:hover {{ border-color: {color}; }}"
         )
-
+        chip.setFixedWidth({"Played": 62, "Loops": 62, "Seq": 66, "Time": 72}.get(title, 62))
+        chip.setFixedHeight(36)
         lo = QHBoxLayout(chip)
         lo.setContentsMargins(5, 3, 5, 3)
-        lo.setSpacing(4)
+        lo.setSpacing(3)
 
+        icon_wrap = QFrame()
+        icon_wrap.setStyleSheet(f"background-color: transparent; border: 1px solid {color}; border-radius: 6px;")
+        icon_wrap.setFixedSize(18, 18)
+        iw_lo = QHBoxLayout(icon_wrap)
+        iw_lo.setContentsMargins(0, 0, 0, 0)
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(16, 16)
-        ico.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
-        lo.addWidget(ico)
+        ico.setPixmap(icon(icon_name, 10, color).pixmap(10, 10))
+        iw_lo.addWidget(ico)
+        lo.addWidget(icon_wrap)
 
+        text_box = QVBoxLayout()
+        text_box.setContentsMargins(0, 0, 0, 0)
+        text_box.setSpacing(0)
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 7px; font-weight: 850; letter-spacing: 0.6px; background: transparent;")
         value_lbl = QLabel(value)
-        value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 11px; font-weight: 950; background: transparent;"
-        )
-        lo.addWidget(value_lbl)
+        value_lbl.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 900; background: transparent;")
+        text_box.addWidget(title_lbl)
+        text_box.addWidget(value_lbl)
+        lo.addLayout(text_box)
         return chip, value_lbl
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):
@@ -1048,7 +891,6 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Escape"), self, self._deselect)
         QShortcut(QKeySequence("Ctrl+S"), self, lambda: (self._do_save_session(), self.status("Session saved")))
         QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.timeline.setFocus())
-        QShortcut(QKeySequence("Ctrl+Enter"), self, self.test_from_selected_row)
 
     def _deselect(self):
         self.select(-1)
@@ -1082,13 +924,8 @@ class MainWindow(QMainWindow):
         m.addAction("Edit", lambda: self._open_active_dialog(index))
         m.addAction("Duplicate", lambda: self.duplicate_action(index))
         m.addSeparator()
-        m.addAction("Test from selected row", self.test_from_selected_row)
-        m.addSeparator()
-        sorting_locked = self.engine.running or self.timeline.playing_index >= 0
-        move_up = m.addAction("Move Up", lambda: self.move_action(index, -1))
-        move_down = m.addAction("Move Down", lambda: self.move_action(index, 1))
-        move_up.setEnabled(not sorting_locked and index > 0)
-        move_down.setEnabled(not sorting_locked and index < self.action_model.rowCount() - 1)
+        m.addAction("Move Up", lambda: self.move_action(index, -1))
+        m.addAction("Move Down", lambda: self.move_action(index, 1))
         m.addSeparator()
         m.addAction("Delete", lambda: self.delete_action(index))
         m.exec(pos)
@@ -1378,43 +1215,27 @@ class MainWindow(QMainWindow):
         self.status("Duplicated action")
 
     def move_action(self, index, direction):
-        if self.engine.running or self.timeline.playing_index >= 0:
-            self.status("Stop playback before reordering actions")
-            return
         if index < 0 or index >= self.action_model.rowCount():
             return
         new_index = index + direction
         if new_index < 0 or new_index >= self.action_model.rowCount():
             return
-        scroll_position = self.timeline.scroll_position()
-        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        self.history.push(self.action_model.actions())
         self.action_model.move_action(index, new_index)
-        self.timeline.remap_after_move(index, new_index)
         self.active_index = new_index
         self.refresh()
-        self.timeline.set_active(new_index)
-        self.timeline.restore_scroll_position(scroll_position)
-        self.timeline.flash_drop(new_index)
         self.save_session()
         self.status("Moved action")
 
     def move_action_to(self, index, target_index):
-        if self.engine.running or self.timeline.playing_index >= 0:
-            self.status("Stop playback before reordering actions")
-            return
         if index < 0 or index >= self.action_model.rowCount():
             return
         if target_index < 0 or target_index >= self.action_model.rowCount():
             return
-        scroll_position = self.timeline.scroll_position()
-        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        self.history.push(self.action_model.actions())
         self.action_model.move_action(index, target_index)
-        self.timeline.remap_after_move(index, target_index)
         self.active_index = target_index
         self.refresh()
-        self.timeline.set_active(target_index)
-        self.timeline.restore_scroll_position(scroll_position)
-        self.timeline.flash_drop(target_index)
         self.update_statistics(immediate=True)
         self.save_session()
         self.status("Moved action")
@@ -1444,201 +1265,6 @@ class MainWindow(QMainWindow):
         self.status("Pasted action")
 
     # ═══════════════════════════════════════════════════════
-    #  RUN VALIDATION / PRE-FLIGHT CHECK
-    # ═══════════════════════════════════════════════════════
-
-    def _known_key_names(self):
-        """Return a conservative key-name set for pre-flight validation.
-
-        This intentionally mirrors the Windows input backend without importing
-        it here. Importing the backend can fail on non-Windows development
-        machines because it touches ctypes.windll during construction.
-        """
-        names = {
-            "enter", "return", "esc", "escape", "space", "backspace", "tab",
-            "delete", "del", "insert", "ins", "home", "end", "pageup", "prior",
-            "pagedown", "next", "left", "up", "right", "down", "shift", "ctrl",
-            "control", "alt", "menu", "capslock", "numlock", "scrolllock",
-            "print", "printscreen", "prtsc", "pause", "win", "command",
-            "multiply", "add", "separator", "subtract", "decimal", "divide",
-            "[scroll_up]", "[scroll_down]",
-        }
-        names.update({f"f{i}" for i in range(1, 25)})
-        names.update({f"num{i}" for i in range(10)})
-        names.update({str(i) for i in range(10)})
-        names.update({chr(c) for c in range(ord("a"), ord("z") + 1)})
-        return names
-
-    def _validate_key_name(self, key: str):
-        key = (key or "").strip().lower()
-        if not key:
-            return False, "empty key"
-        known = self._known_key_names()
-        if key in known:
-            return True, ""
-        if len(key) == 1 and key.isprintable():
-            return True, ""
-        if "+" in key:
-            parts = [p.strip().lower() for p in key.split("+") if p.strip()]
-            if not parts:
-                return False, "empty combo"
-            bad = [p for p in parts if not (p in known or (len(p) == 1 and p.isprintable()))]
-            if bad:
-                return False, "unknown combo key(s): " + ", ".join(bad)
-            return True, ""
-        return False, f"unknown key '{key}'"
-
-    def _format_preflight_report(self, errors, warnings):
-        lines = []
-        if errors:
-            lines.append(f"Errors ({len(errors)}):")
-            lines.extend(f"  • {x}" for x in errors[:20])
-            if len(errors) > 20:
-                lines.append(f"  • …and {len(errors) - 20} more")
-        if warnings:
-            if lines:
-                lines.append("")
-            lines.append(f"Warnings ({len(warnings)}):")
-            lines.extend(f"  • {x}" for x in warnings[:20])
-            if len(warnings) > 20:
-                lines.append(f"  • …and {len(warnings) - 20} more")
-        if not lines:
-            lines.append("Ready to run — no validation issues found.")
-        return "\n".join(lines)
-
-    def run_preflight_check(self, show_success=True, allow_warning_prompt=True):
-        """Validate the visible timeline before playback.
-
-        Returns True when playback may continue. Errors block playback;
-        warnings are shown but can be continued through.
-        """
-        actions = self.action_model.actions()
-        errors = []
-        warnings = []
-        total = len(actions)
-
-        if total <= 0:
-            errors.append("Timeline is empty.")
-
-        for idx, action in enumerate(actions, start=1):
-            prefix = f"Row {idx}"
-            try:
-                duration = float(getattr(action, "duration", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                duration = -1.0
-            if duration < 0:
-                errors.append(f"{prefix}: duration cannot be negative.")
-            elif duration > 3600:
-                warnings.append(f"{prefix}: duration is over 1 hour; confirm this is intentional.")
-
-            try:
-                repeat = int(getattr(action, "repeat_count", 1) or 1)
-            except (TypeError, ValueError):
-                repeat = 0
-            if repeat < 1:
-                errors.append(f"{prefix}: repeat count must be at least 1.")
-            elif repeat > 1000:
-                warnings.append(f"{prefix}: repeat count is very high ({repeat}).")
-
-            kind = getattr(action, "action_type", "key") or "key"
-
-            if action.is_pause():
-                if duration <= 0:
-                    warnings.append(f"{prefix}: delay duration is 0 seconds.")
-                continue
-
-            if action.is_click():
-                button = (getattr(action, "click_button", "left") or "left").lower()
-                mode = (getattr(action, "click_coord_mode", "absolute") or "absolute").lower()
-                if button not in {"left", "right", "middle", "double"}:
-                    errors.append(f"{prefix}: unsupported click button '{button}'.")
-                if mode not in {"absolute", "foreground", "offset", "current"}:
-                    errors.append(f"{prefix}: unsupported click coordinate mode '{mode}'.")
-                if int(getattr(action, "click_rand_radius", 0) or 0) < 0:
-                    errors.append(f"{prefix}: click random radius cannot be negative.")
-                continue
-
-            if action.is_image():
-                if not (getattr(action, "image_data", "") or getattr(action, "extra_images", "")):
-                    errors.append(f"{prefix}: image action has no template data.")
-                try:
-                    sim = float(getattr(action, "similarity", 0.95) or 0.95)
-                except (TypeError, ValueError):
-                    sim = -1.0
-                if not (0.0 < sim <= 1.0):
-                    errors.append(f"{prefix}: image similarity must be between 0 and 1.")
-                elif sim < 0.50:
-                    warnings.append(f"{prefix}: image similarity is low ({sim:.2f}).")
-                try:
-                    wait = float(getattr(action, "wait_timeout", 0.0) or 0.0)
-                except (TypeError, ValueError):
-                    wait = -1.0
-                if wait < 0:
-                    errors.append(f"{prefix}: image wait timeout cannot be negative.")
-                if getattr(action, "on_found_action", "continue") == "press_key":
-                    ok, reason = self._validate_key_name(getattr(action, "on_found_key", ""))
-                    if not ok:
-                        errors.append(f"{prefix}: image on-found key is invalid: {reason}.")
-                for attr, label in (("jump_to_on_found", "found jump"), ("jump_to_on_not_found", "not-found jump")):
-                    target = int(getattr(action, attr, -1) or -1)
-                    if target >= total:
-                        errors.append(f"{prefix}: {label} target {target + 1} is outside the timeline.")
-                continue
-
-            if action.is_condition():
-                true_target = int(getattr(action, "condition_jump_true", -1) or -1)
-                false_target = int(getattr(action, "condition_jump_false", -1) or -1)
-                if true_target >= total:
-                    errors.append(f"{prefix}: true jump target {true_target + 1} is outside the timeline.")
-                if false_target >= total:
-                    errors.append(f"{prefix}: false jump target {false_target + 1} is outside the timeline.")
-                ctype = getattr(action, "condition_type", "none") or "none"
-                if ctype == "none":
-                    warnings.append(f"{prefix}: condition has no condition type selected.")
-                continue
-
-            if kind == "key":
-                ok, reason = self._validate_key_name(getattr(action, "key", ""))
-                if not ok:
-                    errors.append(f"{prefix}: {reason}.")
-            else:
-                warnings.append(f"{prefix}: unknown action type '{kind}' — engine may skip or treat it as a key.")
-
-        if self.sim_check.isChecked():
-            warnings.append("Simulation mode is enabled; actions will animate/log but not deploy to Windows.")
-        if self.focus_check.isChecked() and not getattr(self.engine, "_focus_hwnd", None):
-            warnings.append("Focus lock is enabled but no target window is currently captured.")
-
-        self._last_preflight = {"errors": errors, "warnings": warnings}
-        self._diag(f"[CHECK] Pre-flight complete: {len(errors)} error(s), {len(warnings)} warning(s)")
-        for item in errors[:12]:
-            self._diag(f"[CHECK][ERROR] {item}")
-        for item in warnings[:12]:
-            self._diag(f"[CHECK][WARN] {item}")
-
-        if errors:
-            QMessageBox.critical(self, "MacroForge pre-flight check", self._format_preflight_report(errors, warnings))
-            self.status(f"Pre-flight blocked start: {len(errors)} error(s)")
-            return False
-
-        if warnings and allow_warning_prompt:
-            reply = QMessageBox.warning(
-                self,
-                "MacroForge pre-flight warnings",
-                self._format_preflight_report(errors, warnings) + "\n\nContinue anyway?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                self.status("Start cancelled by pre-flight warnings")
-                return False
-
-        if show_success:
-            QMessageBox.information(self, "MacroForge pre-flight check", self._format_preflight_report(errors, warnings))
-        self.status("Pre-flight check passed" if not warnings else f"Pre-flight passed with {len(warnings)} warning(s)")
-        return True
-
-    # ═══════════════════════════════════════════════════════
     #  PLAYBACK
     # ═══════════════════════════════════════════════════════
 
@@ -1652,16 +1278,13 @@ class MainWindow(QMainWindow):
         if self.engine.running:
             self.status("Already running")
             return
-        self._single_test_active = False
-        self._single_test_index = -1
-        self._run_from_index = 0
         # Always sync the execution engine from the visible timeline/model
         # immediately before playback. This prevents stale engine lists from
         # looping visually while not deploying the edited/current actions.
         self.engine.actions = self.action_model.actions()
-        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
+        if not self.engine.actions:
+            self.status("No actions to play")
             return
-        self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
         self.actions_played = 0
         self.session_elapsed_time = 0.0
         self.session_start_time = time.time()
@@ -1672,7 +1295,6 @@ class MainWindow(QMainWindow):
         self.status_text.setText("Playing")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
         self.engine.infinite_loop = self.inf_check.isChecked()
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
@@ -1685,10 +1307,6 @@ class MainWindow(QMainWindow):
         self.engine.start()
 
     def stop(self):
-        self._diag("[STOP] Stop requested")
-        self._single_test_active = False
-        self._single_test_index = -1
-        self._run_from_index = 0
         self.engine.stop()
         self.timeline.clear_playing()
         self.start_btn.setEnabled(True)
@@ -1702,28 +1320,18 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
 
     def _status_cb(self, msg):
-        self._diag(f"[STATUS] {msg}")
         self._status_msg.emit(msg)
 
     def _play_cb(self, idx, dur):
         self._play_action.emit(idx, dur)
 
     def _do_play_cb(self, idx, dur):
-        display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
-        self.playing_index = display_idx
+        self.playing_index = idx
         self.actions_played += 1
         speed = max(self.engine.speed_multiplier, 0.01)
         adjusted_dur = dur / speed
-        self.timeline.set_playing(display_idx, adjusted_dur)
-        self._diag(f"[PLAY] Timeline row {display_idx + 1} active for ~{adjusted_dur:.2f}s")
+        self.timeline.set_playing(idx, adjusted_dur)
         self.update_statistics()
-
-    def _image_match_cb(self, idx, state):
-        self._image_match_state.emit(idx, state)
-
-    def _do_image_match_state(self, idx, state):
-        display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
-        self.timeline.set_image_state(display_idx, state)
 
     def _pause_cb(self, paused):
         self._pause_state.emit(paused)
@@ -1743,7 +1351,6 @@ class MainWindow(QMainWindow):
         self._complete.emit()
 
     def _do_complete_cb(self):
-        was_single_test = self._single_test_active
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
@@ -1752,11 +1359,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(100)
         self.progress_label.setText("100%")
         self.status_dot.set_color(COLORS["text_dark"])
-        self.status_text.setText("Test done" if was_single_test else "Finished")
-        self._diag("[TEST] Selected action test complete" if was_single_test else "[PLAY] Macro complete")
-        self._single_test_active = False
-        self._single_test_index = -1
-        self._run_from_index = 0
+        self.status_text.setText("Finished")
         if self.session_start_time:
             self.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
@@ -1777,205 +1380,6 @@ class MainWindow(QMainWindow):
         pct = max(0.0, min(100.0, pct))
         self.progress_bar.setValue(round(pct))
         self.progress_label.setText(f"{pct:.0f}%" if pct >= 10 else f"{pct:.1f}%")
-
-    # ═══════════════════════════════════════════════════════
-    #  PLAYBACK DIAGNOSTICS / SINGLE ACTION TEST
-    # ═══════════════════════════════════════════════════════
-
-    def _action_diag_summary(self, action):
-        try:
-            if action is None:
-                return "Unknown action"
-            kind = getattr(action, "action_type", "key") or "key"
-            label = (getattr(action, "label", "") or "").strip()
-            prefix = f"{kind.upper()}"
-            if action.is_pause():
-                return f"DELAY {float(getattr(action, 'duration', 0.0) or 0.0):.2f}s" + (f" · {label}" if label else "")
-            if action.is_click():
-                return f"CLICK {getattr(action, 'click_button', 'left')} @ {getattr(action, 'click_x', 0)},{getattr(action, 'click_y', 0)}" + (f" · {label}" if label else "")
-            if action.is_image():
-                return f"IMAGE Template.png timeout={float(getattr(action, 'wait_timeout', 0.0) or 0.0):.1f}s" + (f" · {label}" if label else "")
-            if action.is_condition():
-                return f"CONDITION {getattr(action, 'condition_type', 'none')}" + (f" · {label}" if label else "")
-            key = getattr(action, "key", "") or "Unknown"
-            hold = " hold" if bool(getattr(action, "hold_mode", False)) else ""
-            return f"KEY {key}{hold} {float(getattr(action, 'duration', 0.0) or 0.0):.2f}s" + (f" · {label}" if label else "")
-        except Exception as e:
-            return f"Action summary failed: {e}"
-
-    def _diag(self, message):
-        try:
-            stamp = time.strftime("%H:%M:%S")
-            self._diag_msg.emit(f"{stamp} {message}")
-        except Exception:
-            pass
-
-    def _append_diagnostic(self, line):
-        self._diag_lines.append(line)
-        max_lines = int(getattr(self, "_diag_max_lines", 10000) or 10000)
-        if len(self._diag_lines) > max_lines:
-            removed = len(self._diag_lines) - max_lines
-            del self._diag_lines[:removed]
-            self._diag_prune_count += removed
-            # Re-seed the visible diagnostics window after pruning so the
-            # widget cannot grow forever either.
-            if self._diag_edit is not None:
-                self._diag_edit.setPlainText("\n".join(self._diag_lines))
-        try:
-            logger.info(line)
-        except Exception:
-            pass
-        if self._diag_edit is not None:
-            self._diag_edit.appendPlainText(line)
-            sb = self._diag_edit.verticalScrollBar()
-            sb.setValue(sb.maximum())
-
-    def _before_action_diag(self, action):
-        self._diag(f"[ACTION] Preparing {self._action_diag_summary(action)}")
-
-    def _after_action_diag(self, action):
-        sim = " simulated" if getattr(self.engine, "simulation_mode", False) else " deployed"
-        self._diag(f"[ACTION] {self._action_diag_summary(action)}{sim}")
-
-    def open_playback_diagnostics(self):
-        if self._diag_dialog is not None and self._diag_dialog.isVisible():
-            self._diag_dialog.raise_()
-            self._diag_dialog.activateWindow()
-            return
-
-        C = COLORS
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Playback Diagnostics")
-        dlg.resize(620, 420)
-        dlg.setStyleSheet(
-            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
-            f"QPlainTextEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 8px; font-family: Consolas, monospace; font-size: 11px; }}"
-            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; "
-            f"border-radius: 7px; padding: 7px 12px; }}"
-            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
-        )
-        lo = QVBoxLayout(dlg)
-        lo.setContentsMargins(12, 12, 12, 12)
-        lo.setSpacing(8)
-        title = QLabel("Playback Diagnostics")
-        title.setStyleSheet(f"color: {C['text']}; font-size: 15px; font-weight: 800;")
-        lo.addWidget(title)
-        hint = QLabel("Shows engine status, active rows, deployment path, and pre-flight checks. Keeps the newest 10,000 lines.")
-        hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
-        lo.addWidget(hint)
-        edit = QPlainTextEdit()
-        edit.setReadOnly(True)
-        edit.setPlainText("\n".join(self._diag_lines))
-        lo.addWidget(edit, stretch=1)
-        btns = QHBoxLayout()
-        btns.addStretch()
-        clear_btn = QPushButton("Clear")
-        close_btn = QPushButton("Close")
-        clear_btn.clicked.connect(lambda: (self._diag_lines.clear(), edit.clear()))
-        close_btn.clicked.connect(dlg.close)
-        btns.addWidget(clear_btn)
-        btns.addWidget(close_btn)
-        lo.addLayout(btns)
-        self._diag_dialog = dlg
-        self._diag_edit = edit
-        dlg.finished.connect(lambda _=0: setattr(self, "_diag_edit", None))
-        dlg.show()
-
-    def test_selected_action(self):
-        if self.engine.running:
-            self.status("Stop playback before testing a single action")
-            return
-        idx = self.active_index
-        if idx < 0:
-            try:
-                cur = self.timeline.currentIndex()
-                idx = cur.row() if cur and cur.isValid() else -1
-            except Exception:
-                idx = -1
-        if idx < 0 or idx >= self.action_model.rowCount():
-            self.status("Select an action to test")
-            return
-
-        action = deepcopy(self.action_model.get(idx))
-        self._single_test_active = True
-        self._single_test_index = idx
-        self._run_from_index = 0
-        self.actions_played = 0
-        self.session_elapsed_time = 0.0
-        self.session_start_time = time.time()
-        self.progress_bar.setValue(0)
-        self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
-        self.start_btn.setEnabled(False)
-        self.pause_btn.setEnabled(True)
-        self.stop_btn.setEnabled(True)
-        self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText("Testing")
-
-        self.engine.actions = [action]
-        self.engine.infinite_loop = False
-        self.engine.simulation_mode = self.sim_check.isChecked()
-        self.engine.human_curve = self.human_check.isChecked()
-        self.engine.focus_lock = self.focus_check.isChecked()
-        self.engine.loops = 1
-        self.engine.loops_completed_count = 0
-        try:
-            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
-        except ValueError:
-            self.engine.speed = 1.0
-
-        self._diag(f"[TEST] Testing row {idx + 1}: {self._action_diag_summary(action)} sim={self.engine.simulation_mode}")
-        self.engine.start()
-
-    def test_from_selected_row(self):
-        if self.engine.running:
-            self.status("Stop playback before testing from a selected row")
-            return
-        idx = self.active_index
-        if idx < 0:
-            try:
-                cur = self.timeline.currentIndex()
-                idx = cur.row() if cur and cur.isValid() else -1
-            except Exception:
-                idx = -1
-        if idx < 0 or idx >= self.action_model.rowCount():
-            self.status("Select a starting row to test")
-            return
-
-        self._single_test_active = False
-        self._single_test_index = -1
-        self._run_from_index = idx
-        self.engine.actions = self.action_model.actions()[idx:]
-        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
-            self._run_from_index = 0
-            return
-
-        self.actions_played = 0
-        self.session_elapsed_time = 0.0
-        self.session_start_time = time.time()
-        self.progress_bar.setValue(0)
-        self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
-        self.start_btn.setEnabled(False)
-        self.pause_btn.setEnabled(True)
-        self.stop_btn.setEnabled(True)
-        self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText(f"Testing row {idx + 1}+")
-
-        self.engine.infinite_loop = False
-        self.engine.simulation_mode = self.sim_check.isChecked()
-        self.engine.human_curve = self.human_check.isChecked()
-        self.engine.focus_lock = self.focus_check.isChecked()
-        self.engine.loops = 1
-        self.engine.loops_completed_count = 0
-        try:
-            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
-        except ValueError:
-            self.engine.speed = 1.0
-
-        self._diag(f"[TEST] Testing from row {idx + 1}: {len(self.engine.actions)} actions")
-        self.engine.start()
 
     # ═══════════════════════════════════════════════════════
     #  RECORDER
@@ -2371,11 +1775,6 @@ class MainWindow(QMainWindow):
         m.addAction("Export CSV…", self.export_csv)
         m.addAction("Import CSV…", self.import_csv)
         m.addSeparator()
-        m.addAction("Run pre-flight check…", lambda: self.run_preflight_check(show_success=True, allow_warning_prompt=False))
-        m.addAction("Test selected action", self.test_selected_action)
-        m.addAction("Test from selected row     Ctrl+Enter", self.test_from_selected_row)
-        m.addAction("Playback diagnostics…", self.open_playback_diagnostics)
-        m.addSeparator()
         m.addAction("Reset statistics", self.reset_stats)
         m.addAction("Clear all actions", self.clear_all)
         m.addSeparator()
@@ -2652,60 +2051,11 @@ class MainWindow(QMainWindow):
 
     def status(self, msg):
         # Thread-safe: always marshal Qt widget access to main thread
-        def _update():
-            self.status_text.setText(msg)
-            # Update status icon based on state
-            msg_lower = msg.lower()
-            C = COLORS
-            if "ready" in msg_lower or "idle" in msg_lower:
-                self.status_icon.setPixmap(icon("check", 16, C["success"]))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["success"], glow=False)
-            elif "playing" in msg_lower or "running" in msg_lower:
-                self.status_icon.setPixmap(icon("play", 16, C["playing"]))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["playing"], glow=True)
-            elif "paused" in msg_lower:
-                self.status_icon.setPixmap(icon("pause", 16, C["warning"]))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["warning"], glow=False)
-            elif "record" in msg_lower:
-                self.status_icon.setPixmap(icon("record", 16, C["error"]))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["error"], glow=True)
-            elif "error" in msg_lower or "failed" in msg_lower:
-                self.status_icon.setPixmap(icon("cross", 16, C["error"]))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["error"], glow=True)
-            elif "saved" in msg_lower or "imported" in msg_lower or "applied" in msg_lower:
-                self.status_icon.setPixmap(icon("save", 16, C["accent"]))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["accent"], glow=False)
-            else:
-                self.status_icon.setVisible(False)
-                self.status_dot.set_color(C["text_dim"], glow=False)
-        QTimer.singleShot(0, _update)
+        QTimer.singleShot(0, lambda: self.status_text.setText(msg))
         logger.info(msg)
 
     def _invalidate_seq_dur(self):
         self._seq_dur_cache = sum(a.duration for a in self.engine.actions)
-        self._update_macro_summary()
-
-    def _update_macro_summary(self):
-        if not hasattr(self, "macro_summary"):
-            return
-        actions = self.action_model.actions()
-        image_checks = sum(1 for action in actions if action.is_image())
-        duration = sum(float(getattr(action, "duration", 0.0) or 0.0) for action in actions)
-        duration_text = f"{duration:.0f}s" if abs(duration - round(duration)) < 0.1 else f"{duration:.1f}s"
-        check_label = "image check" if image_checks == 1 else "image checks"
-        self.macro_summary.setText(f"{len(actions)} actions · {image_checks} {check_label} · ~{duration_text}")
-
-    def _set_playback_collapsed(self, collapsed):
-        collapsed = bool(collapsed)
-        self.playback_dock.setVisible(not collapsed)
-        self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(31 if collapsed else 106)
 
     @staticmethod
     def _format_hms(seconds: float) -> str:
@@ -2961,17 +2311,13 @@ class MainWindow(QMainWindow):
         if not self.history.can_undo():
             self.status("Nothing to undo")
             return
-        result = self.history.undo(self.engine.actions, self._timeline_history_state())
+        result = self.history.undo(self.engine.actions)
         if result is None:
             return
-        actions, timeline_state = result
-        self.action_model.set_actions(actions)
+        self.action_model.set_actions(result)
         self.engine.actions = self.action_model.actions()
-        self._restore_timeline_history_state(timeline_state)
+        self.active_index = -1
         self.refresh()
-        if 0 <= self.active_index < self.action_model.rowCount():
-            self.timeline.ensure_visible_if_needed(self.active_index)
-            self.timeline.flash_drop(self.active_index)
         self.update_statistics()
         self.save_session()
         self.status("Undone")
@@ -2980,47 +2326,16 @@ class MainWindow(QMainWindow):
         if not self.history.can_redo():
             self.status("Nothing to redo")
             return
-        result = self.history.redo(self.engine.actions, self._timeline_history_state())
+        result = self.history.redo(self.engine.actions)
         if result is None:
             return
-        actions, timeline_state = result
-        self.action_model.set_actions(actions)
+        self.action_model.set_actions(result)
         self.engine.actions = self.action_model.actions()
-        self._restore_timeline_history_state(timeline_state)
+        self.active_index = -1
         self.refresh()
-        if 0 <= self.active_index < self.action_model.rowCount():
-            self.timeline.ensure_visible_if_needed(self.active_index)
-            self.timeline.flash_drop(self.active_index)
         self.update_statistics()
         self.save_session()
         self.status("Redone")
-
-    def _timeline_history_state(self):
-        return {
-            "active_index": self.active_index,
-            "selected_indices": sorted(self.timeline.selected_indices),
-            "next_index": self.timeline.next_index,
-            "image_states": dict(self.timeline.image_states),
-            "scroll_position": self.timeline.scroll_position(),
-        }
-
-    def _restore_timeline_history_state(self, state):
-        if not state:
-            self.active_index = -1
-            self.timeline.set_active(-1)
-            return
-        self.active_index = int(state.get("active_index", -1))
-        self.timeline.image_states = dict(state.get("image_states", {}))
-        self.timeline.next_index = int(state.get("next_index", -1))
-        scroll_position = int(state.get("scroll_position", 0))
-        selected = set(state.get("selected_indices", []))
-        if 0 <= self.active_index < self.action_model.rowCount():
-            self.timeline.set_active(self.active_index)
-        else:
-            self.timeline.set_active(-1)
-            self.timeline.selected_indices = selected
-        self.timeline.restore_scroll_position(scroll_position)
-        self.timeline.viewport().update()
 
 
 class HistoryManager:
@@ -3030,17 +2345,9 @@ class HistoryManager:
         self._redo = []
         self._max = max_size
 
-    def _snapshot(self, actions, timeline_state=None):
-        return {
-            "actions": [a.to_dict() for a in actions],
-            "timeline_state": deepcopy(timeline_state) if timeline_state is not None else None,
-        }
-
-    def _restore(self, snapshot):
-        return [Action.from_dict(d) for d in snapshot["actions"]], deepcopy(snapshot["timeline_state"])
-
-    def push(self, actions, timeline_state=None):
-        self._undo.append(self._snapshot(actions, timeline_state))
+    def push(self, actions):
+        import copy
+        self._undo.append([a.to_dict() for a in actions])
         if len(self._undo) > self._max:
             self._undo.pop(0)
         self._redo.clear()
@@ -3051,14 +2358,16 @@ class HistoryManager:
     def can_redo(self):
         return bool(self._redo)
 
-    def undo(self, current_actions, current_timeline_state=None):
+    def undo(self, current_actions):
         if not self._undo:
             return None
-        self._redo.append(self._snapshot(current_actions, current_timeline_state))
-        return self._restore(self._undo.pop())
+        self._redo.append([a.to_dict() for a in current_actions])
+        data = self._undo.pop()
+        return [Action.from_dict(d) for d in data]
 
-    def redo(self, current_actions, current_timeline_state=None):
+    def redo(self, current_actions):
         if not self._redo:
             return None
-        self._undo.append(self._snapshot(current_actions, current_timeline_state))
-        return self._restore(self._redo.pop())
+        self._undo.append([a.to_dict() for a in current_actions])
+        data = self._redo.pop()
+        return [Action.from_dict(d) for d in data]

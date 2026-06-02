@@ -1,5 +1,6 @@
 {
-  "version": "3.1.0",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.0/MacroForge-v3.1.0.zip",
-  "notes": "v3.1.0: Timeline interaction stability release - adds drag-and-drop sorting with insertion markers, edge auto-scroll, row lift feedback, playback sorting locks, live action and image-wait countdowns, preserved image badges, scroll position, selection, and next-action state across sorting and undo/redo, compact playback panel refinements, and expanded regression coverage."
+  "version": "3.1.1",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.1/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.1/MacroForge-v3.1.1.zip",
+  "notes": "v3.1.1: UI polish pass - centered action row text and elements, status indicator moved to center with larger font and contextual icons, check update and menu buttons upgraded and moved to toolbar, recorder panel buttons restyled to match header, inspector form fields, labels, and toolbar buttons all reworked with consistent modern styling."
 }
