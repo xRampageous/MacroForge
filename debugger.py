@@ -14,6 +14,10 @@ from PyQt6.QtGui import QFont, QColor
 from ui.theme import COLORS
 
 
+MAX_LOG_LINES = 10000
+LOG_TRIM_CHECK_INTERVAL = 250
+
+
 class DebugLogger:
     """Singleton file logger.  Writes to <app_dir>/debug.log"""
 
@@ -39,18 +43,11 @@ class DebugLogger:
             log_dir = base
 
         self.log_path = os.path.join(log_dir, "debug.log")
+        self.max_log_lines = MAX_LOG_LINES
+        self._write_count = 0
         self._entries = []          # [(ts, level, msg), ...]
         self._listeners = []        # callables(msg)
-        # Truncate existing log file if too large
-        if os.path.exists(self.log_path):
-            try:
-                with open(self.log_path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                if len(lines) > 10000:
-                    with open(self.log_path, "w", encoding="utf-8") as f:
-                        f.writelines(lines[-10000:])
-            except Exception:
-                pass
+        self._trim_log_file(force=True)
         self._write("=" * 60)
         self._write(f"MacroForge Debug Log – {datetime.now().isoformat()}")
         self._write("=" * 60)
@@ -93,6 +90,15 @@ class DebugLogger:
         except ValueError:
             pass
 
+    def clear(self):
+        """Clear in-memory and on-disk debug log."""
+        self._entries.clear()
+        try:
+            with open(self.log_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+
     # ── internals ───────────────────────────────────────────
 
     @staticmethod
@@ -109,7 +115,9 @@ class DebugLogger:
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         line = f"[{ts}] {level:5s} | {msg}"
         self._entries.append((ts, level, msg))
-        self._write(line)
+        if len(self._entries) > self.max_log_lines:
+            self._entries = self._entries[-self.max_log_lines:]
+        self._write_line(line)
         for cb in self._listeners:
             try:
                 cb(line)
@@ -117,23 +125,41 @@ class DebugLogger:
                 pass
 
     def _write(self, text: str):
+        """Write a plain informational line and keep it in the bounded buffer."""
+        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        self._entries.append((ts, "INFO", text))
+        if len(self._entries) > self.max_log_lines:
+            self._entries = self._entries[-self.max_log_lines:]
+        self._write_line(text)
+
+    def _write_line(self, line: str):
+        """Append one line to disk and periodically trim the file to max_log_lines."""
         try:
-            line = text + "\n"
-            self._entries.append((datetime.now().strftime("%H:%M:%S.%f")[:-3], "INFO", text))
-            # Keep only last 10k lines in memory and file
-            if len(self._entries) > 10000:
-                self._entries = self._entries[-10000:]
-                # Rewrite file with last 10k lines
-                with open(self.log_path, "w", encoding="utf-8") as f:
-                    for ts, level, msg in self._entries:
-                        f.write(f"[{ts}] {level:5s} | {msg}\n")
-                    f.flush()
-                    os.fsync(f.fileno())
-            else:
-                with open(self.log_path, "a", encoding="utf-8") as f:
-                    f.write(line)
-                    f.flush()
-                    os.fsync(f.fileno())
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            self._write_count += 1
+            if self._write_count >= LOG_TRIM_CHECK_INTERVAL:
+                self._write_count = 0
+                self._trim_log_file(force=False)
+        except Exception:
+            pass
+
+    def _trim_log_file(self, force=False):
+        """Keep the debug log from growing indefinitely.
+
+        The newest 10,000 lines are preserved. Older lines are discarded.
+        """
+        try:
+            if not os.path.exists(self.log_path):
+                return
+            with open(self.log_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            if force or len(lines) > self.max_log_lines:
+                if len(lines) > self.max_log_lines:
+                    with open(self.log_path, "w", encoding="utf-8") as f:
+                        f.writelines(lines[-self.max_log_lines:])
         except Exception:
             pass
 
@@ -235,6 +261,7 @@ class DebugViewer(QDialog):
             sb.setValue(sb.maximum())
 
     def _clear(self):
+        logger.clear()
         self.text.clear()
 
     def _open_log(self):

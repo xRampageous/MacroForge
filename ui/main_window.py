@@ -142,10 +142,13 @@ class MainWindow(QMainWindow):
         self.session_start_time = None
         self._seq_dur_cache = 0.0
         self._diag_lines = []
+        self._diag_max_lines = 10000
+        self._diag_prune_count = 0
         self._diag_dialog = None
         self._diag_edit = None
         self._single_test_active = False
         self._single_test_index = -1
+        self._last_preflight = {"errors": [], "warnings": []}
 
         # Recorder state
         self._recorder = {
@@ -1275,6 +1278,201 @@ class MainWindow(QMainWindow):
         self.status("Pasted action")
 
     # ═══════════════════════════════════════════════════════
+    #  RUN VALIDATION / PRE-FLIGHT CHECK
+    # ═══════════════════════════════════════════════════════
+
+    def _known_key_names(self):
+        """Return a conservative key-name set for pre-flight validation.
+
+        This intentionally mirrors the Windows input backend without importing
+        it here. Importing the backend can fail on non-Windows development
+        machines because it touches ctypes.windll during construction.
+        """
+        names = {
+            "enter", "return", "esc", "escape", "space", "backspace", "tab",
+            "delete", "del", "insert", "ins", "home", "end", "pageup", "prior",
+            "pagedown", "next", "left", "up", "right", "down", "shift", "ctrl",
+            "control", "alt", "menu", "capslock", "numlock", "scrolllock",
+            "print", "printscreen", "prtsc", "pause", "win", "command",
+            "multiply", "add", "separator", "subtract", "decimal", "divide",
+            "[scroll_up]", "[scroll_down]",
+        }
+        names.update({f"f{i}" for i in range(1, 25)})
+        names.update({f"num{i}" for i in range(10)})
+        names.update({str(i) for i in range(10)})
+        names.update({chr(c) for c in range(ord("a"), ord("z") + 1)})
+        return names
+
+    def _validate_key_name(self, key: str):
+        key = (key or "").strip().lower()
+        if not key:
+            return False, "empty key"
+        known = self._known_key_names()
+        if key in known:
+            return True, ""
+        if len(key) == 1 and key.isprintable():
+            return True, ""
+        if "+" in key:
+            parts = [p.strip().lower() for p in key.split("+") if p.strip()]
+            if not parts:
+                return False, "empty combo"
+            bad = [p for p in parts if not (p in known or (len(p) == 1 and p.isprintable()))]
+            if bad:
+                return False, "unknown combo key(s): " + ", ".join(bad)
+            return True, ""
+        return False, f"unknown key '{key}'"
+
+    def _format_preflight_report(self, errors, warnings):
+        lines = []
+        if errors:
+            lines.append(f"Errors ({len(errors)}):")
+            lines.extend(f"  • {x}" for x in errors[:20])
+            if len(errors) > 20:
+                lines.append(f"  • …and {len(errors) - 20} more")
+        if warnings:
+            if lines:
+                lines.append("")
+            lines.append(f"Warnings ({len(warnings)}):")
+            lines.extend(f"  • {x}" for x in warnings[:20])
+            if len(warnings) > 20:
+                lines.append(f"  • …and {len(warnings) - 20} more")
+        if not lines:
+            lines.append("Ready to run — no validation issues found.")
+        return "\n".join(lines)
+
+    def run_preflight_check(self, show_success=True, allow_warning_prompt=True):
+        """Validate the visible timeline before playback.
+
+        Returns True when playback may continue. Errors block playback;
+        warnings are shown but can be continued through.
+        """
+        actions = self.action_model.actions()
+        errors = []
+        warnings = []
+        total = len(actions)
+
+        if total <= 0:
+            errors.append("Timeline is empty.")
+
+        for idx, action in enumerate(actions, start=1):
+            prefix = f"Row {idx}"
+            try:
+                duration = float(getattr(action, "duration", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                duration = -1.0
+            if duration < 0:
+                errors.append(f"{prefix}: duration cannot be negative.")
+            elif duration > 3600:
+                warnings.append(f"{prefix}: duration is over 1 hour; confirm this is intentional.")
+
+            try:
+                repeat = int(getattr(action, "repeat_count", 1) or 1)
+            except (TypeError, ValueError):
+                repeat = 0
+            if repeat < 1:
+                errors.append(f"{prefix}: repeat count must be at least 1.")
+            elif repeat > 1000:
+                warnings.append(f"{prefix}: repeat count is very high ({repeat}).")
+
+            kind = getattr(action, "action_type", "key") or "key"
+
+            if action.is_pause():
+                if duration <= 0:
+                    warnings.append(f"{prefix}: delay duration is 0 seconds.")
+                continue
+
+            if action.is_click():
+                button = (getattr(action, "click_button", "left") or "left").lower()
+                mode = (getattr(action, "click_coord_mode", "absolute") or "absolute").lower()
+                if button not in {"left", "right", "middle", "double"}:
+                    errors.append(f"{prefix}: unsupported click button '{button}'.")
+                if mode not in {"absolute", "foreground", "offset", "current"}:
+                    errors.append(f"{prefix}: unsupported click coordinate mode '{mode}'.")
+                if int(getattr(action, "click_rand_radius", 0) or 0) < 0:
+                    errors.append(f"{prefix}: click random radius cannot be negative.")
+                continue
+
+            if action.is_image():
+                if not (getattr(action, "image_data", "") or getattr(action, "extra_images", "")):
+                    errors.append(f"{prefix}: image action has no template data.")
+                try:
+                    sim = float(getattr(action, "similarity", 0.95) or 0.95)
+                except (TypeError, ValueError):
+                    sim = -1.0
+                if not (0.0 < sim <= 1.0):
+                    errors.append(f"{prefix}: image similarity must be between 0 and 1.")
+                elif sim < 0.50:
+                    warnings.append(f"{prefix}: image similarity is low ({sim:.2f}).")
+                try:
+                    wait = float(getattr(action, "wait_timeout", 0.0) or 0.0)
+                except (TypeError, ValueError):
+                    wait = -1.0
+                if wait < 0:
+                    errors.append(f"{prefix}: image wait timeout cannot be negative.")
+                if getattr(action, "on_found_action", "continue") == "press_key":
+                    ok, reason = self._validate_key_name(getattr(action, "on_found_key", ""))
+                    if not ok:
+                        errors.append(f"{prefix}: image on-found key is invalid: {reason}.")
+                for attr, label in (("jump_to_on_found", "found jump"), ("jump_to_on_not_found", "not-found jump")):
+                    target = int(getattr(action, attr, -1) or -1)
+                    if target >= total:
+                        errors.append(f"{prefix}: {label} target {target + 1} is outside the timeline.")
+                continue
+
+            if action.is_condition():
+                true_target = int(getattr(action, "condition_jump_true", -1) or -1)
+                false_target = int(getattr(action, "condition_jump_false", -1) or -1)
+                if true_target >= total:
+                    errors.append(f"{prefix}: true jump target {true_target + 1} is outside the timeline.")
+                if false_target >= total:
+                    errors.append(f"{prefix}: false jump target {false_target + 1} is outside the timeline.")
+                ctype = getattr(action, "condition_type", "none") or "none"
+                if ctype == "none":
+                    warnings.append(f"{prefix}: condition has no condition type selected.")
+                continue
+
+            if kind == "key":
+                ok, reason = self._validate_key_name(getattr(action, "key", ""))
+                if not ok:
+                    errors.append(f"{prefix}: {reason}.")
+            else:
+                warnings.append(f"{prefix}: unknown action type '{kind}' — engine may skip or treat it as a key.")
+
+        if self.sim_check.isChecked():
+            warnings.append("Simulation mode is enabled; actions will animate/log but not deploy to Windows.")
+        if self.focus_check.isChecked() and not getattr(self.engine, "_focus_hwnd", None):
+            warnings.append("Focus lock is enabled but no target window is currently captured.")
+
+        self._last_preflight = {"errors": errors, "warnings": warnings}
+        self._diag(f"[CHECK] Pre-flight complete: {len(errors)} error(s), {len(warnings)} warning(s)")
+        for item in errors[:12]:
+            self._diag(f"[CHECK][ERROR] {item}")
+        for item in warnings[:12]:
+            self._diag(f"[CHECK][WARN] {item}")
+
+        if errors:
+            QMessageBox.critical(self, "MacroForge pre-flight check", self._format_preflight_report(errors, warnings))
+            self.status(f"Pre-flight blocked start: {len(errors)} error(s)")
+            return False
+
+        if warnings and allow_warning_prompt:
+            reply = QMessageBox.warning(
+                self,
+                "MacroForge pre-flight warnings",
+                self._format_preflight_report(errors, warnings) + "\n\nContinue anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self.status("Start cancelled by pre-flight warnings")
+                return False
+
+        if show_success:
+            QMessageBox.information(self, "MacroForge pre-flight check", self._format_preflight_report(errors, warnings))
+        self.status("Pre-flight check passed" if not warnings else f"Pre-flight passed with {len(warnings)} warning(s)")
+        return True
+
+    # ═══════════════════════════════════════════════════════
     #  PLAYBACK
     # ═══════════════════════════════════════════════════════
 
@@ -1294,10 +1492,9 @@ class MainWindow(QMainWindow):
         # immediately before playback. This prevents stale engine lists from
         # looping visually while not deploying the edited/current actions.
         self.engine.actions = self.action_model.actions()
-        self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
-        if not self.engine.actions:
-            self.status("No actions to play")
+        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             return
+        self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
         self.actions_played = 0
         self.session_elapsed_time = 0.0
         self.session_start_time = time.time()
@@ -1438,8 +1635,15 @@ class MainWindow(QMainWindow):
 
     def _append_diagnostic(self, line):
         self._diag_lines.append(line)
-        if len(self._diag_lines) > 600:
-            del self._diag_lines[:len(self._diag_lines) - 600]
+        max_lines = int(getattr(self, "_diag_max_lines", 10000) or 10000)
+        if len(self._diag_lines) > max_lines:
+            removed = len(self._diag_lines) - max_lines
+            del self._diag_lines[:removed]
+            self._diag_prune_count += removed
+            # Re-seed the visible diagnostics window after pruning so the
+            # widget cannot grow forever either.
+            if self._diag_edit is not None:
+                self._diag_edit.setPlainText("\n".join(self._diag_lines))
         try:
             logger.info(line)
         except Exception:
@@ -1480,7 +1684,7 @@ class MainWindow(QMainWindow):
         title = QLabel("Playback Diagnostics")
         title.setStyleSheet(f"color: {C['text']}; font-size: 15px; font-weight: 800;")
         lo.addWidget(title)
-        hint = QLabel("Shows engine status, active rows, and whether each action reached the deployment path.")
+        hint = QLabel("Shows engine status, active rows, deployment path, and pre-flight checks. Keeps the newest 10,000 lines.")
         hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
         lo.addWidget(hint)
         edit = QPlainTextEdit()
@@ -1939,6 +2143,7 @@ class MainWindow(QMainWindow):
         m.addAction("Export CSV…", self.export_csv)
         m.addAction("Import CSV…", self.import_csv)
         m.addSeparator()
+        m.addAction("Run pre-flight check…", lambda: self.run_preflight_check(show_success=True, allow_warning_prompt=False))
         m.addAction("Test selected action", self.test_selected_action)
         m.addAction("Playback diagnostics…", self.open_playback_diagnostics)
         m.addSeparator()

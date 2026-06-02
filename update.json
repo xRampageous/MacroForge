@@ -1,6 +1,6 @@
 {
-  "version": "3.0.7",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.7/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.7/MacroForge-v3.0.7.zip",
-  "notes": "v3.0.7: Diagnostics and source improvements - updated main_window.py with enhanced diagnostics and source code improvements for better debugging and stability."
+  "version": "3.0.8",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.8/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.8/MacroForge-v3.0.8.zip",
+  "notes": "v3.0.8: Pre-flight validation and log limits - added pre-flight check that blocks playback on errors with warning prompts, bounded debug.log to 10,000 lines, and enhanced debugger.py with better diagnostics."
 }
