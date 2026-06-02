@@ -641,7 +641,7 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(110)
+        panel.setFixedHeight(106)
         panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         lo = QVBoxLayout(panel)
@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
 
         dlo = QVBoxLayout(dock)
         dlo.setContentsMargins(8, 6, 8, 6)
-        dlo.setSpacing(6)
+        dlo.setSpacing(4)
 
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
@@ -682,7 +682,7 @@ class MainWindow(QMainWindow):
 
         def vline():
             line = QFrame()
-            line.setFixedSize(1, 42)
+            line.setFixedSize(1, 40)
             line.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             line.setStyleSheet(f"background-color: {C['border']}; border: none;")
             return line
@@ -693,7 +693,7 @@ class MainWindow(QMainWindow):
         play_section.setStyleSheet("background: transparent; border: none;")
         play_lo = QVBoxLayout(play_section)
         play_lo.setContentsMargins(0, 0, 0, 0)
-        play_lo.setSpacing(6)
+        play_lo.setSpacing(4)
         play_lo.addWidget(section_title("PLAYBACK"))
 
         play_row = QHBoxLayout()
@@ -705,7 +705,7 @@ class MainWindow(QMainWindow):
         self.start_btn.setIcon(icon("play", 13, C["text"]))
         self.start_btn.setIconSize(QSize(13, 13))
         self.start_btn.setToolTip("Start playback (F9)")
-        self.start_btn.setFixedSize(58, 38)
+        self.start_btn.setFixedSize(58, 36)
         self.start_btn.setStyleSheet(
             f"QPushButton#play_btn {{ background-color: #063c1f; color: {C['text']}; "
             f"border: 1px solid {C['success']}; border-radius: 7px; font-size: 10px; font-weight: 950; padding: 0 6px; }}"
@@ -719,7 +719,7 @@ class MainWindow(QMainWindow):
         self.pause_btn.setIcon(icon("play", 13, C["text_dim"]))
         self.pause_btn.setIconSize(QSize(13, 13))
         self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-        self.pause_btn.setFixedSize(34, 38)
+        self.pause_btn.setFixedSize(34, 36)
         self.pause_btn.setStyleSheet(
             f"QPushButton#pause_btn {{ background-color: {C['bg_tertiary']}; color: {C['pause_cyan']}; "
             f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
@@ -735,7 +735,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setIcon(icon("stop", 12, C["error"]))
         self.stop_btn.setIconSize(QSize(12, 12))
         self.stop_btn.setToolTip("Stop playback")
-        self.stop_btn.setFixedSize(34, 38)
+        self.stop_btn.setFixedSize(34, 36)
         self.stop_btn.setStyleSheet(
             f"QPushButton#stop_btn {{ background-color: {C['bg_tertiary']}; color: {C['error']}; "
             f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
@@ -896,8 +896,8 @@ class MainWindow(QMainWindow):
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 46, "Loops": 46, "Seq": 72, "Time": 88}.get(title, 50))
-        chip.setFixedHeight(30)
+        chip.setFixedWidth({"Played": 48, "Loops": 48, "Seq": 72, "Time": 88}.get(title, 50))
+        chip.setFixedHeight(32)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
@@ -1017,8 +1017,11 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addAction("Test from selected row", self.test_from_selected_row)
         m.addSeparator()
-        m.addAction("Move Up", lambda: self.move_action(index, -1))
-        m.addAction("Move Down", lambda: self.move_action(index, 1))
+        sorting_locked = self.engine.running or self.timeline.playing_index >= 0
+        move_up = m.addAction("Move Up", lambda: self.move_action(index, -1))
+        move_down = m.addAction("Move Down", lambda: self.move_action(index, 1))
+        move_up.setEnabled(not sorting_locked and index > 0)
+        move_down.setEnabled(not sorting_locked and index < self.action_model.rowCount() - 1)
         m.addSeparator()
         m.addAction("Delete", lambda: self.delete_action(index))
         m.exec(pos)
@@ -1308,27 +1311,43 @@ class MainWindow(QMainWindow):
         self.status("Duplicated action")
 
     def move_action(self, index, direction):
+        if self.engine.running or self.timeline.playing_index >= 0:
+            self.status("Stop playback before reordering actions")
+            return
         if index < 0 or index >= self.action_model.rowCount():
             return
         new_index = index + direction
         if new_index < 0 or new_index >= self.action_model.rowCount():
             return
-        self.history.push(self.action_model.actions())
+        scroll_position = self.timeline.scroll_position()
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
         self.action_model.move_action(index, new_index)
+        self.timeline.remap_after_move(index, new_index)
         self.active_index = new_index
         self.refresh()
+        self.timeline.set_active(new_index)
+        self.timeline.restore_scroll_position(scroll_position)
+        self.timeline.flash_drop(new_index)
         self.save_session()
         self.status("Moved action")
 
     def move_action_to(self, index, target_index):
+        if self.engine.running or self.timeline.playing_index >= 0:
+            self.status("Stop playback before reordering actions")
+            return
         if index < 0 or index >= self.action_model.rowCount():
             return
         if target_index < 0 or target_index >= self.action_model.rowCount():
             return
-        self.history.push(self.action_model.actions())
+        scroll_position = self.timeline.scroll_position()
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
         self.action_model.move_action(index, target_index)
+        self.timeline.remap_after_move(index, target_index)
         self.active_index = target_index
         self.refresh()
+        self.timeline.set_active(target_index)
+        self.timeline.restore_scroll_position(scroll_position)
+        self.timeline.flash_drop(target_index)
         self.update_statistics(immediate=True)
         self.save_session()
         self.status("Moved action")
@@ -2587,7 +2606,7 @@ class MainWindow(QMainWindow):
         collapsed = bool(collapsed)
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(31 if collapsed else 110)
+        self.playback_panel.setFixedHeight(31 if collapsed else 106)
 
     @staticmethod
     def _format_hms(seconds: float) -> str:
@@ -2843,13 +2862,17 @@ class MainWindow(QMainWindow):
         if not self.history.can_undo():
             self.status("Nothing to undo")
             return
-        result = self.history.undo(self.engine.actions)
+        result = self.history.undo(self.engine.actions, self._timeline_history_state())
         if result is None:
             return
-        self.action_model.set_actions(result)
+        actions, timeline_state = result
+        self.action_model.set_actions(actions)
         self.engine.actions = self.action_model.actions()
-        self.active_index = -1
+        self._restore_timeline_history_state(timeline_state)
         self.refresh()
+        if 0 <= self.active_index < self.action_model.rowCount():
+            self.timeline.ensure_visible_if_needed(self.active_index)
+            self.timeline.flash_drop(self.active_index)
         self.update_statistics()
         self.save_session()
         self.status("Undone")
@@ -2858,16 +2881,47 @@ class MainWindow(QMainWindow):
         if not self.history.can_redo():
             self.status("Nothing to redo")
             return
-        result = self.history.redo(self.engine.actions)
+        result = self.history.redo(self.engine.actions, self._timeline_history_state())
         if result is None:
             return
-        self.action_model.set_actions(result)
+        actions, timeline_state = result
+        self.action_model.set_actions(actions)
         self.engine.actions = self.action_model.actions()
-        self.active_index = -1
+        self._restore_timeline_history_state(timeline_state)
         self.refresh()
+        if 0 <= self.active_index < self.action_model.rowCount():
+            self.timeline.ensure_visible_if_needed(self.active_index)
+            self.timeline.flash_drop(self.active_index)
         self.update_statistics()
         self.save_session()
         self.status("Redone")
+
+    def _timeline_history_state(self):
+        return {
+            "active_index": self.active_index,
+            "selected_indices": sorted(self.timeline.selected_indices),
+            "next_index": self.timeline.next_index,
+            "image_states": dict(self.timeline.image_states),
+            "scroll_position": self.timeline.scroll_position(),
+        }
+
+    def _restore_timeline_history_state(self, state):
+        if not state:
+            self.active_index = -1
+            self.timeline.set_active(-1)
+            return
+        self.active_index = int(state.get("active_index", -1))
+        self.timeline.image_states = dict(state.get("image_states", {}))
+        self.timeline.next_index = int(state.get("next_index", -1))
+        scroll_position = int(state.get("scroll_position", 0))
+        selected = set(state.get("selected_indices", []))
+        if 0 <= self.active_index < self.action_model.rowCount():
+            self.timeline.set_active(self.active_index)
+        else:
+            self.timeline.set_active(-1)
+            self.timeline.selected_indices = selected
+        self.timeline.restore_scroll_position(scroll_position)
+        self.timeline.viewport().update()
 
 
 class HistoryManager:
@@ -2877,9 +2931,17 @@ class HistoryManager:
         self._redo = []
         self._max = max_size
 
-    def push(self, actions):
-        import copy
-        self._undo.append([a.to_dict() for a in actions])
+    def _snapshot(self, actions, timeline_state=None):
+        return {
+            "actions": [a.to_dict() for a in actions],
+            "timeline_state": deepcopy(timeline_state) if timeline_state is not None else None,
+        }
+
+    def _restore(self, snapshot):
+        return [Action.from_dict(d) for d in snapshot["actions"]], deepcopy(snapshot["timeline_state"])
+
+    def push(self, actions, timeline_state=None):
+        self._undo.append(self._snapshot(actions, timeline_state))
         if len(self._undo) > self._max:
             self._undo.pop(0)
         self._redo.clear()
@@ -2890,16 +2952,14 @@ class HistoryManager:
     def can_redo(self):
         return bool(self._redo)
 
-    def undo(self, current_actions):
+    def undo(self, current_actions, current_timeline_state=None):
         if not self._undo:
             return None
-        self._redo.append([a.to_dict() for a in current_actions])
-        data = self._undo.pop()
-        return [Action.from_dict(d) for d in data]
+        self._redo.append(self._snapshot(current_actions, current_timeline_state))
+        return self._restore(self._undo.pop())
 
-    def redo(self, current_actions):
+    def redo(self, current_actions, current_timeline_state=None):
         if not self._redo:
             return None
-        self._undo.append([a.to_dict() for a in current_actions])
-        data = self._redo.pop()
-        return [Action.from_dict(d) for d in data]
+        self._undo.append(self._snapshot(current_actions, current_timeline_state))
+        return self._restore(self._redo.pop())

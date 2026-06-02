@@ -365,7 +365,12 @@ class ExecutionEngine:
                     actual_action = self.apply_randomization(action)
 
                     self.current_action_index = i
-                    self.play_cb(i, actual_action.duration)
+                    visible_duration = (
+                        actual_action.wait_timeout
+                        if actual_action.is_image() and actual_action.wait_timeout > 0
+                        else actual_action.duration
+                    )
+                    self.play_cb(i, visible_duration)
 
                     # Refocus locked window before every action
                     self._refocus()

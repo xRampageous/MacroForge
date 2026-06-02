@@ -64,7 +64,7 @@ def _action_text(action):
 
     if kind == "pause":
         title = label or "Delay"
-        return title, f"Duration: {float(getattr(action, 'duration', 0.0) or 0.0):.2f}s{repeat_txt}"
+        return title, f"Repeat x{repeat}" if repeat > 1 else ""
 
     if kind == "click":
         button = (getattr(action, "click_button", "left") or "left").title()
@@ -145,9 +145,12 @@ class TimelineDelegate(QStyledItemDelegate):
             view = option.widget
             row = index.row()
             selected = bool(option.state & QStyle.StateFlag.State_Selected)
-            hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+            hovered = row == getattr(view, "hover_row", -1)
             playing = row == getattr(view, "playing_index", -1)
             queued = row == getattr(view, "next_index", -1)
+            dragging = row == getattr(view, "drag_source_row", -1)
+            flashed = row == getattr(view, "flash_row", -1)
+            flash_opacity = float(getattr(view, "flash_opacity", 0.0) or 0.0)
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
@@ -159,16 +162,23 @@ class TimelineDelegate(QStyledItemDelegate):
             bg = COLORS["bg_card"]
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
-            if selected:
+            if selected and hovered:
                 bg = _mix(bg, type_color, 0.12)
             if queued:
                 bg = _mix(bg, type_color, 0.07)
+            if dragging:
+                bg = _mix(bg, type_color, 0.18)
+                outer.translate(0, -2)
+            if flashed:
+                bg = _mix(bg, type_color, 0.22 * flash_opacity)
 
             border = COLORS["border"]
-            if selected:
+            if selected and hovered:
                 border = COLORS["border_light"]
             if queued:
                 border = _mix(COLORS["border"], type_color, 0.35)
+            if dragging or flashed:
+                border = _mix(COLORS["border_light"], type_color, 0.55)
             if playing:
                 border = type_color
 
@@ -204,6 +214,12 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setPen(QPen(QBrush(sheen), 1.0))
                 painter.drawLine(QPointF(outer.left() + 7, outer.top() + 1), QPointF(outer.right() - 7, outer.top() + 1))
             else:
+                if dragging:
+                    shadow = QRectF(outer)
+                    shadow.translate(0, 4)
+                    shadow_col = QColor("#000000")
+                    shadow_col.setAlpha(95)
+                    self._rounded_rect(painter, shadow, 8, shadow_col.name(QColor.NameFormat.HexArgb))
                 self._rounded_rect(painter, outer, 8, bg, border, 1)
 
             # Compact-aware layout. Timeline metadata stays visible at every
@@ -253,7 +269,8 @@ class TimelineDelegate(QStyledItemDelegate):
             grip_x = outer.left() + (12 if compact else 16)
             grip_y = outer.center().y() - 8
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(COLORS["text_dark"]))
+            grip_color = COLORS["border_light"] if getattr(view, "playing_index", -1) >= 0 else COLORS["text_dark"]
+            painter.setBrush(QColor(grip_color))
             for gx in (0, 5):
                 for gy in (0, 5, 10):
                     painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.0, 2.0))
@@ -337,7 +354,8 @@ class TimelineDelegate(QStyledItemDelegate):
             dur_rect = QRectF(dur_x, outer.top(), duration_w, outer.height())
             painter.setPen(QColor(COLORS["text_dim"]))
             painter.setFont(QFont("Segoe UI", 7 if compact else 8))
-            painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
+            duration_text = view.duration_text(row, action) if hasattr(view, "duration_text") else _duration_text(action)
+            painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, duration_text)
 
             # Per-action progress bar. This is the responsive part of the row.
             bar_y = outer.center().y() - 3
@@ -365,6 +383,22 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setPen(Qt.PenStyle.NoPen)
             for dy in (-7, 0, 7):
                 painter.drawEllipse(QRectF(dot_x, outer.center().y() + dy - 1.5, 3, 3))
+
+            insert_row = getattr(view, "drop_insert_row", -1)
+            line_y = None
+            if insert_row == row:
+                line_y = option.rect.top() + 1
+            elif insert_row == row + 1 and row == view.model().rowCount() - 1:
+                line_y = option.rect.bottom() - 1
+            if line_y is not None:
+                line_left = outer.left() + 8
+                line_right = outer.right() - 8
+                painter.setPen(QPen(QColor(COLORS["accent"]), 2))
+                painter.drawLine(QPointF(line_left, line_y), QPointF(line_right, line_y))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(COLORS["accent"]))
+                painter.drawEllipse(QRectF(line_left - 3, line_y - 3, 6, 6))
+                painter.drawEllipse(QRectF(line_right - 3, line_y - 3, 6, 6))
         except Exception as e:
             painter.setBrush(QColor(COLORS.get("bg_secondary", "#202020")))
             painter.setPen(Qt.PenStyle.NoPen)
@@ -401,6 +435,13 @@ class TimelineView(QListView):
         self.image_states = {}
         self._search = ""
         self._drag_start_row = -1
+        self.drag_source_row = -1
+        self.drop_insert_row = -1
+        self.hover_row = -1
+        self.flash_row = -1
+        self.flash_opacity = 0.0
+        self._auto_scroll_direction = 0
+        self._last_drag_pos = None
         self._playing_started = 0.0
         self._playing_duration = 0.0
         self._frozen_progress = 0.0
@@ -408,6 +449,12 @@ class TimelineView(QListView):
         self._progress_timer = QTimer(self)
         self._progress_timer.setInterval(33)
         self._progress_timer.timeout.connect(self.viewport().update)
+        self._auto_scroll_timer = QTimer(self)
+        self._auto_scroll_timer.setInterval(45)
+        self._auto_scroll_timer.timeout.connect(self._auto_scroll_tick)
+        self._flash_timer = QTimer(self)
+        self._flash_timer.setInterval(35)
+        self._flash_timer.timeout.connect(self._fade_drop_flash)
 
         self.setModel(model or ActionListModel())
         self.setItemDelegate(TimelineDelegate(self))
@@ -422,8 +469,8 @@ class TimelineView(QListView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        self.setDropIndicatorShown(False)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setMinimumHeight(160)
         self.setStyleSheet(
@@ -451,6 +498,12 @@ class TimelineView(QListView):
             return 0.6
         return _clamp((time.monotonic() - self._playing_started) / self._playing_duration)
 
+    def duration_text(self, row: int, action) -> str:
+        if row != self.playing_index:
+            return _duration_text(action)
+        remaining = max(0.0, self._playing_duration * (1.0 - self.action_progress(row)))
+        return f"{remaining:.1f}s"
+
     def _on_current_changed(self, current, previous):
         if current.isValid():
             self.selected_indices = {current.row()}
@@ -477,12 +530,135 @@ class TimelineView(QListView):
         self._drag_start_row = idx.row() if idx.isValid() else -1
         super().mousePressEvent(event)
 
+    def mouseMoveEvent(self, event):
+        pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        index = self.indexAt(pos)
+        self.hover_row = index.row() if index.isValid() else -1
+        if index.isValid():
+            self.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+        else:
+            self.viewport().unsetCursor()
+        self.viewport().update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.hover_row = -1
+        if self.drag_source_row < 0:
+            self.viewport().unsetCursor()
+        self.viewport().update()
+        super().leaveEvent(event)
+
+    def startDrag(self, supported_actions):
+        if self.playing_index >= 0:
+            return
+        self.drag_source_row = self._drag_start_row
+        self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+        self.viewport().update()
+        try:
+            super().startDrag(supported_actions)
+        finally:
+            self._stop_drag_feedback()
+
+    def dragEnterEvent(self, event):
+        if event.source() is self:
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.source() is self:
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            self._last_drag_pos = pos
+            self._update_auto_scroll(pos)
+            self.drop_insert_row = self._drop_insert_row(pos)
+            self.viewport().update()
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self._stop_auto_scroll()
+        super().dragLeaveEvent(event)
+
+    def _update_auto_scroll(self, pos):
+        margin = min(42, max(24, self.viewport().height() // 8))
+        if pos.y() < margin:
+            self._auto_scroll_direction = -1
+        elif pos.y() > self.viewport().height() - margin:
+            self._auto_scroll_direction = 1
+        else:
+            self._auto_scroll_direction = 0
+        if self._auto_scroll_direction and not self._auto_scroll_timer.isActive():
+            self._auto_scroll_timer.start()
+        elif not self._auto_scroll_direction:
+            self._auto_scroll_timer.stop()
+
+    def _auto_scroll_tick(self):
+        scrollbar = self.verticalScrollBar()
+        scrollbar.setValue(scrollbar.value() + (18 * self._auto_scroll_direction))
+        if self._last_drag_pos is not None:
+            self.drop_insert_row = self._drop_insert_row(self._last_drag_pos)
+            self.viewport().update()
+
+    def _stop_auto_scroll(self):
+        self._auto_scroll_direction = 0
+        self._auto_scroll_timer.stop()
+
+    def _stop_drag_feedback(self):
+        self._stop_auto_scroll()
+        self._drag_start_row = -1
+        self.drag_source_row = -1
+        self.drop_insert_row = -1
+        self._last_drag_pos = None
+        self.viewport().unsetCursor()
+        self.viewport().update()
+
+    def flash_drop(self, row: int):
+        self.flash_row = row
+        self.flash_opacity = 1.0
+        self.viewport().update()
+        self._flash_timer.start()
+
+    def _fade_drop_flash(self):
+        self.flash_opacity = max(0.0, self.flash_opacity - 0.09)
+        if self.flash_opacity > 0.0:
+            self.viewport().update()
+            return
+        self._flash_timer.stop()
+        self.flash_row = -1
+        self.viewport().update()
+
+    def _drop_insert_row(self, pos) -> int:
+        count = self.model().rowCount() if self.model() is not None else 0
+        if count <= 0:
+            return -1
+        target_index = self.indexAt(pos)
+        if not target_index.isValid():
+            return count
+        target = target_index.row()
+        if pos.y() > self.visualRect(target_index).center().y():
+            target += 1
+        return max(0, min(target, count))
+
+    def _drop_target_row(self, pos) -> int:
+        count = self.model().rowCount() if self.model() is not None else 0
+        if count <= 0:
+            return -1
+        target = self._drop_insert_row(pos)
+        if self._drag_start_row < target:
+            target -= 1
+        return max(0, min(target, count - 1))
+
     def dropEvent(self, event):
         source = self._drag_start_row
+        if self.playing_index >= 0:
+            event.ignore()
+            self._stop_drag_feedback()
+            return
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
-        target_index = self.indexAt(pos)
-        target = target_index.row() if target_index.isValid() else self.model().rowCount() - 1
-        event.ignore()
+        target = self._drop_target_row(pos)
+        self._stop_auto_scroll()
+        event.acceptProposedAction()
         if source >= 0 and target >= 0 and source != target:
             QTimer.singleShot(0, lambda s=source, t=target: self.action_dragged.emit(s, t))
 
@@ -532,6 +708,8 @@ class TimelineView(QListView):
         self._playing_duration = max(0.0, float(duration or 0.0))
         self._playing_started = time.monotonic()
         self._frozen_progress = 0.0
+        self.setDragEnabled(False)
+        self._stop_drag_feedback()
         if 0 <= index < self.model().rowCount():
             self.scrollTo(self.model().index(index, 0), QAbstractItemView.ScrollHint.EnsureVisible)
         if not self._progress_timer.isActive():
@@ -543,6 +721,7 @@ class TimelineView(QListView):
         self.next_index = -1
         self.paused = False
         self._frozen_progress = 0.0
+        self.setDragEnabled(True)
         if self._progress_timer.isActive():
             self._progress_timer.stop()
         self.viewport().update()
@@ -555,6 +734,33 @@ class TimelineView(QListView):
         if 0 <= index < self.model().rowCount():
             self.image_states[index] = state
             self.viewport().update()
+
+    def remap_after_move(self, source: int, target: int):
+        if source == target:
+            return
+
+        def remap(row):
+            if row == source:
+                return target
+            if source < target and source < row <= target:
+                return row - 1
+            if target < source and target <= row < source:
+                return row + 1
+            return row
+
+        self.image_states = {remap(row): state for row, state in self.image_states.items()}
+        if self.playing_index >= 0:
+            self.playing_index = remap(self.playing_index)
+        if self.next_index >= 0:
+            self.next_index = remap(self.next_index)
+        self.viewport().update()
+
+    def scroll_position(self) -> int:
+        return self.verticalScrollBar().value()
+
+    def restore_scroll_position(self, value: int):
+        scrollbar = self.verticalScrollBar()
+        scrollbar.setValue(max(scrollbar.minimum(), min(int(value or 0), scrollbar.maximum())))
 
     def set_paused(self, paused: bool):
         paused = bool(paused)
@@ -573,6 +779,13 @@ class TimelineView(QListView):
     def ensure_visible(self, index):
         if 0 <= index < self.model().rowCount():
             self.scrollTo(self.model().index(index, 0), QAbstractItemView.ScrollHint.EnsureVisible)
+
+    def ensure_visible_if_needed(self, index):
+        if index < 0 or index >= self.model().rowCount():
+            return
+        rect = self.visualRect(self.model().index(index, 0))
+        if not self.viewport().rect().contains(rect):
+            self.ensure_visible(index)
 
     def set_search(self, text: str):
         self._search = (text or "").strip().lower()

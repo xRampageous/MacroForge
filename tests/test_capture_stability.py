@@ -11,14 +11,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication, QDialog
+from PyQt6.QtCore import QEvent, QPoint, QTimer
+from PyQt6.QtWidgets import QApplication, QDialog, QMenu
 
 from debugger import DebugLogger
 from models import Action, ActionListModel
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
-from ui.timeline import TimelineView
+from ui.timeline import TimelineView, _action_text
 
 
 PNG_1X1 = base64.b64encode(
@@ -33,6 +33,7 @@ class QtTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+        cls.app.setQuitOnLastWindowClosed(False)
 
 
 class TestCaptureApply(QtTestCase):
@@ -90,6 +91,130 @@ class TestCaptureApply(QtTestCase):
         )
 
 
+class TestTimelineRows(QtTestCase):
+    def test_delay_detail_does_not_duplicate_duration_column(self):
+        title, detail = _action_text(Action("[DELAY]", 4.0, action_type="pause"))
+        self.assertEqual(title, "Delay")
+        self.assertEqual(detail, "")
+
+    def test_running_duration_column_counts_down(self):
+        timeline = TimelineView(model=ActionListModel([Action("[DELAY]", 4.0, action_type="pause")]))
+        timeline.set_playing(0, 4.0)
+        with patch("ui.timeline.time.monotonic", return_value=timeline._playing_started + 1.5):
+            self.assertEqual(timeline.duration_text(0, timeline.model().get(0)), "2.5s")
+        timeline.clear_playing()
+        timeline.deleteLater()
+
+    def test_pause_resume_countdown_does_not_skip_paused_time(self):
+        action = Action("[DELAY]", 4.0, action_type="pause")
+        timeline = TimelineView(model=ActionListModel([action]))
+        timeline.set_playing(0, 4.0)
+        timeline._playing_started = 100.0
+        with patch("ui.timeline.time.monotonic", return_value=101.25):
+            timeline.set_paused(True)
+        self.assertEqual(timeline.duration_text(0, action), "2.8s")
+        with patch("ui.timeline.time.monotonic", return_value=110.0):
+            timeline.set_paused(False)
+        with patch("ui.timeline.time.monotonic", return_value=111.0):
+            self.assertEqual(timeline.duration_text(0, action), "1.8s")
+        timeline.clear_playing()
+        timeline.deleteLater()
+
+    def test_drag_target_uses_drop_position_between_rows(self):
+        timeline = TimelineView(model=ActionListModel([
+            Action("a", 0.1), Action("b", 0.1), Action("c", 0.1),
+        ]))
+        timeline.resize(700, 300)
+        timeline.show()
+        self.app.processEvents()
+        timeline._drag_start_row = 0
+        third_rect = timeline.visualRect(timeline.model().index(2, 0))
+        self.assertEqual(timeline._drop_target_row(QPoint(third_rect.center().x(), third_rect.bottom() - 1)), 2)
+        self.assertEqual(timeline._drop_insert_row(QPoint(third_rect.center().x(), third_rect.bottom() - 1)), 3)
+        timeline.hide()
+        timeline.deleteLater()
+
+    def test_drag_target_supports_upward_reorder(self):
+        timeline = TimelineView(model=ActionListModel([
+            Action("a", 0.1), Action("b", 0.1), Action("c", 0.1),
+        ]))
+        timeline.resize(700, 300)
+        timeline.show()
+        self.app.processEvents()
+        timeline._drag_start_row = 2
+        first_rect = timeline.visualRect(timeline.model().index(0, 0))
+        self.assertEqual(timeline._drop_insert_row(QPoint(first_rect.center().x(), first_rect.top() + 1)), 0)
+        self.assertEqual(timeline._drop_target_row(QPoint(first_rect.center().x(), first_rect.top() + 1)), 0)
+        timeline.hide()
+        timeline.deleteLater()
+
+    def test_hover_highlight_clears_when_cursor_leaves_timeline(self):
+        timeline = TimelineView(model=ActionListModel([Action("a", 0.1)]))
+        timeline.hover_row = 0
+        timeline.leaveEvent(QEvent(QEvent.Type.Leave))
+        self.assertEqual(timeline.hover_row, -1)
+        timeline.deleteLater()
+
+    def test_drop_flash_fades_before_clearing(self):
+        timeline = TimelineView(model=ActionListModel([Action("a", 0.1)]))
+        timeline.flash_drop(0)
+        timeline._fade_drop_flash()
+        self.assertEqual(timeline.flash_row, 0)
+        self.assertLess(timeline.flash_opacity, 1.0)
+        for _ in range(20):
+            timeline._fade_drop_flash()
+        self.assertEqual(timeline.flash_row, -1)
+        timeline.deleteLater()
+
+    def test_playback_disables_drag_sorting_and_restores_it_when_cleared(self):
+        timeline = TimelineView(model=ActionListModel([Action("a", 0.1)]))
+        timeline.set_playing(0, 0.1)
+        self.assertFalse(timeline.dragEnabled())
+        timeline.clear_playing()
+        self.assertTrue(timeline.dragEnabled())
+        timeline.deleteLater()
+
+    def test_badges_follow_rows_when_indices_are_remapped(self):
+        timeline = TimelineView(model=ActionListModel([
+            Action("[IMAGE]", 0.1, action_type="image"),
+            Action("a", 0.1),
+            Action("[IMAGE]", 0.1, action_type="image"),
+        ]))
+        timeline.image_states = {0: "Found", 2: "Waiting"}
+        timeline.remap_after_move(0, 2)
+        self.assertEqual(timeline.image_states, {2: "Found", 1: "Waiting"})
+        timeline.deleteLater()
+
+    def test_drag_edge_auto_scroll_moves_viewport(self):
+        timeline = TimelineView(model=ActionListModel([Action(str(i), 0.1) for i in range(30)]))
+        timeline.resize(700, 180)
+        timeline.show()
+        self.app.processEvents()
+        timeline.verticalScrollBar().setValue(0)
+        timeline._update_auto_scroll(QPoint(10, timeline.viewport().height() - 1))
+        self.assertEqual(timeline._auto_scroll_direction, 1)
+        self.assertTrue(timeline._auto_scroll_timer.isActive())
+        timeline._auto_scroll_tick()
+        self.assertGreater(timeline.verticalScrollBar().value(), 0)
+        timeline._stop_auto_scroll()
+        timeline.hide()
+        timeline.deleteLater()
+
+    def test_drag_edge_auto_scroll_recomputes_insertion_marker(self):
+        timeline = TimelineView(model=ActionListModel([Action(str(i), 0.1) for i in range(30)]))
+        timeline.resize(700, 180)
+        timeline.show()
+        self.app.processEvents()
+        pos = QPoint(10, timeline.viewport().height() - 1)
+        timeline._last_drag_pos = pos
+        timeline._update_auto_scroll(pos)
+        timeline._auto_scroll_tick()
+        self.assertEqual(timeline.drop_insert_row, timeline._drop_insert_row(pos))
+        timeline._stop_drag_feedback()
+        timeline.hide()
+        timeline.deleteLater()
+
+
 class TestOwnedTimers(QtTestCase):
     def test_main_window_owns_debounce_and_repeating_update_timers(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -129,6 +254,14 @@ class TestPlaybackVisibility(QtTestCase):
             self.addCleanup(item.stop)
         return MainWindow(profile_manager=profile_manager)
 
+    def _dispose_window(self, window):
+        window._save_session_timer.stop()
+        window._update_check_timer.stop()
+        window.timeline._progress_timer.stop()
+        window.timeline._auto_scroll_timer.stop()
+        window.timeline._flash_timer.stop()
+        window.deleteLater()
+
     def test_summary_and_bottom_panel_collapse(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
@@ -145,9 +278,8 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertFalse(window.playback_dock.isVisible())
             self.assertFalse(window.playback_restore_btn.isHidden())
             window._set_playback_collapsed(False)
-            self.assertEqual(window.playback_panel.height(), 110)
-            window._update_check_timer.stop()
-            window.deleteLater()
+            self.assertEqual(window.playback_panel.height(), 106)
+            self._dispose_window(window)
 
     def test_from_selected_row_uses_remaining_actions_and_maps_timeline_index(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -167,8 +299,207 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertEqual(window.timeline.playing_index, 1)
             window._do_image_match_state(1, "Found")
             self.assertEqual(window.timeline.image_states[2], "Found")
-            window._update_check_timer.stop()
-            window.deleteLater()
+            self._dispose_window(window)
+
+    def test_drag_move_preserves_selection_and_flashes_destination(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action("a", 0.0), Action("b", 0.0), Action("c", 0.0)])
+            window.move_action_to(0, 2)
+            self.assertEqual([action.key for action in window.action_model.actions()], ["b", "c", "a"])
+            self.assertEqual(window.active_index, 2)
+            self.assertEqual(window.timeline.currentIndex().row(), 2)
+            self.assertEqual(window.timeline.flash_row, 2)
+            self._dispose_window(window)
+
+    def test_drag_sort_is_undoable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action("a", 0.0), Action("b", 0.0), Action("c", 0.0)])
+            window.move_action_to(0, 2)
+            self.assertEqual([action.key for action in window.action_model.actions()], ["b", "c", "a"])
+            window.undo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["a", "b", "c"])
+            self._dispose_window(window)
+
+    def test_drag_sort_is_blocked_during_playback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action("a", 0.0), Action("b", 0.0), Action("c", 0.0)])
+            window.timeline.set_playing(0, 1.0)
+            window.move_action_to(0, 2)
+            self.assertEqual([action.key for action in window.action_model.actions()], ["a", "b", "c"])
+            window.timeline.clear_playing()
+            self._dispose_window(window)
+
+    def test_drag_sort_badges_selection_and_next_highlight_survive_undo_redo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("[IMAGE]", 0.0, action_type="image"),
+                Action("b", 0.0),
+                Action("[IMAGE]", 0.0, action_type="image"),
+            ])
+            window.active_index = 0
+            window.timeline.set_active(0)
+            window.timeline.next_index = 2
+            window.timeline.image_states = {0: "Found", 2: "Waiting"}
+
+            window.move_action_to(0, 2)
+            self.assertEqual(window.timeline.image_states, {2: "Found", 1: "Waiting"})
+            self.assertEqual(window.timeline.next_index, 1)
+            self.assertEqual(window.timeline.currentIndex().row(), 2)
+
+            window.undo()
+            self.assertEqual(window.timeline.image_states, {0: "Found", 2: "Waiting"})
+            self.assertEqual(window.timeline.next_index, 2)
+            self.assertEqual(window.timeline.currentIndex().row(), 0)
+
+            window.redo()
+            self.assertEqual(window.timeline.image_states, {2: "Found", 1: "Waiting"})
+            self.assertEqual(window.timeline.next_index, 1)
+            self.assertEqual(window.timeline.currentIndex().row(), 2)
+            self._dispose_window(window)
+
+    def test_upward_drag_sort_survives_undo_redo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action("a", 0.0), Action("b", 0.0), Action("c", 0.0)])
+            window.active_index = 2
+            window.timeline.set_active(2)
+            window.move_action_to(2, 0)
+            self.assertEqual([action.key for action in window.action_model.actions()], ["c", "a", "b"])
+            window.undo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["a", "b", "c"])
+            self.assertEqual(window.timeline.currentIndex().row(), 2)
+            window.redo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["c", "a", "b"])
+            self.assertEqual(window.timeline.currentIndex().row(), 0)
+            self.assertEqual(window.timeline.flash_row, 0)
+            self._dispose_window(window)
+
+    def test_multiple_drag_sorts_support_multiple_undo_redo_steps(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("a", 0.0), Action("b", 0.0), Action("c", 0.0), Action("d", 0.0),
+            ])
+            window.move_action_to(0, 3)
+            window.move_action_to(1, 0)
+            self.assertEqual([action.key for action in window.action_model.actions()], ["c", "b", "d", "a"])
+            window.undo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["b", "c", "d", "a"])
+            window.undo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["a", "b", "c", "d"])
+            window.redo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["b", "c", "d", "a"])
+            window.redo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["c", "b", "d", "a"])
+            self._dispose_window(window)
+
+    def test_long_timeline_sort_near_bottom_preserves_scroll_position(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action(str(i), 0.0) for i in range(40)])
+            window.resize(760, 1050)
+            window.show()
+            self.app.processEvents()
+            scrollbar = window.timeline.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+            before = scrollbar.value()
+            self.assertGreater(before, 0)
+
+            window.move_action_to(39, 35)
+            self.assertEqual(window.timeline.scroll_position(), before)
+            window.undo()
+            self.assertEqual(window.timeline.scroll_position(), before)
+            window.redo()
+            self.assertEqual(window.timeline.scroll_position(), before)
+            window.hide()
+            self._dispose_window(window)
+
+    def test_first_and_last_rows_can_be_sorted_repeatedly(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("a", 0.0), Action("b", 0.0), Action("c", 0.0), Action("d", 0.0),
+            ])
+            window.move_action_to(0, 3)
+            window.move_action_to(3, 0)
+            window.move_action_to(0, 3)
+            self.assertEqual([action.key for action in window.action_model.actions()], ["b", "c", "d", "a"])
+            window.undo()
+            window.undo()
+            window.undo()
+            self.assertEqual([action.key for action in window.action_model.actions()], ["a", "b", "c", "d"])
+            self._dispose_window(window)
+
+    def test_edit_after_sort_undo_clears_redo_history(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action("a", 0.0), Action("b", 0.0), Action("c", 0.0)])
+            window.move_action_to(0, 2)
+            window.undo()
+            self.assertTrue(window.history.can_redo())
+            window.history.push(window.action_model.actions())
+            window.action_model.replace_action(0, Action("edited", 0.0))
+            self.assertFalse(window.history.can_redo())
+            self._dispose_window(window)
+
+    def test_badges_survive_chained_image_row_moves(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("[I1]", 0.0, action_type="image"),
+                Action("[I2]", 0.0, action_type="image"),
+                Action("key", 0.0),
+                Action("[I3]", 0.0, action_type="image"),
+            ])
+            window.timeline.image_states = {0: "Found", 1: "Waiting", 3: "Missed"}
+            window.move_action_to(0, 3)
+            window.move_action_to(0, 2)
+            self.assertEqual(window.timeline.image_states, {3: "Found", 2: "Waiting", 1: "Missed"})
+            window.undo()
+            window.undo()
+            self.assertEqual(window.timeline.image_states, {0: "Found", 1: "Waiting", 3: "Missed"})
+            window.redo()
+            window.redo()
+            self.assertEqual(window.timeline.image_states, {3: "Found", 2: "Waiting", 1: "Missed"})
+            self._dispose_window(window)
+
+    def test_undo_only_scrolls_restored_selection_when_outside_viewport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action(str(i), 0.0) for i in range(40)])
+            window.resize(760, 1050)
+            window.show()
+            self.app.processEvents()
+            window.active_index = 39
+            window.timeline.set_active(39)
+            window.move_action_to(39, 35)
+            window.timeline.verticalScrollBar().setValue(0)
+            window.undo()
+            self.assertGreater(window.timeline.scroll_position(), 0)
+            window.hide()
+            self._dispose_window(window)
+
+    def test_context_menu_move_actions_are_disabled_during_playback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([Action("a", 0.0), Action("b", 0.0), Action("c", 0.0)])
+            window.timeline.set_playing(1, 1.0)
+            captured = {}
+
+            def capture_menu(menu, _pos):
+                captured.update({action.text(): action.isEnabled() for action in menu.actions()})
+
+            with patch.object(QMenu, "exec", capture_menu):
+                window._timeline_context_menu(1, QPoint())
+
+            self.assertFalse(captured["Move Up"])
+            self.assertFalse(captured["Move Down"])
+            window.timeline.clear_playing()
+            self._dispose_window(window)
 
 
 if __name__ == "__main__":

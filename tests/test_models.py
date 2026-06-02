@@ -105,6 +105,21 @@ class TestProfileManager(unittest.TestCase):
             self.assertIn("alpha", names)
             self.assertIn("beta", names)
 
+    def test_reordered_rows_persist_after_profile_reload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pm = ProfileManager()
+            pm.base_dir = tmpdir
+            pm.profiles_dir = os.path.join(tmpdir, "profiles")
+            pm.settings_file = os.path.join(tmpdir, "settings.json")
+            os.makedirs(pm.profiles_dir, exist_ok=True)
+            model = ActionListModel([Action("a", 0.1), Action("b", 0.1), Action("c", 0.1)])
+            model.move_action(0, 2)
+
+            pm.save_profile(model.actions(), {}, "sorted")
+            data = pm.load_profile("sorted")
+            reloaded = [Action.from_dict(raw) for raw in data["actions"]]
+            self.assertEqual([action.key for action in reloaded], ["b", "c", "a"])
+
 
 if __name__ == "__main__":
     unittest.main()

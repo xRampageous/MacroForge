@@ -1,5 +1,5 @@
 {
-  "version": "3.0.22",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.22/MacroForge-v3.0.22.zip",
-  "notes": "v3.0.22: Playback visibility and compact controls - adds image-match badges (Found, Waiting, Missed), faint next-action highlighting, timeline macro summary, collapsible bottom playback panel, test-from-selected-row via menu/context menu/Ctrl+Enter, static timeline stage chips and duration metadata at narrow widths, readable Speed control, and enlarged bottom stats."
+  "version": "3.1.0",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.0/MacroForge-v3.1.0.zip",
+  "notes": "v3.1.0: Timeline interaction stability release - adds drag-and-drop sorting with insertion markers, edge auto-scroll, row lift feedback, playback sorting locks, live action and image-wait countdowns, preserved image badges, scroll position, selection, and next-action state across sorting and undo/redo, compact playback panel refinements, and expanded regression coverage."
 }

@@ -67,6 +67,20 @@ class TestExecutionEngineLoops(unittest.TestCase):
         self.assertEqual(runner.loops_completed_count, 1)
         self.assertIn("Image not found — looping sequence after remaining actions...", statuses)
 
+    def test_image_wait_timeout_is_reported_as_visible_duration(self):
+        played = []
+        with patch("engine.PlatformInput", return_value=DummyInput()):
+            runner = ExecutionEngine(
+                lambda _message: None,
+                lambda idx, duration: played.append((idx, duration)),
+                lambda: None,
+                lambda _progress: None,
+            )
+        runner.actions = [Action("[IMAGE]", 0.05, action_type="image", wait_timeout=6.5)]
+        runner._exec_image_search = lambda _action: None
+        runner.run(1)
+        self.assertEqual(played, [(0, 6.5)])
+
 
 if __name__ == "__main__":
     unittest.main()
