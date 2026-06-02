@@ -1,6 +1,5 @@
 {
-  "version": "3.0.19",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.19/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.19/MacroForge-v3.0.19.zip",
-  "notes": "v3.0.19: Timeline image-row fix + active gradient + bottom panel readability - fixes Timeline error name 'chip_w' is not defined on image action rows, removes cramped image threshold chip from timeline, improves active/playing timeline row colour grading with richer action-colour gradient, active row left fill stronger and fades more smoothly, bottom panel height slightly increased for readability, playback buttons slightly enlarged, options labels and Speed area made more readable, bottom progress bar expands/contracts with window, bottom stat chips now static fixed-size buttons."
+  "version": "3.0.20",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.20/MacroForge-v3.0.20.zip",
+  "notes": "v3.0.20: Pre-flight loop reachability warning - warns when an image action with 'Loop sequence until found' has later timeline rows that cannot run until the image is matched."
 }
