@@ -553,7 +553,38 @@ def build_stylesheet() -> str:
     /* ═══════════════════════════════════════════════════════ */
     /*  DIALOG                                                */
     /* ═══════════════════════════════════════════════════════ */
-    QDialog {{ background-color: {C['bg']}; }}
+    QDialog {
+        background-color: {C['bg']};
+        color: {C['text']};
+    }
+
+    QMessageBox, QFileDialog, QInputDialog {
+        background-color: {C['bg']};
+        color: {C['text']};
+    }
+
+    QMessageBox QLabel, QFileDialog QLabel, QInputDialog QLabel {
+        color: {C['text']};
+        font-size: 12px;
+        background: transparent;
+    }
+
+    QMessageBox QPushButton, QInputDialog QPushButton, QFileDialog QPushButton {
+        background-color: {C['bg_tertiary']};
+        color: {C['text']};
+        border: 1px solid {C['border']};
+        border-radius: 8px;
+        padding: 7px 14px;
+        min-width: 76px;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    QMessageBox QPushButton:hover, QInputDialog QPushButton:hover, QFileDialog QPushButton:hover {
+        border-color: {C['accent']};
+        background-color: {C['bg_secondary']};
+    }
+
 
     /* ═══════════════════════════════════════════════════════ */
     /*  TAB BAR (Profile tabs)                                */

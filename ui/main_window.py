@@ -802,11 +802,12 @@ class MainWindow(QMainWindow):
         opt_lo.addStretch()
         dlo.addWidget(options_section)
         dlo.addWidget(vline())
+        dlo.addStretch(1)
 
         # ── 3. Progress + stats ────────────────────────────
         progress_section = QFrame()
         progress_section.setStyleSheet("background: transparent; border: none;")
-        progress_section.setMinimumWidth(210)
+        progress_section.setFixedWidth(260)
         ps_lo = QVBoxLayout(progress_section)
         ps_lo.setContentsMargins(0, 0, 0, 0)
         ps_lo.setSpacing(5)
@@ -857,7 +858,7 @@ class MainWindow(QMainWindow):
         stats_row.addStretch()
         ps_lo.addLayout(stats_row)
 
-        dlo.addWidget(progress_section, stretch=1)
+        dlo.addWidget(progress_section, stretch=0)
         lo.addWidget(dock, stretch=1)
         return panel
 
@@ -872,8 +873,8 @@ class MainWindow(QMainWindow):
             f"border: 1px solid {C['border']}; border-radius: 6px; }}"
             f"QFrame#mf2_stat_chip:hover {{ border-color: {color}; }}"
         )
-        chip.setFixedWidth({"Played": 42, "Loops": 42, "Seq": 54, "Time": 68}.get(title, 44))
-        chip.setFixedHeight(27)
+        chip.setFixedWidth({"Played": 52, "Loops": 52, "Seq": 66, "Time": 82}.get(title, 54))
+        chip.setFixedHeight(28)
 
         lo = QHBoxLayout(chip)
         lo.setContentsMargins(5, 3, 5, 3)
@@ -881,13 +882,13 @@ class MainWindow(QMainWindow):
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(15, 15)
+        ico.setFixedSize(16, 16)
         ico.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        value_lbl.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 900; background: transparent;")
+        value_lbl.setStyleSheet(f"color: {C['text']}; font-size: 10px; font-weight: 950; background: transparent;")
         lo.addWidget(value_lbl, stretch=1)
         return chip, value_lbl
 

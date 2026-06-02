@@ -25,8 +25,8 @@ class KeyDialog(QDialog):
         self.setStyleSheet(dialog_stylesheet(self._accent))
 
         lo = QVBoxLayout(self)
-        lo.setSpacing(10)
-        lo.setContentsMargins(16, 16, 16, 16)
+        lo.setSpacing(9)
+        lo.setContentsMargins(16, 16, 16, 14)
 
         lo.addWidget(make_header("Key Press", self._accent, "key", "Simulate a keyboard key press or hold"))
 

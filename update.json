@@ -1,6 +1,6 @@
 {
-  "version": "3.0.13",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.13/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.13/MacroForge-v3.0.13.zip",
-  "notes": "v3.0.13: Bottom panel alignment - removed PROGRESS text label, expanded progress bar, reworked Playback Options into two clean rows, aligned Speed, Loops, Focus, Sim, and Hum controls, kept bottom panel compact, preserved icon + value stats layout."
+  "version": "3.0.14",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.14/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.14/MacroForge-v3.0.14.zip",
+  "notes": "v3.0.14: Dialog redesign + right anchored bottom panel stats - redesigned shared action dialog styling to match dark compact UI, updated Key, Click, Delay, Image, and Settings dialogs, improved global QMessageBox/QInputDialog/QFileDialog styling, restyled debug log viewer, anchored bottom progress/stats section to right side, widened stat chips for clearer values."
 }

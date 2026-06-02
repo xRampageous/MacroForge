@@ -12,6 +12,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QCursor, QIntValidator
 from models import Action
 from ui.theme import COLORS
 from debugger import logger
+from ui.dialogs._common import dialog_stylesheet, make_header
 
 
 def _hsep(color):
@@ -106,14 +107,16 @@ class ImageDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Image Search Action")
         self.setMinimumWidth(520)
-        self.setMinimumHeight(640)
+        self.setMinimumHeight(600)
         C = COLORS
         self._accent = C['image']
-        self.setStyleSheet(f"QDialog {{ background-color: {C['bg']}; }}")
+        self.setStyleSheet(dialog_stylesheet(self._accent))
 
         lo = QVBoxLayout(self)
         lo.setSpacing(10)
         lo.setContentsMargins(18, 18, 18, 18)
+
+        lo.addWidget(make_header("Image Search", self._accent, "image", "Find an image on screen and continue when it matches"))
 
         # -- Top description --
         desc = QLabel("This command searches for an image on your screen (pixel by pixel).")
@@ -426,7 +429,7 @@ class ImageDialog(QDialog):
         cancel = QPushButton("Cancel")
         cancel.setObjectName("compact")
         cancel.clicked.connect(self._on_cancel_clicked)
-        ok = QPushButton("OK")
+        ok = QPushButton("Apply")
         ok.setObjectName("accent")
         ok.clicked.connect(self._on_ok_clicked)
         foot.addWidget(cancel)

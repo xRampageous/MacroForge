@@ -186,11 +186,36 @@ class DebugViewer(QDialog):
         self.setMinimumSize(800, 400)
         self.resize(800, 400)
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {COLORS['bg']}; }}
-            QTextEdit {{ background-color: {COLORS['bg']}; color: {COLORS['text']}; font-family: Consolas; font-size: 9pt; border: none; }}
-            QPushButton {{ background-color: {COLORS['bg_tertiary']}; color: {COLORS['text']}; border: 1px solid {COLORS['border']}; padding: 4px 12px; border-radius: 4px; }}
-            QPushButton:hover {{ background-color: {COLORS['border']}; }}
-            QCheckBox {{ color: {COLORS['text']}; }}
+            QDialog {{
+                background-color: {COLORS['bg']};
+                color: {COLORS['text']};
+            }}
+            QTextEdit {{
+                background-color: {COLORS['bg_card']};
+                color: {COLORS['text']};
+                font-family: Consolas;
+                font-size: 9pt;
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 8px;
+            }}
+            QPushButton {{
+                background-color: {COLORS['bg_tertiary']};
+                color: {COLORS['text']};
+                border: 1px solid {COLORS['border']};
+                padding: 6px 14px;
+                border-radius: 8px;
+                font-weight: 800;
+            }}
+            QPushButton:hover {{
+                border-color: {COLORS['accent']};
+                background-color: {COLORS['bg_secondary']};
+            }}
+            QCheckBox {{
+                color: {COLORS['text']};
+                font-weight: 700;
+                spacing: 6px;
+            }}
         """)
         self._build_ui()
         self._seed_history()
