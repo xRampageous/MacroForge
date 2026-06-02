@@ -628,7 +628,7 @@ class MainWindow(QMainWindow):
         
         # Status icon for different states
         self.status_icon = QLabel()
-        self.status_icon.setPixmap(icon("check", 16, C["success"]))
+        self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
         self.status_icon.setFixedSize(20, 20)
         self.status_icon.setScaledContents(True)
         self.status_icon.setVisible(False)
@@ -2658,27 +2658,27 @@ class MainWindow(QMainWindow):
             msg_lower = msg.lower()
             C = COLORS
             if "ready" in msg_lower or "idle" in msg_lower:
-                self.status_icon.setPixmap(icon("check", 16, C["success"]))
+                self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
                 self.status_icon.setVisible(True)
                 self.status_dot.set_color(C["success"], glow=False)
             elif "playing" in msg_lower or "running" in msg_lower:
-                self.status_icon.setPixmap(icon("play", 16, C["playing"]))
+                self.status_icon.setPixmap(icon("play", 16, C["playing"]).pixmap(16, 16))
                 self.status_icon.setVisible(True)
                 self.status_dot.set_color(C["playing"], glow=True)
             elif "paused" in msg_lower:
-                self.status_icon.setPixmap(icon("pause", 16, C["warning"]))
+                self.status_icon.setPixmap(icon("pause", 16, C["warning"]).pixmap(16, 16))
                 self.status_icon.setVisible(True)
                 self.status_dot.set_color(C["warning"], glow=False)
             elif "record" in msg_lower:
-                self.status_icon.setPixmap(icon("record", 16, C["error"]))
+                self.status_icon.setPixmap(icon("record", 16, C["error"]).pixmap(16, 16))
                 self.status_icon.setVisible(True)
                 self.status_dot.set_color(C["error"], glow=True)
             elif "error" in msg_lower or "failed" in msg_lower:
-                self.status_icon.setPixmap(icon("cross", 16, C["error"]))
+                self.status_icon.setPixmap(icon("cross", 16, C["error"]).pixmap(16, 16))
                 self.status_icon.setVisible(True)
                 self.status_dot.set_color(C["error"], glow=True)
             elif "saved" in msg_lower or "imported" in msg_lower or "applied" in msg_lower:
-                self.status_icon.setPixmap(icon("save", 16, C["accent"]))
+                self.status_icon.setPixmap(icon("save", 16, C["accent"]).pixmap(16, 16))
                 self.status_icon.setVisible(True)
                 self.status_dot.set_color(C["accent"], glow=False)
             else:
