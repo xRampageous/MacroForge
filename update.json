@@ -1,6 +1,6 @@
 {
-  "version": "1.2.62",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.62/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.62/MacroForge-v1.2.62.zip",
-  "notes": "v1.2.62: fixed the native Qt crash after capturing an image by keeping the modal image dialog alive during capture. The dialog is now temporarily transparent instead of hidden, preventing its outer exec() loop from being rejected and later resurrected in an invalid state."
+  "version": "2.0.0",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v2.0.0/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v2.0.0/MacroForge-v2.0.0.zip",
+  "notes": "v2.0.0: Major rebuild with improved architecture - new macroforge2 package structure, refactored engine, core, services, and UI components for better maintainability and extensibility."
 }
