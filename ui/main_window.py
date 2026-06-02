@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
     _progress = pyqtSignal(float)
     _status_msg = pyqtSignal(str)
     _diag_msg = pyqtSignal(str)
+    _image_match_state = pyqtSignal(int, str)
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
         self.engine.pause_cb = self._pause_cb
         self.engine.before_action_hook = self._before_action_diag
         self.engine.after_action_hook = self._after_action_diag
+        self.engine.image_state_cb = self._image_match_cb
         self.engine.actions = self.action_model.actions()
 
         # State
@@ -149,6 +151,7 @@ class MainWindow(QMainWindow):
         self._diag_edit = None
         self._single_test_active = False
         self._single_test_index = -1
+        self._run_from_index = 0
         self._last_preflight = {"errors": [], "warnings": []}
 
         # Recorder state
@@ -188,6 +191,7 @@ class MainWindow(QMainWindow):
         self._progress.connect(self._do_progress_cb)
         self._status_msg.connect(self.status)
         self._diag_msg.connect(self._append_diagnostic)
+        self._image_match_state.connect(self._do_image_match_state)
 
         self._check_update_silent()
         self.load_last_session()
@@ -591,6 +595,9 @@ class MainWindow(QMainWindow):
         hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 9px;")
         hints.setVisible(False)
         header_stack.addWidget(hints)
+        self.macro_summary = QLabel("0 actions · 0 image checks · ~0s")
+        self.macro_summary.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 600;")
+        header_stack.addWidget(self.macro_summary)
         tl_hl.addLayout(header_stack)
         tl_hl.addStretch()
 
@@ -623,7 +630,8 @@ class MainWindow(QMainWindow):
         self.timeline = TimelineView(model=self.action_model)
         content_lo.addWidget(self.timeline, stretch=1)
 
-        content_lo.addWidget(self._make_playback_panel())
+        self.playback_panel = self._make_playback_panel()
+        content_lo.addWidget(self.playback_panel)
 
         main_lo.addWidget(content, stretch=1)
 
@@ -633,7 +641,7 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setObjectName("mf2_playback_panel")
         panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-        panel.setFixedHeight(104)
+        panel.setFixedHeight(110)
         panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         lo = QVBoxLayout(panel)
@@ -648,9 +656,13 @@ class MainWindow(QMainWindow):
             f"border: 1px solid {C['border']}; border-radius: 7px; }}"
         )
 
-        dlo = QHBoxLayout(dock)
-        dlo.setContentsMargins(8, 7, 8, 7)
+        dlo = QVBoxLayout(dock)
+        dlo.setContentsMargins(8, 6, 8, 6)
         dlo.setSpacing(6)
+
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setSpacing(6)
 
         def section_title(txt):
             lbl = QLabel(txt)
@@ -670,14 +682,14 @@ class MainWindow(QMainWindow):
 
         def vline():
             line = QFrame()
-            line.setFixedSize(1, 64)
+            line.setFixedSize(1, 42)
             line.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             line.setStyleSheet(f"background-color: {C['border']}; border: none;")
             return line
 
         # ── 1. Playback buttons ────────────────────────────
         play_section = QFrame()
-        play_section.setFixedWidth(128)
+        play_section.setFixedWidth(134)
         play_section.setStyleSheet("background: transparent; border: none;")
         play_lo = QVBoxLayout(play_section)
         play_lo.setContentsMargins(0, 0, 0, 0)
@@ -693,7 +705,7 @@ class MainWindow(QMainWindow):
         self.start_btn.setIcon(icon("play", 13, C["text"]))
         self.start_btn.setIconSize(QSize(13, 13))
         self.start_btn.setToolTip("Start playback (F9)")
-        self.start_btn.setFixedSize(56, 36)
+        self.start_btn.setFixedSize(58, 38)
         self.start_btn.setStyleSheet(
             f"QPushButton#play_btn {{ background-color: #063c1f; color: {C['text']}; "
             f"border: 1px solid {C['success']}; border-radius: 7px; font-size: 10px; font-weight: 950; padding: 0 6px; }}"
@@ -707,7 +719,7 @@ class MainWindow(QMainWindow):
         self.pause_btn.setIcon(icon("play", 13, C["text_dim"]))
         self.pause_btn.setIconSize(QSize(13, 13))
         self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-        self.pause_btn.setFixedSize(32, 36)
+        self.pause_btn.setFixedSize(34, 38)
         self.pause_btn.setStyleSheet(
             f"QPushButton#pause_btn {{ background-color: {C['bg_tertiary']}; color: {C['pause_cyan']}; "
             f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
@@ -723,7 +735,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setIcon(icon("stop", 12, C["error"]))
         self.stop_btn.setIconSize(QSize(12, 12))
         self.stop_btn.setToolTip("Stop playback")
-        self.stop_btn.setFixedSize(32, 36)
+        self.stop_btn.setFixedSize(34, 38)
         self.stop_btn.setStyleSheet(
             f"QPushButton#stop_btn {{ background-color: {C['bg_tertiary']}; color: {C['error']}; "
             f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 0; }}"
@@ -736,12 +748,12 @@ class MainWindow(QMainWindow):
 
         play_lo.addLayout(play_row)
         play_lo.addStretch()
-        dlo.addWidget(play_section)
-        dlo.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
+        controls_row.addWidget(play_section)
+        controls_row.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
 
         # ── 2. Playback options ────────────────────────────
         options_section = QFrame()
-        options_section.setFixedWidth(138)
+        options_section.setFixedWidth(254)
         options_section.setStyleSheet("background: transparent; border: none;")
         opt_lo = QVBoxLayout(options_section)
         opt_lo.setContentsMargins(0, 0, 0, 0)
@@ -750,7 +762,7 @@ class MainWindow(QMainWindow):
 
         row_one = QHBoxLayout()
         row_one.setContentsMargins(0, 0, 0, 0)
-        row_one.setSpacing(6)
+        row_one.setSpacing(5)
 
         speed_box = QVBoxLayout()
         speed_box.setContentsMargins(0, 0, 0, 0)
@@ -760,7 +772,7 @@ class MainWindow(QMainWindow):
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x"])
         self.speed_combo.setCurrentIndex(3)
         self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-        self.speed_combo.setFixedSize(54, 24)
+        self.speed_combo.setFixedSize(66, 24)
         speed_box.addWidget(self.speed_combo)
         row_one.addLayout(speed_box)
 
@@ -785,44 +797,41 @@ class MainWindow(QMainWindow):
         loop_pair_lo.addWidget(self.inf_check)
         loops_box.addWidget(loop_pair)
         row_one.addLayout(loops_box)
-        opt_lo.addLayout(row_one)
-
-        row_two = QHBoxLayout()
-        row_two.setContentsMargins(0, 0, 0, 0)
-        row_two.setSpacing(4)
         self.sim_check = QCheckBox("Sim")
         self.sim_check.setObjectName("pill_check")
         self.sim_check.setToolTip("Simulation mode")
         self.sim_check.setFixedSize(36, 23)
-        row_two.addWidget(self.sim_check)
+        row_one.addWidget(self.sim_check, alignment=Qt.AlignmentFlag.AlignBottom)
 
         self.human_check = QCheckBox("Hum")
         self.human_check.setObjectName("pill_check")
         self.human_check.setToolTip("Humanized movement curve")
         self.human_check.setFixedSize(38, 23)
         self.human_check.setChecked(True)
-        row_two.addWidget(self.human_check)
+        row_one.addWidget(self.human_check, alignment=Qt.AlignmentFlag.AlignBottom)
 
         self.focus_check = QCheckBox("Lock")
         self.focus_check.setObjectName("pill_check")
         self.focus_check.setToolTip("Keep playback targeted to the captured window")
         self.focus_check.setFixedSize(40, 23)
-        row_two.addWidget(self.focus_check)
-        row_two.addStretch()
+        row_one.addWidget(self.focus_check, alignment=Qt.AlignmentFlag.AlignBottom)
+        row_one.addStretch()
 
-        opt_lo.addLayout(row_two)
+        opt_lo.addLayout(row_one)
         opt_lo.addStretch()
-        dlo.addWidget(options_section)
-        dlo.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
+        controls_row.addWidget(options_section)
+        controls_row.addStretch()
+        self.collapse_playback_btn = QPushButton("Collapse")
+        self.collapse_playback_btn.setToolTip("Collapse playback panel")
+        self.collapse_playback_btn.setFixedSize(58, 24)
+        self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))
+        controls_row.addWidget(self.collapse_playback_btn, alignment=Qt.AlignmentFlag.AlignTop)
+        dlo.addLayout(controls_row)
 
         # ── 3. Progress expands; stat chips remain static ───
-        progress_section = QFrame()
-        progress_section.setStyleSheet("background: transparent; border: none;")
-        progress_section.setMinimumWidth(230)
-        progress_section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        ps_lo = QVBoxLayout(progress_section)
-        ps_lo.setContentsMargins(0, 0, 0, 0)
-        ps_lo.setSpacing(6)
+        progress_row = QHBoxLayout()
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.setSpacing(6)
 
         progress_wrap = QFrame()
         progress_wrap.setObjectName("progress_wrap")
@@ -854,7 +863,7 @@ class MainWindow(QMainWindow):
             "min-width: 34px; background: transparent;"
         )
         pw_lo.addWidget(self.progress_label)
-        ps_lo.addWidget(progress_wrap)
+        progress_row.addWidget(progress_wrap, stretch=1)
 
         stats_row = QHBoxLayout()
         stats_row.setContentsMargins(0, 0, 0, 0)
@@ -868,10 +877,17 @@ class MainWindow(QMainWindow):
         stats_row.addWidget(self._stat_seq_w)
         stats_row.addWidget(self._stat_time_w)
         stats_row.addStretch()
-        ps_lo.addLayout(stats_row)
-
-        dlo.addWidget(progress_section, stretch=1)
+        progress_row.addLayout(stats_row)
+        dlo.addLayout(progress_row)
         lo.addWidget(dock, stretch=1)
+        self.playback_dock = dock
+
+        self.playback_restore_btn = QPushButton("Show playback panel")
+        self.playback_restore_btn.setToolTip("Restore playback controls")
+        self.playback_restore_btn.setFixedHeight(24)
+        self.playback_restore_btn.clicked.connect(lambda: self._set_playback_collapsed(False))
+        self.playback_restore_btn.setVisible(False)
+        lo.addWidget(self.playback_restore_btn)
         return panel
 
     def _make_stat_chip(self, icon_name, title, value, color, tooltip):
@@ -880,8 +896,8 @@ class MainWindow(QMainWindow):
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 42, "Loops": 42, "Seq": 66, "Time": 82}.get(title, 46))
-        chip.setFixedHeight(28)
+        chip.setFixedWidth({"Played": 46, "Loops": 46, "Seq": 72, "Time": 88}.get(title, 50))
+        chip.setFixedHeight(30)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
@@ -895,14 +911,14 @@ class MainWindow(QMainWindow):
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(15, 15)
-        ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
+        ico.setFixedSize(16, 16)
+        ico.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 10px; font-weight: 950; background: transparent;"
+            f"color: {C['text']}; font-size: 11px; font-weight: 950; background: transparent;"
         )
         lo.addWidget(value_lbl)
         return chip, value_lbl
@@ -965,6 +981,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Escape"), self, self._deselect)
         QShortcut(QKeySequence("Ctrl+S"), self, lambda: (self._do_save_session(), self.status("Session saved")))
         QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.timeline.setFocus())
+        QShortcut(QKeySequence("Ctrl+Enter"), self, self.test_from_selected_row)
 
     def _deselect(self):
         self.select(-1)
@@ -997,6 +1014,8 @@ class MainWindow(QMainWindow):
         """)
         m.addAction("Edit", lambda: self._open_active_dialog(index))
         m.addAction("Duplicate", lambda: self.duplicate_action(index))
+        m.addSeparator()
+        m.addAction("Test from selected row", self.test_from_selected_row)
         m.addSeparator()
         m.addAction("Move Up", lambda: self.move_action(index, -1))
         m.addAction("Move Down", lambda: self.move_action(index, 1))
@@ -1549,6 +1568,7 @@ class MainWindow(QMainWindow):
             return
         self._single_test_active = False
         self._single_test_index = -1
+        self._run_from_index = 0
         # Always sync the execution engine from the visible timeline/model
         # immediately before playback. This prevents stale engine lists from
         # looping visually while not deploying the edited/current actions.
@@ -1566,6 +1586,7 @@ class MainWindow(QMainWindow):
         self.status_text.setText("Playing")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
+        self.timeline.clear_image_states()
         self.engine.infinite_loop = self.inf_check.isChecked()
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
@@ -1581,6 +1602,7 @@ class MainWindow(QMainWindow):
         self._diag("[STOP] Stop requested")
         self._single_test_active = False
         self._single_test_index = -1
+        self._run_from_index = 0
         self.engine.stop()
         self.timeline.clear_playing()
         self.start_btn.setEnabled(True)
@@ -1601,7 +1623,7 @@ class MainWindow(QMainWindow):
         self._play_action.emit(idx, dur)
 
     def _do_play_cb(self, idx, dur):
-        display_idx = self._single_test_index if self._single_test_active and idx == 0 else idx
+        display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
         self.playing_index = display_idx
         self.actions_played += 1
         speed = max(self.engine.speed_multiplier, 0.01)
@@ -1609,6 +1631,13 @@ class MainWindow(QMainWindow):
         self.timeline.set_playing(display_idx, adjusted_dur)
         self._diag(f"[PLAY] Timeline row {display_idx + 1} active for ~{adjusted_dur:.2f}s")
         self.update_statistics()
+
+    def _image_match_cb(self, idx, state):
+        self._image_match_state.emit(idx, state)
+
+    def _do_image_match_state(self, idx, state):
+        display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+        self.timeline.set_image_state(display_idx, state)
 
     def _pause_cb(self, paused):
         self._pause_state.emit(paused)
@@ -1641,6 +1670,7 @@ class MainWindow(QMainWindow):
         self._diag("[TEST] Selected action test complete" if was_single_test else "[PLAY] Macro complete")
         self._single_test_active = False
         self._single_test_index = -1
+        self._run_from_index = 0
         if self.session_start_time:
             self.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
@@ -1784,11 +1814,13 @@ class MainWindow(QMainWindow):
         action = deepcopy(self.action_model.get(idx))
         self._single_test_active = True
         self._single_test_index = idx
+        self._run_from_index = 0
         self.actions_played = 0
         self.session_elapsed_time = 0.0
         self.session_start_time = time.time()
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
+        self.timeline.clear_image_states()
         self.start_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
@@ -1808,6 +1840,55 @@ class MainWindow(QMainWindow):
             self.engine.speed = 1.0
 
         self._diag(f"[TEST] Testing row {idx + 1}: {self._action_diag_summary(action)} sim={self.engine.simulation_mode}")
+        self.engine.start()
+
+    def test_from_selected_row(self):
+        if self.engine.running:
+            self.status("Stop playback before testing from a selected row")
+            return
+        idx = self.active_index
+        if idx < 0:
+            try:
+                cur = self.timeline.currentIndex()
+                idx = cur.row() if cur and cur.isValid() else -1
+            except Exception:
+                idx = -1
+        if idx < 0 or idx >= self.action_model.rowCount():
+            self.status("Select a starting row to test")
+            return
+
+        self._single_test_active = False
+        self._single_test_index = -1
+        self._run_from_index = idx
+        self.engine.actions = self.action_model.actions()[idx:]
+        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
+            self._run_from_index = 0
+            return
+
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = time.time()
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self.timeline.clear_image_states()
+        self.start_btn.setEnabled(False)
+        self.pause_btn.setEnabled(True)
+        self.stop_btn.setEnabled(True)
+        self.status_dot.set_color(COLORS["playing"], glow=True)
+        self.status_text.setText(f"Testing row {idx + 1}+")
+
+        self.engine.infinite_loop = False
+        self.engine.simulation_mode = self.sim_check.isChecked()
+        self.engine.human_curve = self.human_check.isChecked()
+        self.engine.focus_lock = self.focus_check.isChecked()
+        self.engine.loops = 1
+        self.engine.loops_completed_count = 0
+        try:
+            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
+        except ValueError:
+            self.engine.speed = 1.0
+
+        self._diag(f"[TEST] Testing from row {idx + 1}: {len(self.engine.actions)} actions")
         self.engine.start()
 
     # ═══════════════════════════════════════════════════════
@@ -2206,6 +2287,7 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addAction("Run pre-flight check…", lambda: self.run_preflight_check(show_success=True, allow_warning_prompt=False))
         m.addAction("Test selected action", self.test_selected_action)
+        m.addAction("Test from selected row     Ctrl+Enter", self.test_from_selected_row)
         m.addAction("Playback diagnostics…", self.open_playback_diagnostics)
         m.addSeparator()
         m.addAction("Reset statistics", self.reset_stats)
@@ -2489,6 +2571,23 @@ class MainWindow(QMainWindow):
 
     def _invalidate_seq_dur(self):
         self._seq_dur_cache = sum(a.duration for a in self.engine.actions)
+        self._update_macro_summary()
+
+    def _update_macro_summary(self):
+        if not hasattr(self, "macro_summary"):
+            return
+        actions = self.action_model.actions()
+        image_checks = sum(1 for action in actions if action.is_image())
+        duration = sum(float(getattr(action, "duration", 0.0) or 0.0) for action in actions)
+        duration_text = f"{duration:.0f}s" if abs(duration - round(duration)) < 0.1 else f"{duration:.1f}s"
+        check_label = "image check" if image_checks == 1 else "image checks"
+        self.macro_summary.setText(f"{len(actions)} actions · {image_checks} {check_label} · ~{duration_text}")
+
+    def _set_playback_collapsed(self, collapsed):
+        collapsed = bool(collapsed)
+        self.playback_dock.setVisible(not collapsed)
+        self.playback_restore_btn.setVisible(collapsed)
+        self.playback_panel.setFixedHeight(31 if collapsed else 110)
 
     @staticmethod
     def _format_hms(seconds: float) -> str:

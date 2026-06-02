@@ -19,6 +19,17 @@ class DummyInput:
 
 
 class TestExecutionEngineLoops(unittest.TestCase):
+    def test_image_without_template_reports_waiting_then_missed(self):
+        states = []
+        with patch("engine.PlatformInput", return_value=DummyInput()):
+            runner = ExecutionEngine(lambda _message: None, lambda *_args: None, lambda: None, lambda _progress: None)
+        runner.current_action_index = 4
+        runner.image_state_cb = lambda idx, state: states.append((idx, state))
+
+        runner._exec_image_search(Action("[IMAGE]", 0.0, action_type="image"))
+
+        self.assertEqual(states, [(4, "Waiting"), (4, "Missed")])
+
     def test_loop_until_found_finishes_every_timeline_row_before_restarting(self):
         played = []
         statuses = []

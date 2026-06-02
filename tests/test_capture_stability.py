@@ -15,7 +15,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QDialog
 
 from debugger import DebugLogger
-from models import ActionListModel
+from models import Action, ActionListModel
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
 from ui.timeline import TimelineView
@@ -111,6 +111,62 @@ class TestOwnedTimers(QtTestCase):
             window.save_session()
             self.assertTrue(window._save_session_timer.isActive())
             window._save_session_timer.stop()
+            window._update_check_timer.stop()
+            window.deleteLater()
+
+
+class TestPlaybackVisibility(QtTestCase):
+    def _make_window(self, tmpdir):
+        profile_manager = SimpleNamespace(base_dir=tmpdir)
+        patches = (
+            patch.object(MainWindow, "_check_update_silent"),
+            patch.object(MainWindow, "load_last_session"),
+            patch.object(MainWindow, "_restore_window_geometry"),
+            patch.object(MainWindow, "_setup_tray"),
+        )
+        for item in patches:
+            item.start()
+            self.addCleanup(item.stop)
+        return MainWindow(profile_manager=profile_manager)
+
+    def test_summary_and_bottom_panel_collapse(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("enter", 1.0),
+                Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1, wait_timeout=10.0),
+                Action("[DELAY]", 47.0, action_type="pause"),
+            ])
+            window.refresh()
+
+            self.assertEqual(window.macro_summary.text(), "3 actions · 1 image check · ~48s")
+            window._set_playback_collapsed(True)
+            self.assertEqual(window.playback_panel.height(), 31)
+            self.assertFalse(window.playback_dock.isVisible())
+            self.assertFalse(window.playback_restore_btn.isHidden())
+            window._set_playback_collapsed(False)
+            self.assertEqual(window.playback_panel.height(), 110)
+            window._update_check_timer.stop()
+            window.deleteLater()
+
+    def test_from_selected_row_uses_remaining_actions_and_maps_timeline_index(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("a", 0.0),
+                Action("b", 0.0),
+                Action("[IMAGE]", 0.0, action_type="image", image_data=PNG_1X1),
+            ])
+            window.active_index = 1
+            with patch.object(window.engine, "start"):
+                window.test_from_selected_row()
+
+            self.assertEqual([action.key for action in window.engine.actions], ["b", "[IMAGE]"])
+            self.assertEqual(window._run_from_index, 1)
+            window._do_play_cb(0, 0.0)
+            self.assertEqual(window.timeline.playing_index, 1)
+            window._do_image_match_state(1, "Found")
+            self.assertEqual(window.timeline.image_states[2], "Found")
             window._update_check_timer.stop()
             window.deleteLater()
 

@@ -49,6 +49,7 @@ class ExecutionEngine:
         self.loops_completed_count = 0
         self.human_curve = True   # Adds subtle ease-in/out jitter to key presses
         self._flash_cb = None     # Optional callback(loc) to flash matched region on screen
+        self.image_state_cb = None  # Optional callback(row, "Waiting" | "Found" | "Missed")
         self._last_image_found = False  # Set by _exec_image_search; read by loop_until_found
         self.focus_lock = False         # If True, refocus _focus_hwnd before each action
         self._focus_hwnd = None         # Window handle captured at start
@@ -101,13 +102,16 @@ class ExecutionEngine:
 
     def _exec_image_search(self, action: 'Action'):
         """Execute an image-search action: locate template on screen and react."""
+        self._set_image_state("Waiting")
         if not action.image_data:
             self.status("Image action: no template captured — skipping")
+            self._set_image_state("Missed")
             return
         try:
             import cv2  # noqa — needed by pyautogui confidence matching
         except ImportError:
             self.status("Image search requires: pip install opencv-python")
+            self._set_image_state("Missed")
             return
         try:
             from PIL import Image
@@ -125,6 +129,7 @@ class ExecutionEngine:
                         pass
                 if not templates:
                     self.status("Image action: no valid template — skipping")
+                    self._set_image_state("Missed")
                     return
                 self._img_template_cache[cache_key] = templates
 
@@ -149,6 +154,8 @@ class ExecutionEngine:
 
             if self.simulation_mode:
                 self.status(f"[Simulate] Image search ({len(templates)} template(s), conf={action.similarity:.2f})")
+                self._last_image_found = True
+                self._set_image_state("Found")
                 return
 
             # ── Polling loop (respects wait_timeout + pause) ────────────
@@ -218,6 +225,7 @@ class ExecutionEngine:
                 tmpl_lbl = f" (template {matched_tmpl})" if len(templates) > 1 else ""
                 self.status(f"Image found at {cx},{cy}{tmpl_lbl} -> {action.on_found_action}")
                 self._last_image_found = True
+                self._set_image_state("Found")
 
                 try:
                     # Move mouse to match first if requested (independent of action)
@@ -239,6 +247,7 @@ class ExecutionEngine:
                     self._flash_cb(loc)
             else:
                 self._last_image_found = False
+                self._set_image_state("Missed")
                 waited = f" (waited {timeout:.0f}s)" if timeout > 0 else ""
                 if action.on_not_found == "stop":
                     self.status(f"✗ Image not found{waited} — STOPPED (set 'When not found' to skip to continue)")
@@ -250,6 +259,15 @@ class ExecutionEngine:
 
         except Exception as e:
             self.status(f"Image search error: {e}")
+            self._last_image_found = False
+            self._set_image_state("Missed")
+
+    def _set_image_state(self, state: str):
+        if self.image_state_cb:
+            try:
+                self.image_state_cb(self.current_action_index, state)
+            except Exception:
+                pass
 
     def stop(self):
         self.running = False

@@ -147,6 +147,7 @@ class TimelineDelegate(QStyledItemDelegate):
             selected = bool(option.state & QStyle.StateFlag.State_Selected)
             hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
             playing = row == getattr(view, "playing_index", -1)
+            queued = row == getattr(view, "next_index", -1)
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
@@ -160,10 +161,14 @@ class TimelineDelegate(QStyledItemDelegate):
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
             if selected:
                 bg = _mix(bg, type_color, 0.12)
+            if queued:
+                bg = _mix(bg, type_color, 0.07)
 
             border = COLORS["border"]
             if selected:
                 border = COLORS["border_light"]
+            if queued:
+                border = _mix(COLORS["border"], type_color, 0.35)
             if playing:
                 border = type_color
 
@@ -201,11 +206,9 @@ class TimelineDelegate(QStyledItemDelegate):
             else:
                 self._rounded_rect(painter, outer, 8, bg, border, 1)
 
-            # Compact-aware layout. The default app window is 780x780, so the
-            # delegate intentionally collapses labels/status metadata before it
-            # lets progress bars overlap or clip.
+            # Compact-aware layout. Timeline metadata stays visible at every
+            # supported window size; only the progress rail flexes horizontally.
             compact = outer.width() < 760
-            tiny = outer.width() < 600
 
             # Left type accent stripe and active play marker. Active playback fills
             # the row's left end with the action's own gradient colour.
@@ -272,21 +275,18 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawPath(path)
             self._draw_type_icon(painter, icon_rect, kind, type_color)
 
-            # Right-side progress area. Status/duration are fixed-size columns;
-            # only the progress rail itself expands/contracts with window width.
+            # Right-side progress area. Status and duration are static columns;
+            # only the progress rail expands/contracts with window width.
             menu_reserve = 22 if compact else 26
             pct_w = 38 if compact else 44
             right_edge = outer.right() - menu_reserve - pct_w - 10
 
-            status_w = 14 if compact else 92
-            status_x = max(icon_rect.right() + 96, outer.left() + int(outer.width() * (0.52 if compact else 0.49)))
-            duration_w = 48 if compact else 56
-            bar_x = max(status_x + status_w + (42 if tiny else 62), outer.left() + int(outer.width() * (0.70 if compact else 0.66)))
-            if not tiny:
-                bar_x = max(bar_x, status_x + status_w + duration_w + 18)
-            bar_w = max(64 if compact else 96, int(right_edge - bar_x))
-            if bar_x + bar_w > right_edge:
-                bar_w = max(56, int(right_edge - bar_x))
+            status_w = 76 if compact else 92
+            status_x = outer.left() + (216 if compact else 300)
+            duration_w = 46 if compact else 56
+            dur_x = status_x + status_w + 10
+            bar_x = dur_x + duration_w + 10
+            bar_w = max(28, int(right_edge - bar_x))
 
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
@@ -304,7 +304,22 @@ class TimelineDelegate(QStyledItemDelegate):
             fm = painter.fontMetrics()
             painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
-            # Status chip / dot. Its width is fixed; it does not resize with the row.
+            if kind == "image":
+                match_state = getattr(view, "image_states", {}).get(row, "")
+                if match_state:
+                    match_col = {
+                        "Found": COLORS["success"],
+                        "Waiting": COLORS["neon_gold"],
+                        "Missed": COLORS["error"],
+                    }.get(match_state, COLORS["text_dim"])
+                    badge_w = 42 if compact else 50
+                    badge_rect = QRectF(text_x, outer.bottom() - 17, badge_w, 14)
+                    self._rounded_rect(painter, badge_rect, 4, COLORS["bg"], match_col, 1)
+                    painter.setPen(QColor(match_col))
+                    painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
+                    painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, match_state)
+
+            # Status chip. Its width is fixed and never collapses into a dot.
             if playing:
                 status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", type_color)
             elif progress >= 0.999:
@@ -312,24 +327,17 @@ class TimelineDelegate(QStyledItemDelegate):
             else:
                 status, status_col = "Pending", COLORS["text_dim"]
 
-            if compact:
-                painter.setBrush(QColor(status_col))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawEllipse(QRectF(status_x, outer.center().y() - 4, 8, 8))
-            else:
-                status_rect = QRectF(status_x, outer.center().y() - 15, status_w, 30)
-                self._rounded_rect(painter, status_rect, 5, COLORS["bg"], status_col, 1)
-                painter.setPen(QColor(status_col))
-                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
-                painter.drawText(status_rect, Qt.AlignmentFlag.AlignCenter, status)
+            status_rect = QRectF(status_x, outer.center().y() - 15, status_w, 30)
+            self._rounded_rect(painter, status_rect, 5, COLORS["bg"], status_col, 1)
+            painter.setPen(QColor(status_col))
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+            painter.drawText(status_rect, Qt.AlignmentFlag.AlignCenter, status)
 
             # Duration metadata; fixed-size column before progress rail.
-            if not tiny:
-                dur_x = bar_x - duration_w - 12
-                dur_rect = QRectF(dur_x, outer.top(), duration_w, outer.height())
-                painter.setPen(QColor(COLORS["text_dim"]))
-                painter.setFont(QFont("Segoe UI", 7 if compact else 8))
-                painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
+            dur_rect = QRectF(dur_x, outer.top(), duration_w, outer.height())
+            painter.setPen(QColor(COLORS["text_dim"]))
+            painter.setFont(QFont("Segoe UI", 7 if compact else 8))
+            painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
 
             # Per-action progress bar. This is the responsive part of the row.
             bar_y = outer.center().y() - 3
@@ -388,7 +396,9 @@ class TimelineView(QListView):
         self.zoom = 0.90
         self.selected_indices = set()
         self.playing_index = -1
+        self.next_index = -1
         self.paused = False
+        self.image_states = {}
         self._search = ""
         self._drag_start_row = -1
         self._playing_started = 0.0
@@ -517,6 +527,7 @@ class TimelineView(QListView):
 
     def set_playing(self, index, duration=0.0):
         self.playing_index = index
+        self.next_index = index + 1 if index + 1 < self.model().rowCount() else -1
         self.paused = False
         self._playing_duration = max(0.0, float(duration or 0.0))
         self._playing_started = time.monotonic()
@@ -529,11 +540,21 @@ class TimelineView(QListView):
 
     def clear_playing(self):
         self.playing_index = -1
+        self.next_index = -1
         self.paused = False
         self._frozen_progress = 0.0
         if self._progress_timer.isActive():
             self._progress_timer.stop()
         self.viewport().update()
+
+    def clear_image_states(self):
+        self.image_states.clear()
+        self.viewport().update()
+
+    def set_image_state(self, index, state):
+        if 0 <= index < self.model().rowCount():
+            self.image_states[index] = state
+            self.viewport().update()
 
     def set_paused(self, paused: bool):
         paused = bool(paused)

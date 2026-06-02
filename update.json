@@ -1,5 +1,5 @@
 {
-  "version": "3.0.21",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.21/MacroForge-v3.0.21.zip",
-  "notes": "v3.0.21: Loop-until-found continuation fix - image misses no longer stop the current timeline pass early. Remaining actions run before the sequence restarts, regardless of timeline length. Removes the obsolete reachability warning and adds regression coverage for a 12-action sequence."
+  "version": "3.0.22",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.22/MacroForge-v3.0.22.zip",
+  "notes": "v3.0.22: Playback visibility and compact controls - adds image-match badges (Found, Waiting, Missed), faint next-action highlighting, timeline macro summary, collapsible bottom playback panel, test-from-selected-row via menu/context menu/Ctrl+Enter, static timeline stage chips and duration metadata at narrow widths, readable Speed control, and enlarged bottom stats."
 }
