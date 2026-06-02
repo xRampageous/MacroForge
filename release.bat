@@ -89,12 +89,22 @@ echo.
 ::  BUILD
 :: ===========================================================
 echo [1/3] Building...
-echo        Flags: !BUILD_FLAGS!
-call build.bat !BUILD_FLAGS!
+echo        Flags: !BUILD_FLAGS! --clean-release
+call build.bat !BUILD_FLAGS! --clean-release
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed.
     pause & exit /b 1
 )
+
+echo.
+echo [PRE] Release preflight...
+python release_preflight.py --allow-dirty
+if %errorlevel% neq 0 (
+    echo [ERROR] Release preflight failed.
+    pause & exit /b 1
+)
+
+python release_notes.py !VER! > _release_notes.txt
 
 :: ===========================================================
 ::  RELEASE
@@ -106,8 +116,9 @@ echo [2/3] Releasing to GitHub...
 gh release delete v!VER! --repo xRampageous/MacroForge --yes >nul 2>&1
 
 :: Create release
-gh release create v!VER! --repo xRampageous/MacroForge --title "MacroForge v!VER!" --notes "Release v!VER!" >nul 2>&1
+gh release create v!VER! --repo xRampageous/MacroForge --title "MacroForge v!VER!" --notes-file _release_notes.txt >nul 2>&1
 if %errorlevel% neq 0 (
+    del /f /q _release_notes.txt >nul 2>&1
     echo [ERROR] Release creation failed.
     pause & exit /b 1
 )
@@ -115,9 +126,11 @@ if %errorlevel% neq 0 (
 :: Upload assets
 gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge-v!VER!.zip" >nul 2>&1
 if %errorlevel% neq 0 (
+    del /f /q _release_notes.txt >nul 2>&1
     echo [ERROR] Asset upload failed.
     pause & exit /b 1
 )
+del /f /q _release_notes.txt >nul 2>&1
 
 echo        Release v!VER! published.
 
@@ -126,7 +139,7 @@ echo        Release v!VER! published.
 :: ===========================================================
 echo.
 echo [3/3] Pushing update manifest...
-git add version.py update.json build.bat release.bat build_helper.py >nul 2>&1
+git add -A >nul 2>&1
 git commit -m "Release v!VER!" >nul 2>&1
 git push origin main >nul 2>&1
 if %errorlevel% neq 0 (

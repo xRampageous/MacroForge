@@ -23,6 +23,46 @@ MANIFEST_TIMEOUT = 3  # seconds
 DOWNLOAD_TIMEOUT = 120  # seconds (ZIPs are larger)
 
 
+def parse_version_tuple(version: str) -> tuple[int, ...]:
+    """Parse strict dotted numeric versions like 3.1.2."""
+    value = str(version or "").strip()
+    if not value:
+        raise ValueError("version is missing")
+    parts = value.split(".")
+    if not all(part.isdigit() for part in parts):
+        raise ValueError(f"invalid version: {version!r}")
+    return tuple(int(part) for part in parts)
+
+
+def validate_manifest(manifest: dict, require_notes: bool = True) -> list[str]:
+    """Return manifest validation errors."""
+    errors = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be a JSON object"]
+    try:
+        parse_version_tuple(manifest.get("version", ""))
+    except ValueError as exc:
+        errors.append(str(exc))
+    if not str(manifest.get("zip_url", "")).strip() and not str(manifest.get("url", "")).strip():
+        errors.append("manifest must include zip_url or url")
+    if require_notes and not str(manifest.get("notes", "")).strip():
+        errors.append("manifest notes must not be empty")
+    return errors
+
+
+def _safe_extract_zip(zf: zipfile.ZipFile, extract_dir: Path) -> None:
+    """Extract a ZIP after rejecting paths that escape extract_dir."""
+    target_root = extract_dir.resolve()
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        if name.startswith("/") or name.startswith("../") or "/../" in name:
+            raise ValueError(f"unsafe ZIP member path: {info.filename}")
+        target = (target_root / name).resolve()
+        if target != target_root and target_root not in target.parents:
+            raise ValueError(f"unsafe ZIP member path: {info.filename}")
+    zf.extractall(extract_dir)
+
+
 def _is_frozen() -> bool:
     return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
 
@@ -75,6 +115,14 @@ def check_update(silent: bool = True) -> dict | None:
             raise
         return None
 
+    errors = validate_manifest(data, require_notes=True)
+    if errors:
+        _last_error = "; ".join(errors)
+        logger.error(f"check_update: invalid manifest: {_last_error}")
+        if not silent:
+            raise ValueError(_last_error)
+        return None
+
     remote_ver = data.get("version", "").strip()
     logger.info(f"check_update: remote_ver={remote_ver!r}")
     if not remote_ver:
@@ -82,7 +130,7 @@ def check_update(silent: bool = True) -> dict | None:
         return None
 
     try:
-        remote_tuple = tuple(int(p) for p in remote_ver.split(".") if p.isdigit())
+        remote_tuple = parse_version_tuple(remote_ver)
     except Exception as e:
         _last_error = f"Failed to parse version '{remote_ver}': {e}"
         logger.error(f"check_update: {e}")
@@ -212,6 +260,11 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     Optional progress_cb(bytes_downloaded, total_bytes) is called periodically.
     Returns True if the hand-off was started (app should exit).
     """
+    errors = validate_manifest(manifest, require_notes=False)
+    if errors:
+        logger.error("Invalid update manifest: " + "; ".join(errors))
+        return False
+
     zip_url = manifest.get("zip_url", "").strip()
     exe_url = manifest.get("url", "").strip()
     download_url = zip_url or exe_url
@@ -278,7 +331,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
     try:
         logger.info(f"Extracting ZIP to {extract_dir} ...")
         with zipfile.ZipFile(zip_file, "r") as zf:
-            zf.extractall(extract_dir)
+            _safe_extract_zip(zf, extract_dir)
         logger.info("ZIP extracted successfully")
     except Exception as e:
         logger.error(f"ZIP extraction failed: {e}")

@@ -16,6 +16,23 @@ from PlatformInput import PlatformInput
 from models import Action
 
 
+class ImageSearchTiming:
+    """Tracks image-search wait time while keeping pause handling explicit."""
+    def __init__(self, timeout: float, now=None):
+        self._now = now or time.time
+        self.timeout = max(0.0, float(timeout or 0.0))
+        self.deadline = self._now() + self.timeout
+
+    def extend_for_pause(self, paused_seconds: float) -> None:
+        self.deadline += max(0.0, float(paused_seconds or 0.0))
+
+    def remaining(self) -> float:
+        return max(0.0, self.deadline - self._now())
+
+    def expired(self) -> bool:
+        return self.remaining() <= 0.0
+
+
 class ExecutionEngine:
     # Pre-built randomization tables (avoid recreating dicts every action)
     _KEY_VARIATIONS = {
@@ -159,9 +176,9 @@ class ExecutionEngine:
                 return
 
             # ── Polling loop (respects wait_timeout + pause) ────────────
-            timeout       = max(0.0, action.wait_timeout)
+            timing        = ImageSearchTiming(action.wait_timeout)
+            timeout       = timing.timeout
             poll_interval = 0.10
-            deadline      = time.time() + timeout
             loc           = None
             matched_tmpl  = 0
             _last_status  = 0.0
@@ -174,7 +191,7 @@ class ExecutionEngine:
                     pause_start = time.time()
                     while self.paused and self.running:
                         time.sleep(0.05)
-                    deadline += time.time() - pause_start
+                    timing.extend_for_pause(time.time() - pause_start)
 
                 for ti, tmpl in enumerate(templates):
                     try:
@@ -198,9 +215,9 @@ class ExecutionEngine:
 
                 if loc is not None:
                     break
-                if time.time() >= deadline:
+                if timing.expired():
                     break
-                remaining = deadline - time.time()
+                remaining = timing.remaining()
                 now = time.time()
                 if now - _last_status >= 1.0:
                     self.status(f"Waiting for image… {remaining:.1f}s left")

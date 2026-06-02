@@ -210,26 +210,40 @@ class ActionListModel(QAbstractListModel):
 # HISTORY / UNDO-REDO
 # =========================================================
 class HistoryManager:
-    def __init__(self):
+    def __init__(self, max_size=50):
         self.undo_stack = deque()
         self.redo_stack = deque()
-        self.max_size = 50
+        self.max_size = max_size
 
-    def undo(self, current):
+    def _snapshot(self, actions: List[Action], timeline_state=None) -> dict:
+        return {
+            "actions": [a.to_dict() for a in actions],
+            "timeline_state": deepcopy(timeline_state) if timeline_state is not None else None,
+            "with_timeline": timeline_state is not None,
+        }
+
+    def _restore(self, snapshot: dict, force_timeline: bool = False):
+        actions = [Action.from_dict(d) for d in snapshot["actions"]]
+        timeline_state = deepcopy(snapshot.get("timeline_state"))
+        if force_timeline or snapshot.get("with_timeline"):
+            return actions, timeline_state
+        return actions
+
+    def undo(self, current, current_timeline_state=None):
         if not self.undo_stack:
             return None
-        self.redo_stack.append(deepcopy(current))
-        return self.undo_stack.pop()
+        self.redo_stack.append(self._snapshot(current, current_timeline_state))
+        return self._restore(self.undo_stack.pop(), current_timeline_state is not None)
 
-    def redo(self, current):
+    def redo(self, current, current_timeline_state=None):
         if not self.redo_stack:
             return None
-        self.undo_stack.append(deepcopy(current))
-        return self.redo_stack.pop()
+        self.undo_stack.append(self._snapshot(current, current_timeline_state))
+        return self._restore(self.redo_stack.pop(), current_timeline_state is not None)
 
-    def push(self, actions: List[Action]):
+    def push(self, actions: List[Action], timeline_state=None):
         """Save current state for undo"""
-        self.undo_stack.append(deepcopy(actions))
+        self.undo_stack.append(self._snapshot(actions, timeline_state))
         self.redo_stack.clear()
         if len(self.undo_stack) > self.max_size:
             self.undo_stack.popleft()

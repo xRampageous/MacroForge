@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine import ExecutionEngine
+from engine import ExecutionEngine, ImageSearchTiming
 from models import Action
 
 
@@ -19,6 +19,18 @@ class DummyInput:
 
 
 class TestExecutionEngineLoops(unittest.TestCase):
+    def test_image_search_timing_extends_deadline_for_pause(self):
+        now = [100.0]
+        timing = ImageSearchTiming(5.0, now=lambda: now[0])
+
+        now[0] = 102.0
+        self.assertAlmostEqual(timing.remaining(), 3.0)
+        timing.extend_for_pause(4.0)
+        self.assertAlmostEqual(timing.remaining(), 7.0)
+
+        now[0] = 109.1
+        self.assertTrue(timing.expired())
+
     def test_image_without_template_reports_waiting_then_missed(self):
         states = []
         with patch("engine.PlatformInput", return_value=DummyInput()):

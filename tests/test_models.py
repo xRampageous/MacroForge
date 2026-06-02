@@ -59,6 +59,27 @@ class TestHistoryManager(unittest.TestCase):
             h.push([Action(str(i), 0.1)])
         self.assertEqual(len(h.undo_stack), 3)
 
+    def test_undo_redo_preserves_timeline_state_when_requested(self):
+        h = HistoryManager()
+        h.push([Action("a", 0.1)], {"active_index": 0, "scroll_position": 12})
+        current = [Action("b", 0.1)]
+
+        actions, state = h.undo(current, {"active_index": 1, "scroll_position": 99})
+        self.assertEqual(actions[0].key, "a")
+        self.assertEqual(state["scroll_position"], 12)
+
+        actions, state = h.redo(actions, state)
+        self.assertEqual(actions[0].key, "b")
+        self.assertEqual(state["scroll_position"], 99)
+
+    def test_ui_style_undo_returns_tuple_for_plain_snapshots(self):
+        h = HistoryManager()
+        h.push([Action("a", 0.1)])
+
+        actions, state = h.undo([Action("b", 0.1)], {"active_index": 1})
+        self.assertEqual(actions[0].key, "a")
+        self.assertIsNone(state)
+
 
 class TestActionListModel(unittest.TestCase):
     def test_insert_action_uses_requested_position(self):

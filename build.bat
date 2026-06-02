@@ -10,12 +10,14 @@ set "FAST=0"
 set "NO_ZIP=0"
 set "NO_SMOKE=0"
 set "NO_INSTALLER=0"
+set "CLEAN_RELEASE=0"
 
 for %%a in (%*) do (
     if "%%~a"=="--fast"     set "FAST=1"
     if "%%~a"=="--no-zip"  set "NO_ZIP=1"
     if "%%~a"=="--no-smoke" set "NO_SMOKE=1"
     if "%%~a"=="--no-installer" set "NO_INSTALLER=1"
+    if "%%~a"=="--clean-release" set "CLEAN_RELEASE=1"
 )
 
 :: ===========================================================
@@ -71,6 +73,7 @@ if "%FAST%"=="1"       echo   Mode     : FAST ^(incremental^)
 if "%NO_ZIP%"=="1"     echo   ZIP      : skipped
 if "%NO_SMOKE%"=="1"  echo   Smoke    : skipped
 if "%NO_INSTALLER%"=="1" echo   Installer: skipped
+if "%CLEAN_RELEASE%"=="1" echo   Release : cleaning old dist ZIPs
 echo.
 
 :: ===========================================================
@@ -118,7 +121,11 @@ if "%NO_ZIP%"=="1" goto :skip_zip
 echo.
 echo [3/5] Generating update.json and ZIP...
 if exist "%SCRIPT_DIR%build_helper.py" (
-    python "%SCRIPT_DIR%build_helper.py"
+    if "%CLEAN_RELEASE%"=="1" (
+        python "%SCRIPT_DIR%build_helper.py" --clean-release
+    ) else (
+        python "%SCRIPT_DIR%build_helper.py"
+    )
     if %errorlevel% neq 0 (
         echo  [WARNING] build_helper.py exited with errors.
     ) else (

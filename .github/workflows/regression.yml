@@ -1,0 +1,61 @@
+name: Regression
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PyQt6 pillow pyautogui pynput opencv-python requests numpy
+
+      - name: Run regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -v
+
+      - name: Compile key sources
+        run: >
+          python -m py_compile
+          engine.py
+          models.py
+          updater.py
+          build_helper.py
+          release_notes.py
+          release_preflight.py
+          ui/main_window.py
+          ui/status_dot.py
+          ui/timeline.py
+
+      - name: Report release ZIP artifacts
+        shell: pwsh
+        run: |
+          $zips = Get-ChildItem -Path dist -Filter '*.zip' -File -ErrorAction SilentlyContinue
+          if (-not $zips) {
+            "No release ZIP artifacts found."
+            exit 0
+          }
+          foreach ($zip in $zips) {
+            "ZIP: $($zip.Name) size=$($zip.Length)"
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+            try {
+              $archive.Entries | Select-Object -First 40 | ForEach-Object { " - $($_.FullName)" }
+            } finally {
+              $archive.Dispose()
+            }
+          }

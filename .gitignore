@@ -24,6 +24,7 @@ installer/
 # Debug / logs
 debug.log
 *.log
+.local_snapshots/
 
 # Session data
 macroforge_session.json
