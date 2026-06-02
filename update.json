@@ -1,6 +1,6 @@
 {
-  "version": "3.0.9",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.9/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.9/MacroForge-v3.0.9.zip",
-  "notes": "v3.0.9: UI bottom panel retweak - reorganized bottom panel into Playback | Playback Options | Progress + Stats, enlarged progress bar, slimmed playback buttons, improved stats chips with icons, and enhanced recorder buttons for better readability."
+  "version": "3.0.10",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.10/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.10/MacroForge-v3.0.10.zip",
+  "notes": "v3.0.10: Compact playback panel and crisp stat icons - reworked bottom panel to tighter compact size, reduced panel height and spacing, slimmed playback buttons, improved stat icon sharpness with HiDPI pixmaps and smoother vector drawing."
 }

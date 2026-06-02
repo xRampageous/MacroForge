@@ -6,10 +6,15 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush, QFont, QIcon
 
 
 def _make_pixmap(size, draw_fn):
-    pm = QPixmap(size, size)
+    scale = 2
+    pm = QPixmap(size * scale, size * scale)
     pm.fill(Qt.GlobalColor.transparent)
+    pm.setDevicePixelRatio(scale)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    p.scale(scale, scale)
     draw_fn(p, size)
     p.end()
     return pm
@@ -17,7 +22,8 @@ def _make_pixmap(size, draw_fn):
 
 def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
     c = QColor(color)
-    pen = QPen(c, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    pen_w = max(1.8, size * 0.12)
+    pen = QPen(c, pen_w, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     brush = QBrush(c)
 
     def _draw_play(p, s):
