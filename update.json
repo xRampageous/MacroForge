@@ -1,6 +1,6 @@
 {
-  "version": "1.2.61",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.61/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.61/MacroForge-v1.2.61.zip",
-  "notes": "v1.2.61 stability release: added image capture OK/apply regression coverage, routed timeline insertion and movement through ActionListModel APIs, removed the unused duplicate capture dialog path, fixed autosave debouncing with an owned single-shot timer, and fixed periodic update checks with a repeating timer."
+  "version": "1.2.62",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.62/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v1.2.62/MacroForge-v1.2.62.zip",
+  "notes": "v1.2.62: fixed the native Qt crash after capturing an image by keeping the modal image dialog alive during capture. The dialog is now temporarily transparent instead of hidden, preventing its outer exec() loop from being rejected and later resurrected in an invalid state."
 }

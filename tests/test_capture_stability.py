@@ -10,6 +10,8 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from PIL import Image
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QDialog
 
 from debugger import DebugLogger
@@ -54,6 +56,31 @@ class TestCaptureApply(QtTestCase):
         self.assertIs(timeline.model().get(0), action)
 
         timeline.deleteLater()
+        dialog.deleteLater()
+
+    def test_capture_keeps_outer_modal_dialog_alive_until_ok(self):
+        class FakeOverlay:
+            region = (10, 20, 4, 5)
+
+            def exec(self):
+                return QDialog.DialogCode.Accepted
+
+        dialog = ImageDialog()
+
+        def capture_then_accept():
+            dialog._capture_image()
+            QTimer.singleShot(0, dialog._on_ok_clicked)
+
+        with (
+            patch("ui.dialogs.image_dialog.CaptureOverlay", FakeOverlay),
+            patch("PIL.ImageGrab.grab", return_value=Image.new("RGB", (4, 5), "white")),
+        ):
+            QTimer.singleShot(0, capture_then_accept)
+            result = dialog.exec()
+
+        self.assertEqual(result, QDialog.DialogCode.Accepted)
+        self.assertTrue(dialog._img_data)
+        self.assertIsNotNone(dialog.get_action())
         dialog.deleteLater()
 
     def test_logger_accepts_standard_format_arguments(self):

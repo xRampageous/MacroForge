@@ -631,45 +631,49 @@ class ImageDialog(QDialog):
         except ImportError:
             QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
             return None
-        # Hide parent dialog completely (like tkinter withdraw)
-        logger.debug("image_dialog._do_capture: hiding dialog")
-        self.hide()
+        # Keep the modal dialog alive while making it invisible. Calling hide()
+        # here terminates the dialog's outer exec() loop as Rejected, then the
+        # later show() resurrects a window whose owner has already returned.
+        previous_opacity = self.windowOpacity()
+        logger.debug("image_dialog._do_capture: making dialog transparent")
+        self.setWindowOpacity(0.0)
         QApplication.processEvents()
         import time
         time.sleep(0.08)
-        # Show overlay as modal dialog (like tkinter grab_set)
-        overlay = CaptureOverlay()
-        logger.debug("image_dialog._do_capture: showing overlay")
-        result = overlay.exec()
-        logger.debug(f"image_dialog._do_capture: overlay returned result={result}")
-        # Capture after overlay closes
         captured_result = None
-        if result == QDialog.DialogCode.Accepted and overlay.region:
-            x, y, w, h = overlay.region
-            logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
-            if return_region:
-                captured_result = (x, y, w, h)
-                logger.debug(f"image_dialog._do_capture: returning region={captured_result}")
+        try:
+            # Show overlay as modal dialog (like tkinter grab_set)
+            overlay = CaptureOverlay()
+            logger.debug("image_dialog._do_capture: showing overlay")
+            result = overlay.exec()
+            logger.debug(f"image_dialog._do_capture: overlay returned result={result}")
+            # Capture after overlay closes
+            if result == QDialog.DialogCode.Accepted and overlay.region:
+                x, y, w, h = overlay.region
+                logger.debug(f"image_dialog._do_capture: region={x},{y},{w},{h}")
+                if return_region:
+                    captured_result = (x, y, w, h)
+                    logger.debug(f"image_dialog._do_capture: returning region={captured_result}")
+                else:
+                    try:
+                        shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
+                        buf = io.BytesIO()
+                        shot.save(buf, format="PNG")
+                        b64 = base64.b64encode(buf.getvalue()).decode()
+                        logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
+                        logger.debug("image_dialog._do_capture: captured image len=%s", len(b64))
+                        captured_result = b64
+                    except Exception as e:
+                        logger.exception("image_dialog._do_capture: capture failed")
+                        QMessageBox.critical(self, "Capture Error", str(e))
             else:
-                try:
-                    shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
-                    buf = io.BytesIO()
-                    shot.save(buf, format="PNG")
-                    b64 = base64.b64encode(buf.getvalue()).decode()
-                    logger.debug(f"image_dialog._do_capture: captured b64 len={len(b64)}")
-                    logger.debug("image_dialog._do_capture: captured image len=%s", len(b64))
-                    captured_result = b64
-                except Exception as e:
-                    logger.exception("image_dialog._do_capture: capture failed")
-                    QMessageBox.critical(self, "Capture Error", str(e))
-        else:
-            logger.debug("image_dialog._do_capture: no region selected or cancelled")
-        # Show parent dialog again (like tkinter deiconify)
-        logger.debug("image_dialog._do_capture: showing dialog")
-        self.show()
-        self.raise_()
-        self.activateWindow()
-        QApplication.processEvents()
+                logger.debug("image_dialog._do_capture: no region selected or cancelled")
+        finally:
+            logger.debug("image_dialog._do_capture: restoring dialog opacity")
+            self.setWindowOpacity(previous_opacity)
+            self.raise_()
+            self.activateWindow()
+            QApplication.processEvents()
         logger.debug("image_dialog._do_capture: returning %s", "region" if return_region and captured_result else f"image len={len(captured_result) if isinstance(captured_result, str) else 0}")
         return captured_result
 
