@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QFrame, QMenu,
     QSpinBox, QDoubleSpinBox,
     QFileDialog, QMessageBox, QInputDialog,
-    QDialog
+    QDialog, QPlainTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QAction, QKeySequence, QShortcut, QIcon
@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
     _complete = pyqtSignal()
     _progress = pyqtSignal(float)
     _status_msg = pyqtSignal(str)
+    _diag_msg = pyqtSignal(str)
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -120,6 +121,8 @@ class MainWindow(QMainWindow):
             self._progress_cb
         )
         self.engine.pause_cb = self._pause_cb
+        self.engine.before_action_hook = self._before_action_diag
+        self.engine.after_action_hook = self._after_action_diag
         self.engine.actions = self.action_model.actions()
 
         # State
@@ -138,6 +141,11 @@ class MainWindow(QMainWindow):
         self.session_elapsed_time = 0.0
         self.session_start_time = None
         self._seq_dur_cache = 0.0
+        self._diag_lines = []
+        self._diag_dialog = None
+        self._diag_edit = None
+        self._single_test_active = False
+        self._single_test_index = -1
 
         # Recorder state
         self._recorder = {
@@ -175,6 +183,7 @@ class MainWindow(QMainWindow):
         self._complete.connect(self._do_complete_cb)
         self._progress.connect(self._do_progress_cb)
         self._status_msg.connect(self.status)
+        self._diag_msg.connect(self._append_diagnostic)
 
         self._check_update_silent()
         self.load_last_session()
@@ -332,6 +341,7 @@ class MainWindow(QMainWindow):
         ibrow = QHBoxLayout()
         ibrow.setSpacing(3)
         for name, slot, tip, clr in [("check", self._apply_inspector, "Apply", C["success"]),
+                          ("play", self.test_selected_action, "Test selected action", C["success"]),
                           ("cross", self._cancel_inspector, "Cancel", C["error"]),
                           ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
                           ("duplicate", self._duplicate_inspector, "Duplicate", C["accent"]),
@@ -1278,10 +1288,13 @@ class MainWindow(QMainWindow):
         if self.engine.running:
             self.status("Already running")
             return
+        self._single_test_active = False
+        self._single_test_index = -1
         # Always sync the execution engine from the visible timeline/model
         # immediately before playback. This prevents stale engine lists from
         # looping visually while not deploying the edited/current actions.
         self.engine.actions = self.action_model.actions()
+        self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
         if not self.engine.actions:
             self.status("No actions to play")
             return
@@ -1307,6 +1320,9 @@ class MainWindow(QMainWindow):
         self.engine.start()
 
     def stop(self):
+        self._diag("[STOP] Stop requested")
+        self._single_test_active = False
+        self._single_test_index = -1
         self.engine.stop()
         self.timeline.clear_playing()
         self.start_btn.setEnabled(True)
@@ -1320,17 +1336,20 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
 
     def _status_cb(self, msg):
+        self._diag(f"[STATUS] {msg}")
         self._status_msg.emit(msg)
 
     def _play_cb(self, idx, dur):
         self._play_action.emit(idx, dur)
 
     def _do_play_cb(self, idx, dur):
-        self.playing_index = idx
+        display_idx = self._single_test_index if self._single_test_active and idx == 0 else idx
+        self.playing_index = display_idx
         self.actions_played += 1
         speed = max(self.engine.speed_multiplier, 0.01)
         adjusted_dur = dur / speed
-        self.timeline.set_playing(idx, adjusted_dur)
+        self.timeline.set_playing(display_idx, adjusted_dur)
+        self._diag(f"[PLAY] Timeline row {display_idx + 1} active for ~{adjusted_dur:.2f}s")
         self.update_statistics()
 
     def _pause_cb(self, paused):
@@ -1351,6 +1370,7 @@ class MainWindow(QMainWindow):
         self._complete.emit()
 
     def _do_complete_cb(self):
+        was_single_test = self._single_test_active
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
@@ -1359,7 +1379,10 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(100)
         self.progress_label.setText("100%")
         self.status_dot.set_color(COLORS["text_dark"])
-        self.status_text.setText("Finished")
+        self.status_text.setText("Test done" if was_single_test else "Finished")
+        self._diag("[TEST] Selected action test complete" if was_single_test else "[PLAY] Macro complete")
+        self._single_test_active = False
+        self._single_test_index = -1
         if self.session_start_time:
             self.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
@@ -1380,6 +1403,147 @@ class MainWindow(QMainWindow):
         pct = max(0.0, min(100.0, pct))
         self.progress_bar.setValue(round(pct))
         self.progress_label.setText(f"{pct:.0f}%" if pct >= 10 else f"{pct:.1f}%")
+
+    # ═══════════════════════════════════════════════════════
+    #  PLAYBACK DIAGNOSTICS / SINGLE ACTION TEST
+    # ═══════════════════════════════════════════════════════
+
+    def _action_diag_summary(self, action):
+        try:
+            if action is None:
+                return "Unknown action"
+            kind = getattr(action, "action_type", "key") or "key"
+            label = (getattr(action, "label", "") or "").strip()
+            prefix = f"{kind.upper()}"
+            if action.is_pause():
+                return f"DELAY {float(getattr(action, 'duration', 0.0) or 0.0):.2f}s" + (f" · {label}" if label else "")
+            if action.is_click():
+                return f"CLICK {getattr(action, 'click_button', 'left')} @ {getattr(action, 'click_x', 0)},{getattr(action, 'click_y', 0)}" + (f" · {label}" if label else "")
+            if action.is_image():
+                return f"IMAGE Template.png timeout={float(getattr(action, 'wait_timeout', 0.0) or 0.0):.1f}s" + (f" · {label}" if label else "")
+            if action.is_condition():
+                return f"CONDITION {getattr(action, 'condition_type', 'none')}" + (f" · {label}" if label else "")
+            key = getattr(action, "key", "") or "Unknown"
+            hold = " hold" if bool(getattr(action, "hold_mode", False)) else ""
+            return f"KEY {key}{hold} {float(getattr(action, 'duration', 0.0) or 0.0):.2f}s" + (f" · {label}" if label else "")
+        except Exception as e:
+            return f"Action summary failed: {e}"
+
+    def _diag(self, message):
+        try:
+            stamp = time.strftime("%H:%M:%S")
+            self._diag_msg.emit(f"{stamp} {message}")
+        except Exception:
+            pass
+
+    def _append_diagnostic(self, line):
+        self._diag_lines.append(line)
+        if len(self._diag_lines) > 600:
+            del self._diag_lines[:len(self._diag_lines) - 600]
+        try:
+            logger.info(line)
+        except Exception:
+            pass
+        if self._diag_edit is not None:
+            self._diag_edit.appendPlainText(line)
+            sb = self._diag_edit.verticalScrollBar()
+            sb.setValue(sb.maximum())
+
+    def _before_action_diag(self, action):
+        self._diag(f"[ACTION] Preparing {self._action_diag_summary(action)}")
+
+    def _after_action_diag(self, action):
+        sim = " simulated" if getattr(self.engine, "simulation_mode", False) else " deployed"
+        self._diag(f"[ACTION] {self._action_diag_summary(action)}{sim}")
+
+    def open_playback_diagnostics(self):
+        if self._diag_dialog is not None and self._diag_dialog.isVisible():
+            self._diag_dialog.raise_()
+            self._diag_dialog.activateWindow()
+            return
+
+        C = COLORS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Playback Diagnostics")
+        dlg.resize(620, 420)
+        dlg.setStyleSheet(
+            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
+            f"QPlainTextEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 8px; font-family: Consolas, monospace; font-size: 11px; }}"
+            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; "
+            f"border-radius: 7px; padding: 7px 12px; }}"
+            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+        )
+        lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(12, 12, 12, 12)
+        lo.setSpacing(8)
+        title = QLabel("Playback Diagnostics")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 15px; font-weight: 800;")
+        lo.addWidget(title)
+        hint = QLabel("Shows engine status, active rows, and whether each action reached the deployment path.")
+        hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
+        lo.addWidget(hint)
+        edit = QPlainTextEdit()
+        edit.setReadOnly(True)
+        edit.setPlainText("\n".join(self._diag_lines))
+        lo.addWidget(edit, stretch=1)
+        btns = QHBoxLayout()
+        btns.addStretch()
+        clear_btn = QPushButton("Clear")
+        close_btn = QPushButton("Close")
+        clear_btn.clicked.connect(lambda: (self._diag_lines.clear(), edit.clear()))
+        close_btn.clicked.connect(dlg.close)
+        btns.addWidget(clear_btn)
+        btns.addWidget(close_btn)
+        lo.addLayout(btns)
+        self._diag_dialog = dlg
+        self._diag_edit = edit
+        dlg.finished.connect(lambda _=0: setattr(self, "_diag_edit", None))
+        dlg.show()
+
+    def test_selected_action(self):
+        if self.engine.running:
+            self.status("Stop playback before testing a single action")
+            return
+        idx = self.active_index
+        if idx < 0:
+            try:
+                cur = self.timeline.currentIndex()
+                idx = cur.row() if cur and cur.isValid() else -1
+            except Exception:
+                idx = -1
+        if idx < 0 or idx >= self.action_model.rowCount():
+            self.status("Select an action to test")
+            return
+
+        action = deepcopy(self.action_model.get(idx))
+        self._single_test_active = True
+        self._single_test_index = idx
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = time.time()
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self.start_btn.setEnabled(False)
+        self.pause_btn.setEnabled(True)
+        self.stop_btn.setEnabled(True)
+        self.status_dot.set_color(COLORS["playing"], glow=True)
+        self.status_text.setText("Testing")
+
+        self.engine.actions = [action]
+        self.engine.infinite_loop = False
+        self.engine.simulation_mode = self.sim_check.isChecked()
+        self.engine.human_curve = self.human_check.isChecked()
+        self.engine.focus_lock = self.focus_check.isChecked()
+        self.engine.loops = 1
+        self.engine.loops_completed_count = 0
+        try:
+            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
+        except ValueError:
+            self.engine.speed = 1.0
+
+        self._diag(f"[TEST] Testing row {idx + 1}: {self._action_diag_summary(action)} sim={self.engine.simulation_mode}")
+        self.engine.start()
 
     # ═══════════════════════════════════════════════════════
     #  RECORDER
@@ -1774,6 +1938,9 @@ class MainWindow(QMainWindow):
         m.addAction("Import JSON…", self.load)
         m.addAction("Export CSV…", self.export_csv)
         m.addAction("Import CSV…", self.import_csv)
+        m.addSeparator()
+        m.addAction("Test selected action", self.test_selected_action)
+        m.addAction("Playback diagnostics…", self.open_playback_diagnostics)
         m.addSeparator()
         m.addAction("Reset statistics", self.reset_stats)
         m.addAction("Clear all actions", self.clear_all)

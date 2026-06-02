@@ -1,6 +1,6 @@
 {
-  "version": "3.0.6",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.6/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.6/MacroForge-v3.0.6.zip",
-  "notes": "v3.0.6: Platform input and engine improvements - updated PlatformInput.py with enhanced input handling, improved engine.py with better execution logic, and main_window.py refinements for better stability."
+  "version": "3.0.7",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.7/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.7/MacroForge-v3.0.7.zip",
+  "notes": "v3.0.7: Diagnostics and source improvements - updated main_window.py with enhanced diagnostics and source code improvements for better debugging and stability."
 }
