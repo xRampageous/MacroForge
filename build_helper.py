@@ -32,6 +32,7 @@ def write_update_json(version: str) -> None:
     }
     with open("update.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+        f.write("\n")
     print(f"  update.json -> {version}")
 
 
