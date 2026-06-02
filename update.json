@@ -1,6 +1,6 @@
 {
-  "version": "2.0.0",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v2.0.0/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v2.0.0/MacroForge-v2.0.0.zip",
-  "notes": "v2.0.0: Major rebuild with improved architecture - new macroforge2 package structure, refactored engine, core, services, and UI components for better maintainability and extensibility."
+  "version": "2.1.0",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v2.1.0/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v2.1.0/MacroForge-v2.1.0.zip",
+  "notes": "v2.1.0: UI rework improvements - enhanced user interface with improved layout, better component organization, and refined user experience."
 }

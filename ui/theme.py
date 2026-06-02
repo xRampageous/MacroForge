@@ -9,12 +9,12 @@ gradient highlights, and smooth micro-interactions.
 # ═══════════════════════════════════════════════════════
 COLORS = {
     # ── Surfaces (deep indigo-black with subtle blue undertone) ──
-    "bg": "#080910",
-    "bg_secondary": "#0e0f1a",
-    "bg_tertiary": "#161827",
-    "bg_card": "#1a1d30",
-    "bg_hover": "#222540",
-    "bg_pressed": "#2a2d4d",
+    "bg": "#050914",
+    "bg_secondary": "#08111f",
+    "bg_tertiary": "#101a2c",
+    "bg_card": "#111c30",
+    "bg_hover": "#192743",
+    "bg_pressed": "#243456",
     "bg_glass": "#ffffff06",
 
     # ── Primary accent (electric cyan-blue) ──
@@ -42,8 +42,8 @@ COLORS = {
     "btn_text": "#ffffff",
 
     # ── Borders ──
-    "border": "#24263f",
-    "border_light": "#383b63",
+    "border": "#1e2b44",
+    "border_light": "#31476e",
     "border_accent": "#4cc4ff44",
 
     # ── Action-type accents (vibrant, distinct) ──
@@ -56,7 +56,7 @@ COLORS = {
     # ── Playback ──
     "playing": "#3fe08a",
     "playing_glow": "#3fe08a22",
-    "lane": "#2a3a4c",
+    "lane": "#17243a",
 
     # ── Neon highlights ──
     "neon_blue": "#4cc4ff",
@@ -316,21 +316,21 @@ def build_stylesheet() -> str:
     /* ── Circular playback control buttons ── */
     QPushButton#play_btn {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['success']}, stop:1 #2bbf6e);
-        color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+        color: #ffffff; border: none; border-radius: 14px; font-weight: 850; padding: 8px;
     }}
     QPushButton#play_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5cf0a0, stop:1 {C['success']}); }}
     QPushButton#play_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#pause_btn {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['warning']}, stop:1 #e09020);
-        color: {C['text_inverse']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+        color: #ffffff; border: none; border-radius: 14px; font-weight: 850; padding: 8px;
     }}
     QPushButton#pause_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffc766, stop:1 {C['warning']}); }}
     QPushButton#pause_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
 
     QPushButton#stop_btn {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C['error']}, stop:1 #d9415e);
-        color: {C['btn_text']}; border: none; border-radius: 10px; font-weight: 700; padding: 8px;
+        color: #ffffff; border: none; border-radius: 14px; font-weight: 850; padding: 8px;
     }}
     QPushButton#stop_btn:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff7a92, stop:1 {C['error']}); }}
     QPushButton#stop_btn:disabled {{ background: {C['bg_secondary']}; color: {C['text_dark']}; border: 1px solid {C['border']}; }}
@@ -561,4 +561,72 @@ def build_stylesheet() -> str:
         border-bottom-color: {C['accent']};
         font-weight: 600;
     }}
+
+    /* ═══════════════════════════════════════════════════════ */
+    /*  MACROFORGE 2.0 UI REWORK DETAILS                      */
+    /* ═══════════════════════════════════════════════════════ */
+    QPushButton#view_toggle {{
+        background-color: {C['bg_card']};
+        color: {C['text_dim']};
+        border: 1px solid {C['border']};
+        border-radius: 12px;
+        padding: 8px 12px;
+        min-width: 42px;
+        min-height: 34px;
+    }}
+    QPushButton#view_toggle:hover {{
+        background-color: {C['bg_hover']};
+        border-color: {C['border_light']};
+    }}
+    QPushButton#view_toggle:checked {{
+        background-color: {C['accent_glow']};
+        border-color: {C['accent']};
+    }}
+
+    QPushButton#rec_round_btn {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 {C['error']}, stop:1 #d9415e);
+        border: 1px solid #ff5c7944;
+        border-radius: 12px;
+    }}
+    QPushButton#rec_round_btn:hover {{ background-color: #ff708a; border-color: {C['error']}; }}
+    QPushButton#rec_round_btn:pressed {{ background-color: #cc344f; }}
+
+    QPushButton#rec_pause_btn {{
+        background-color: {C['bg_tertiary']};
+        border: 1px solid {C['border']};
+        border-radius: 12px;
+    }}
+    QPushButton#rec_pause_btn:hover {{ background-color: {C['bg_hover']}; border-color: {C['accent']}; }}
+    QPushButton#rec_pause_btn:disabled {{ background-color: {C['bg_secondary']}; border-color: {C['border']}; }}
+
+    QCheckBox#pill_check {{
+        color: {C['text']};
+        font-size: 12px;
+        font-weight: 700;
+        spacing: 8px;
+    }}
+    QCheckBox#pill_check::indicator {{
+        width: 18px;
+        height: 18px;
+        border-radius: 7px;
+        border: 1px solid {C['border_light']};
+        background-color: {C['bg_secondary']};
+    }}
+    QCheckBox#pill_check::indicator:checked {{
+        background-color: {C['accent']};
+        border-color: {C['accent_hover']};
+    }}
+
+    QPushButton#icon_btn {{
+        background-color: {C['bg_tertiary']};
+        border: 1px solid {C['border']};
+        border-radius: 10px;
+        padding: 4px;
+    }}
+    QPushButton#icon_btn:hover {{
+        background-color: {C['bg_hover']};
+        border-color: {C['border_light']};
+    }}
+
 """

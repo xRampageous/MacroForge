@@ -1,76 +1,287 @@
-"""MacroForge Timeline — robust, smooth QListView-based action list.
+"""MacroForge Timeline — high-performance polished action list.
 
-This module intentionally keeps the public API used by main_window.py that the
-old timeline exposed: selected_indices, zoom, set_active, set_playing,
-clear_playing, set_paused, set_search, refresh, ensure_visible, and action_* signals.
+This QListView timeline keeps the public API used by main_window.py while
+rendering a modern, information-rich action row using one lightweight delegate.
+It intentionally avoids widgets-per-row so large macros remain fast.
 """
 
-from PyQt6.QtWidgets import QStyledItemDelegate, QListView, QAbstractItemView
-from PyQt6.QtCore import Qt, pyqtSignal, QModelIndex, QSize, QTimer
-from PyQt6.QtGui import QColor, QFont, QPainter
+import time
+from PyQt6.QtWidgets import QStyledItemDelegate, QListView, QAbstractItemView, QStyle
+from PyQt6.QtCore import Qt, pyqtSignal, QModelIndex, QSize, QTimer, QRectF, QPointF
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPainterPath, QLinearGradient
 
 from ui.theme import COLORS, TYPE_COLORS
 from models import ActionListModel
 
 
+def _clamp(value, lo=0.0, hi=1.0):
+    return max(lo, min(hi, float(value)))
+
+
+def _mix(hex_a: str, hex_b: str, t: float) -> str:
+    """Blend two #RRGGBB colours."""
+    t = _clamp(t)
+    a = QColor(hex_a)
+    b = QColor(hex_b)
+    r = int(a.red() + (b.red() - a.red()) * t)
+    g = int(a.green() + (b.green() - a.green()) * t)
+    bl = int(a.blue() + (b.blue() - a.blue()) * t)
+    return f"#{r:02x}{g:02x}{bl:02x}"
+
+
+def _action_kind(action) -> str:
+    if not action:
+        return "key"
+    if getattr(action, "action_type", "key") == "pause" or getattr(action, "key", "") in ("[PAUSE]", "[DELAY]"):
+        return "pause"
+    return getattr(action, "action_type", "key") or "key"
+
+
+def _duration_text(action) -> str:
+    if not action:
+        return ""
+    kind = _action_kind(action)
+    dur = float(getattr(action, "duration", 0.0) or 0.0)
+    if kind == "pause":
+        return f"{dur:.2f}s"
+    if kind == "image":
+        timeout = float(getattr(action, "wait_timeout", 0.0) or 0.0)
+        return f"≤ {timeout:.1f}s" if timeout > 0 else "~250ms"
+    if kind == "click":
+        return f"{dur:.2f}s" if dur >= 0.05 else "< 50ms"
+    return f"{dur:.2f}s" if dur >= 0.05 else "< 1ms"
+
+
+def _action_text(action):
+    """Return title, details for an action."""
+    if not action:
+        return "Unknown", ""
+    kind = _action_kind(action)
+    label = (getattr(action, "label", "") or "").strip()
+    key = (getattr(action, "key", "") or "").strip()
+    repeat = int(getattr(action, "repeat_count", 1) or 1)
+    repeat_txt = f" · x{repeat}" if repeat > 1 else ""
+
+    if kind == "pause":
+        title = label or "Pause"
+        return title, f"Duration: {float(getattr(action, 'duration', 0.0) or 0.0):.2f}s{repeat_txt}"
+
+    if kind == "click":
+        button = (getattr(action, "click_button", "left") or "left").title()
+        mode = getattr(action, "click_coord_mode", "absolute") or "absolute"
+        x, y = getattr(action, "click_x", 0), getattr(action, "click_y", 0)
+        rand = int(getattr(action, "click_rand_radius", 0) or 0)
+        rand_txt = f" · ±{rand}px" if rand > 0 else ""
+        return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
+
+    if kind == "image":
+        similarity = float(getattr(action, "similarity", 0.95) or 0.95)
+        timeout = float(getattr(action, "wait_timeout", 0.0) or 0.0)
+        title = label or "Image Match"
+        wait_txt = f" · Wait {timeout:.1f}s" if timeout > 0 else " · Single scan"
+        found = getattr(action, "on_found_action", "continue") or "continue"
+        return title, f"Threshold: {similarity * 100:.0f}%{wait_txt} · Found: {found.replace('_', ' ')}"
+
+    if kind == "condition":
+        ctype = getattr(action, "condition_type", "none") or "none"
+        if ctype == "pixel_color":
+            detail = f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}"
+        elif ctype == "variable":
+            detail = f"{getattr(action, 'condition_var_name', '') or 'variable'} = {getattr(action, 'condition_var_value', '') or 'value'}"
+        else:
+            detail = "Condition rule"
+        return label or "Condition", detail + repeat_txt
+
+    title = label or (key[:1].upper() + key[1:] if key else "Key")
+    hold = " · Hold" if bool(getattr(action, "hold_mode", False)) else ""
+    return title, f"Key: {key or 'Unknown'}{hold}{repeat_txt}"
+
+
 class TimelineDelegate(QStyledItemDelegate):
-    """Lightweight delegate. Avoid widgets-per-row for large timelines."""
+    """Modern row delegate with per-action progress bars and status chips."""
+
+    def _rounded_rect(self, painter, rect, radius, color, border=None, border_width=1):
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(rect), radius, radius)
+        painter.setBrush(QBrush(QColor(color)))
+        if border:
+            painter.setPen(QPen(QColor(border), border_width))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(path)
+
+    def _draw_type_icon(self, painter, rect, kind, color):
+        painter.save()
+        c = QColor("#ffffff")
+        pen = QPen(c, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
+        if kind == "pause":
+            painter.drawEllipse(QRectF(x + w * 0.22, y + h * 0.22, w * 0.56, h * 0.56))
+            painter.drawLine(int(x + w * 0.50), int(y + h * 0.34), int(x + w * 0.50), int(y + h * 0.52))
+            painter.drawLine(int(x + w * 0.50), int(y + h * 0.52), int(x + w * 0.64), int(y + h * 0.60))
+        elif kind == "click":
+            painter.drawEllipse(QRectF(x + w * 0.28, y + h * 0.20, w * 0.44, h * 0.62))
+            painter.drawLine(int(x + w * 0.50), int(y + h * 0.20), int(x + w * 0.50), int(y + h * 0.42))
+            painter.drawLine(int(x + w * 0.28), int(y + h * 0.42), int(x + w * 0.72), int(y + h * 0.42))
+        elif kind == "image":
+            painter.drawRoundedRect(QRectF(x + w * 0.20, y + h * 0.25, w * 0.60, h * 0.50), 3, 3)
+            painter.drawLine(int(x + w * 0.23), int(y + h * 0.62), int(x + w * 0.42), int(y + h * 0.45))
+            painter.drawLine(int(x + w * 0.42), int(y + h * 0.45), int(x + w * 0.58), int(y + h * 0.56))
+            painter.drawLine(int(x + w * 0.58), int(y + h * 0.56), int(x + w * 0.76), int(y + h * 0.40))
+        elif kind == "condition":
+            painter.drawPolygon([
+                QPointF(x + w * 0.50, y + h * 0.18), QPointF(x + w * 0.82, y + h * 0.50),
+                QPointF(x + w * 0.50, y + h * 0.82), QPointF(x + w * 0.18, y + h * 0.50),
+            ])
+        else:
+            painter.drawRoundedRect(QRectF(x + w * 0.18, y + h * 0.28, w * 0.64, h * 0.44), 3, 3)
+            for px in (0.30, 0.46, 0.62):
+                painter.drawPoint(QPointF(x + w * px, y + h * 0.42))
+            painter.drawLine(int(x + w * 0.34), int(y + h * 0.58), int(x + w * 0.66), int(y + h * 0.58))
+        painter.restore()
 
     def paint(self, painter: QPainter, option, index):
         painter.save()
         try:
-            rect = option.rect
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             action = index.data(ActionListModel.ActionRole)
             view = option.widget
+            row = index.row()
+            selected = bool(option.state & QStyle.StateFlag.State_Selected)
+            hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+            playing = row == getattr(view, "playing_index", -1)
+            progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
+            kind = _action_kind(action)
+            type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
 
-            selected = bool(option.state & option.StateFlag.State_Selected) if hasattr(option, "StateFlag") else False
-            # PyQt exposes the flags through QStyle.StateFlag; the fallback below keeps this
-            # robust across PyQt minor versions.
-            try:
-                from PyQt6.QtWidgets import QStyle
-                selected = bool(option.state & QStyle.StateFlag.State_Selected)
-            except Exception:
-                pass
+            outer = option.rect.adjusted(8, 4, -8, -4)
+            bg = COLORS["bg_card"]
+            if hovered:
+                bg = _mix(bg, COLORS["bg_hover"], 0.45)
+            if selected:
+                bg = _mix(bg, COLORS["accent"], 0.11)
+            if playing:
+                bg = _mix(COLORS["bg_card"], COLORS["accent"], 0.16)
 
-            bg = COLORS.get("bg_hover") if selected else COLORS.get("bg_secondary")
-            painter.setBrush(QColor(bg))
+            border = COLORS["border"]
+            if selected:
+                border = COLORS["border_light"]
+            if playing:
+                border = COLORS["accent"]
+            self._rounded_rect(painter, outer, 10, bg, border, 1.2 if playing else 1)
+
+            # Left type accent stripe and active play marker.
+            stripe = QRectF(outer.left(), outer.top() + 8, 3.0, outer.height() - 16)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRect(rect)
+            painter.setBrush(QColor(type_color))
+            painter.drawRoundedRect(stripe, 1.5, 1.5)
+            if playing:
+                painter.setBrush(QColor(COLORS["accent"]))
+                tri_x = outer.left() + 18
+                tri_y = outer.center().y()
+                painter.drawPolygon([
+                    QPointF(tri_x, tri_y - 8), QPointF(tri_x, tri_y + 8), QPointF(tri_x + 11, tri_y)
+                ])
 
-            if not action:
-                return
+            # Drag grip.
+            grip_x = outer.left() + 18
+            grip_y = outer.center().y() - 12
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(COLORS["text_dark"]))
+            for gx in (0, 7):
+                for gy in (0, 7, 14):
+                    painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.6, 2.6))
 
-            action_type = getattr(action, "action_type", "key") or "key"
-            color = QColor(TYPE_COLORS.get(action_type, COLORS.get("accent", "#5aa9ff")))
-            painter.setBrush(color)
-            painter.drawRect(rect.left(), rect.top(), 4, rect.height())
+            # Index.
+            num_rect = QRectF(outer.left() + 46, outer.top(), 34, outer.height())
+            painter.setPen(QColor(COLORS["text"]))
+            painter.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+            painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, str(row + 1))
 
-            # Playing indicator overlay/accent.
-            playing_index = getattr(view, "playing_index", -1)
-            if index.row() == playing_index:
-                painter.setBrush(QColor(COLORS.get("accent", "#5aa9ff")))
-                painter.drawRect(rect.left(), rect.top(), rect.width(), 2)
+            # Icon tile.
+            icon_rect = QRectF(outer.left() + 90, outer.top() + 12, 36, 36)
+            tile_col = _mix(type_color, COLORS["bg_secondary"], 0.45)
+            gradient = QLinearGradient(icon_rect.topLeft(), icon_rect.bottomRight())
+            gradient.setColorAt(0, QColor(_mix(type_color, "#ffffff", 0.10)))
+            gradient.setColorAt(1, QColor(tile_col))
+            path = QPainterPath(); path.addRoundedRect(icon_rect, 8, 8)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(gradient))
+            painter.drawPath(path)
+            self._draw_type_icon(painter, icon_rect, kind, type_color)
 
-            painter.setPen(QColor(COLORS.get("text", "#ffffff")))
-            painter.setFont(QFont("Segoe UI", 9))
+            # Title/detail.
+            title, detail = _action_text(action)
+            text_x = outer.left() + 146
+            title_rect = QRectF(text_x, outer.top() + 12, 250, 20)
+            detail_rect = QRectF(text_x, outer.top() + 34, 320, 18)
+            painter.setPen(QColor(COLORS["text"]))
+            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+            painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title)
+            painter.setPen(QColor(COLORS["text_dim"]))
+            painter.setFont(QFont("Segoe UI", 8))
+            painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, detail)
 
-            label = getattr(action, "label", "") or ""
-            key = getattr(action, "key", "") or ""
-            text = label or key or "Unknown"
+            # Status chip.
+            status_x = max(text_x + 270, outer.left() + outer.width() * 0.43)
+            if playing:
+                status, status_col = ("Paused", COLORS["warning"]) if getattr(view, "paused", False) else ("Running", COLORS["accent"])
+            elif progress >= 0.999:
+                status, status_col = "Completed", COLORS["success"]
+            else:
+                status, status_col = "Pending", COLORS["text_dim"]
+            painter.setBrush(QColor(status_col))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(status_x, outer.center().y() - 4, 8, 8))
+            painter.setPen(QColor(COLORS["text_dim"] if status == "Pending" else COLORS["text"]))
+            painter.setFont(QFont("Segoe UI", 8))
+            painter.drawText(QRectF(status_x + 14, outer.top(), 92, outer.height()), Qt.AlignmentFlag.AlignVCenter, status)
 
-            # Useful secondary detail without expensive rich rendering.
-            duration = getattr(action, "duration", None)
-            if action_type == "pause":
-                text = f"Pause · {duration:.2f}s" if isinstance(duration, (int, float)) else "Pause"
-            elif action_type == "click":
-                text = label or f"Click · {getattr(action, 'click_button', 'left')} @ {getattr(action, 'click_x', 0)}, {getattr(action, 'click_y', 0)}"
-            elif action_type == "image":
-                text = label or "Image match"
+            # Duration.
+            dur_rect = QRectF(status_x + 120, outer.top(), 70, outer.height())
+            painter.setPen(QColor(COLORS["text_dim"]))
+            painter.setFont(QFont("Segoe UI", 8))
+            painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
 
-            text_rect = rect.adjusted(12, 0, -8, 0)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+            # Per-action progress bar.
+            bar_w = max(130, min(300, int(outer.width() * 0.28)))
+            bar_x = outer.right() - bar_w - 90
+            bar_y = outer.center().y() - 4
+            bar_h = 8
+            track = QRectF(bar_x, bar_y, bar_w, bar_h)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(COLORS["lane"]))
+            painter.drawRoundedRect(track, 4, 4)
+            if progress > 0:
+                fill = QRectF(bar_x, bar_y, bar_w * progress, bar_h)
+                grad = QLinearGradient(fill.topLeft(), fill.topRight())
+                grad.setColorAt(0, QColor(type_color if not playing else COLORS["accent_secondary"]))
+                grad.setColorAt(1, QColor(COLORS["accent_hover"] if playing else _mix(type_color, "#ffffff", 0.18)))
+                painter.setBrush(QBrush(grad))
+                painter.drawRoundedRect(fill, 4, 4)
+
+            pct = f"{int(progress * 100):d}%"
+            painter.setPen(QColor(COLORS["text_dim"] if progress < 1 else COLORS["text"]))
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+            painter.drawText(QRectF(bar_x + bar_w + 12, outer.top(), 42, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
+
+            # Image threshold metadata chip.
+            if kind == "image":
+                sim = int(float(getattr(action, "similarity", 0.95) or 0.95) * 100)
+                chip = QRectF(outer.right() - 76, outer.center().y() - 12, 38, 24)
+                self._rounded_rect(painter, chip, 7, COLORS["bg_secondary"], COLORS["border_light"], 1)
+                painter.setPen(QColor(COLORS["text_dim"]))
+                painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, f"{sim}%")
+
+            # Kebab menu dots.
+            dot_x = outer.right() - 20
+            painter.setBrush(QColor(COLORS["text_dim"]))
+            painter.setPen(Qt.PenStyle.NoPen)
+            for dx in (0, 6, 12):
+                painter.drawEllipse(QRectF(dot_x + dx, outer.center().y() - 1.5, 3, 3))
         except Exception as e:
-            # A delegate must never raise during paint; Qt can otherwise stop repainting the view.
             painter.setBrush(QColor(COLORS.get("bg_secondary", "#202020")))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRect(option.rect)
@@ -81,12 +292,9 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.restore()
 
     def sizeHint(self, option, index):
-        # IMPORTANT: Qt expects QSize here. Returning an int makes the list unable
-        # to compute row geometry correctly in PyQt6, which is why the timeline rows
-        # can appear blank/missing.
         view = option.widget
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
-        height = max(24, int(36 * zoom))
+        height = max(46, int(70 * zoom))
         return QSize(100, height)
 
 
@@ -105,12 +313,20 @@ class TimelineView(QListView):
         self.paused = False
         self._search = ""
         self._drag_start_row = -1
+        self._playing_started = 0.0
+        self._playing_duration = 0.0
+        self._frozen_progress = 0.0
+
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(33)
+        self._progress_timer.timeout.connect(self.viewport().update)
 
         self.setModel(model or ActionListModel())
         self.setItemDelegate(TimelineDelegate(self))
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setFrameShape(QListView.Shape.NoFrame)
+        self.setMouseTracking(True)
         self.setAlternatingRowColors(False)
         self.setUniformItemSizes(True)
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -118,14 +334,13 @@ class TimelineView(QListView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
+        self.setDropIndicatorShown(False)
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.setMinimumHeight(160)
+        self.setMinimumHeight(180)
         self.setStyleSheet(
-            f"QListView {{ border: 1px solid {COLORS['border']}; "
-            f"background-color: {COLORS['bg']}; outline: none; }}"
-            f"QListView::item {{ border: none; }}"
+            f"QListView {{ border: none; background-color: {COLORS['bg']}; outline: none; padding: 6px 0; }}"
+            f"QListView::item {{ border: none; background: transparent; }}"
         )
 
         self.clicked.connect(self._on_clicked)
@@ -134,6 +349,19 @@ class TimelineView(QListView):
         sel = self.selectionModel()
         if sel is not None:
             sel.currentChanged.connect(self._on_current_changed)
+
+    def action_progress(self, row: int) -> float:
+        if self.playing_index < 0:
+            return 0.0
+        if row < self.playing_index:
+            return 1.0
+        if row > self.playing_index:
+            return 0.0
+        if self.paused:
+            return self._frozen_progress
+        if self._playing_duration <= 0.05:
+            return 0.6
+        return _clamp((time.monotonic() - self._playing_started) / self._playing_duration)
 
     def _on_current_changed(self, current, previous):
         if current.isValid():
@@ -174,9 +402,8 @@ class TimelineView(QListView):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             old = self.zoom
             delta = event.angleDelta().y()
-            self.zoom = max(0.5, min(2.5, self.zoom * (1.1 if delta > 0 else 1 / 1.1)))
+            self.zoom = max(0.65, min(1.85, self.zoom * (1.08 if delta > 0 else 1 / 1.08)))
             if self.zoom != old:
-                # Uniform sizes cache must be invalidated after zoom changes.
                 self.setUniformItemSizes(False)
                 self.doItemsLayout()
                 self.setUniformItemSizes(True)
@@ -190,7 +417,6 @@ class TimelineView(QListView):
         if not isinstance(m, ActionListModel):
             m = ActionListModel()
             self.setModel(m)
-        # Reset order matters: beginResetModel before mutating backing data.
         if hasattr(m, "set_actions"):
             m.set_actions(actions)
         else:
@@ -213,17 +439,36 @@ class TimelineView(QListView):
 
     def set_playing(self, index, duration=0.0):
         self.playing_index = index
+        self.paused = False
+        self._playing_duration = max(0.0, float(duration or 0.0))
+        self._playing_started = time.monotonic()
+        self._frozen_progress = 0.0
         if 0 <= index < self.model().rowCount():
             self.scrollTo(self.model().index(index, 0), QAbstractItemView.ScrollHint.EnsureVisible)
+        if not self._progress_timer.isActive():
+            self._progress_timer.start()
         self.viewport().update()
 
     def clear_playing(self):
         self.playing_index = -1
         self.paused = False
+        self._frozen_progress = 0.0
+        if self._progress_timer.isActive():
+            self._progress_timer.stop()
         self.viewport().update()
 
     def set_paused(self, paused: bool):
-        self.paused = bool(paused)
+        paused = bool(paused)
+        if paused and not self.paused:
+            self._frozen_progress = self.action_progress(self.playing_index)
+            if self._progress_timer.isActive():
+                self._progress_timer.stop()
+        elif not paused and self.paused:
+            # Resume without visually jumping the active row.
+            self._playing_started = time.monotonic() - (self._frozen_progress * max(self._playing_duration, 0.001))
+            if self.playing_index >= 0 and not self._progress_timer.isActive():
+                self._progress_timer.start()
+        self.paused = paused
         self.viewport().update()
 
     def ensure_visible(self, index):
@@ -231,9 +476,6 @@ class TimelineView(QListView):
             self.scrollTo(self.model().index(index, 0), QAbstractItemView.ScrollHint.EnsureVisible)
 
     def set_search(self, text: str):
-        # Keep the API for the search box. For now this selects the first match
-        # instead of hiding rows, avoiding proxy-model complexity and keeping the
-        # main window's model indices stable.
         self._search = (text or "").strip().lower()
         if not self._search:
             self.viewport().update()
