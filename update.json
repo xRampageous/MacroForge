@@ -1,6 +1,6 @@
 {
-  "version": "3.0.18",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.18/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.18/MacroForge-v3.0.18.zip",
-  "notes": "v3.0.18: Responsive timeline/bottom panel/side panel line pass - timeline active row uses action type colour, playing row fills with action-colour gradient, timeline progress bar expands/contracts with row/window width, timeline progress fill uses action type colours, bottom Progress + Stats section expands/contracts with window, bottom stat chips expand with available width, speed label made more readable, bottom panel separators shortened/centered, recorder/sidebar separator line handling softened."
+  "version": "3.0.19",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.19/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.0.19/MacroForge-v3.0.19.zip",
+  "notes": "v3.0.19: Timeline image-row fix + active gradient + bottom panel readability - fixes Timeline error name 'chip_w' is not defined on image action rows, removes cramped image threshold chip from timeline, improves active/playing timeline row colour grading with richer action-colour gradient, active row left fill stronger and fades more smoothly, bottom panel height slightly increased for readability, playback buttons slightly enlarged, options labels and Speed area made more readable, bottom progress bar expands/contracts with window, bottom stat chips now static fixed-size buttons."
 }

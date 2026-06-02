@@ -167,22 +167,37 @@ class TimelineDelegate(QStyledItemDelegate):
             if playing:
                 border = type_color
 
-            # Active rows use the same left-to-dark color language as Add Action
-            # buttons, while inactive rows stay neutral.
+            # Active rows use a richer action-colour gradient: strong left block,
+            # soft centre glow, and dark right fade. This keeps the action colour
+            # obvious without hurting text readability.
             if playing:
                 row_path = QPainterPath()
                 row_path.addRoundedRect(QRectF(outer), 8, 8)
+
                 row_grad = QLinearGradient(QPointF(outer.left(), outer.top()), QPointF(outer.right(), outer.top()))
-                active_col = QColor(type_color)
-                active_col.setAlpha(165)
-                mid_col = QColor(type_color)
-                mid_col.setAlpha(42)
-                row_grad.setColorAt(0.0, active_col)
-                row_grad.setColorAt(0.20, mid_col)
-                row_grad.setColorAt(1.0, QColor(COLORS["bg_card"]))
+                left_col = QColor(type_color); left_col.setAlpha(205)
+                hot_col = QColor(_mix(type_color, "#ffffff", 0.18)); hot_col.setAlpha(132)
+                mid_col = QColor(type_color); mid_col.setAlpha(54)
+                dim_col = QColor(type_color); dim_col.setAlpha(16)
+                row_grad.setColorAt(0.00, left_col)
+                row_grad.setColorAt(0.10, hot_col)
+                row_grad.setColorAt(0.28, mid_col)
+                row_grad.setColorAt(0.58, dim_col)
+                row_grad.setColorAt(1.00, QColor(COLORS["bg_card"]))
+
                 painter.setBrush(QBrush(row_grad))
-                painter.setPen(QPen(QColor(border), 1.4))
+                painter.setPen(QPen(QColor(type_color), 1.6))
                 painter.drawPath(row_path)
+
+                # Thin top sheen gives the active row a sleeker, less flat look.
+                sheen = QLinearGradient(QPointF(outer.left(), outer.top()), QPointF(outer.right(), outer.top()))
+                sheen_col = QColor("#ffffff"); sheen_col.setAlpha(44)
+                clear_col = QColor("#ffffff"); clear_col.setAlpha(0)
+                sheen.setColorAt(0.00, sheen_col)
+                sheen.setColorAt(0.30, QColor(type_color).lighter(130))
+                sheen.setColorAt(1.00, clear_col)
+                painter.setPen(QPen(QBrush(sheen), 1.0))
+                painter.drawLine(QPointF(outer.left() + 7, outer.top() + 1), QPointF(outer.right() - 7, outer.top() + 1))
             else:
                 self._rounded_rect(painter, outer, 8, bg, border, 1)
 
@@ -199,16 +214,24 @@ class TimelineDelegate(QStyledItemDelegate):
                 clip_path = QPainterPath()
                 clip_path.addRoundedRect(QRectF(outer), 8, 8)
                 painter.setClipPath(clip_path)
-                active_w = (96 if compact else 128)
+
+                active_w = (112 if compact else 150)
                 active_rect = QRectF(outer.left(), outer.top(), active_w, outer.height())
                 left_grad = QLinearGradient(QPointF(active_rect.left(), active_rect.top()), QPointF(active_rect.right(), active_rect.top()))
-                left_col = QColor(type_color); left_col.setAlpha(225)
-                fade_col = QColor(type_color); fade_col.setAlpha(20)
-                left_grad.setColorAt(0.0, left_col)
-                left_grad.setColorAt(1.0, fade_col)
+                left_a = QColor(_mix(type_color, "#ffffff", 0.16)); left_a.setAlpha(238)
+                left_b = QColor(type_color); left_b.setAlpha(168)
+                left_c = QColor(type_color); left_c.setAlpha(18)
+                left_grad.setColorAt(0.00, left_a)
+                left_grad.setColorAt(0.22, left_b)
+                left_grad.setColorAt(1.00, left_c)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QBrush(left_grad))
                 painter.drawRect(active_rect)
+
+                # Bright active edge, matching the Add Action button colour.
+                edge = QRectF(outer.left(), outer.top() + 1, 4, outer.height() - 2)
+                painter.setBrush(QColor(type_color))
+                painter.drawRoundedRect(edge, 2, 2)
                 painter.restore()
 
             stripe = QRectF(outer.left(), outer.top() + 1, 3.0, outer.height() - 2)
@@ -326,14 +349,8 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold))
             painter.drawText(QRectF(pct_x, outer.top(), pct_w, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
 
-            # Image threshold metadata chip.
-            if kind == "image" and chip_w:
-                sim = int(float(getattr(action, "similarity", 0.95) or 0.95) * 100)
-                chip = QRectF(outer.right() - menu_reserve - 40, outer.center().y() - 10, 34, 20)
-                self._rounded_rect(painter, chip, 7, COLORS["bg_secondary"], COLORS["border_light"], 1)
-                painter.setPen(QColor(COLORS["text_dim"]))
-                painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, f"{sim}%")
-
+            # Image threshold metadata chip intentionally removed. Image rows now
+            # show the template name in the detail text, avoiding cramped metadata.
             # Kebab menu dots.
             dot_x = outer.right() - (16 if compact else 22)
             painter.setBrush(QColor(COLORS["text_dim"]))
