@@ -152,7 +152,9 @@ class TimelineDelegate(QStyledItemDelegate):
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
 
             narrow = option.rect.width() < 700
-            outer = option.rect.adjusted(10, 3, -12, -3) if narrow else option.rect.adjusted(24, 4, -38, -4)
+            # Compact timeline treatment: tighter outer padding keeps more rows
+            # visible at once without changing the overall layout structure.
+            outer = option.rect.adjusted(8, 2, -8, -2) if narrow else option.rect.adjusted(14, 3, -20, -3)
             bg = COLORS["bg_card"]
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
@@ -171,8 +173,8 @@ class TimelineDelegate(QStyledItemDelegate):
             # Compact-aware layout. The default app window is 780x780, so the
             # delegate intentionally collapses labels/status metadata before it
             # lets progress bars overlap or clip.
-            compact = outer.width() < 720
-            tiny = outer.width() < 560
+            compact = outer.width() < 760
+            tiny = outer.width() < 600
 
             # Left type accent stripe and active play marker.
             stripe = QRectF(outer.left(), outer.top() + 1, 3.0, outer.height() - 2)
@@ -181,31 +183,31 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(stripe, 1.5, 1.5)
             if playing:
                 painter.setBrush(QColor(COLORS["accent"]))
-                tri_x = outer.left() + (12 if compact else 18)
+                tri_x = outer.left() + (10 if compact else 14)
                 tri_y = outer.center().y()
                 painter.drawPolygon([
-                    QPointF(tri_x, tri_y - 7), QPointF(tri_x, tri_y + 7), QPointF(tri_x + 10, tri_y)
+                    QPointF(tri_x, tri_y - 5), QPointF(tri_x, tri_y + 5), QPointF(tri_x + 8, tri_y)
                 ])
 
             # Drag grip.
-            grip_x = outer.left() + (14 if compact else 18)
-            grip_y = outer.center().y() - 10
+            grip_x = outer.left() + (12 if compact else 16)
+            grip_y = outer.center().y() - 8
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(COLORS["text_dark"]))
-            for gx in (0, 6):
-                for gy in (0, 6, 12):
-                    painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.2, 2.2))
+            for gx in (0, 5):
+                for gy in (0, 5, 10):
+                    painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.0, 2.0))
 
             # Index.
-            num_left = outer.left() + (34 if compact else 58)
-            num_rect = QRectF(num_left, outer.top(), 28 if compact else 34, outer.height())
+            num_left = outer.left() + (28 if compact else 46)
+            num_rect = QRectF(num_left, outer.top(), 26 if compact else 30, outer.height())
             painter.setPen(QColor(COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 10 if compact else 12, QFont.Weight.DemiBold))
+            painter.setFont(QFont("Segoe UI", 9 if compact else 10, QFont.Weight.DemiBold))
             painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, str(row + 1))
 
             # Icon tile.
-            icon_size = 34 if compact else 48
-            icon_left = outer.left() + (66 if compact else 104)
+            icon_size = 28 if compact else 34
+            icon_left = outer.left() + (54 if compact else 82)
             icon_rect = QRectF(icon_left, outer.center().y() - icon_size / 2, icon_size, icon_size)
             path = QPainterPath(); path.addRoundedRect(icon_rect, 8, 8)
             painter.setPen(QPen(QColor(COLORS["border"]), 1))
@@ -228,16 +230,16 @@ class TimelineDelegate(QStyledItemDelegate):
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
             text_x = icon_rect.right() + 14
-            text_right = max(text_x + 88, bar_x - (104 if compact else 218))
+            text_right = max(text_x + 84, bar_x - (84 if compact else 176))
             text_w = max(82, text_right - text_x)
-            title_rect = QRectF(text_x, outer.top() + (10 if compact else 14), text_w, 20)
-            detail_rect = QRectF(text_x, outer.top() + (31 if compact else 39), text_w, 18)
+            title_rect = QRectF(text_x, outer.top() + (7 if compact else 9), text_w, 17)
+            detail_rect = QRectF(text_x, outer.top() + (22 if compact else 26), text_w, 14)
             painter.setPen(QColor(COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 9 if compact else 11, QFont.Weight.DemiBold))
+            painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
             fm = painter.fontMetrics()
             painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(title, Qt.TextElideMode.ElideRight, int(text_w)))
             painter.setPen(QColor(COLORS["text_dim"]))
-            painter.setFont(QFont("Segoe UI", 7 if compact else 9))
+            painter.setFont(QFont("Segoe UI", 7 if compact else 8))
             fm = painter.fontMetrics()
             painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
@@ -255,23 +257,23 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawEllipse(QRectF(status_x, outer.center().y() - 4, 8, 8))
             else:
-                status_rect = QRectF(status_x, outer.center().y() - 20, 110, 40)
+                status_rect = QRectF(status_x, outer.center().y() - 15, 92, 30)
                 self._rounded_rect(painter, status_rect, 5, COLORS["bg"], status_col, 1)
                 painter.setPen(QColor(status_col))
-                painter.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
                 painter.drawText(status_rect, Qt.AlignmentFlag.AlignCenter, status)
 
             # Duration metadata; hidden on tiny widths, kept compact otherwise.
             if not tiny:
-                dur_x = bar_x - (76 if compact else 76)
-                dur_rect = QRectF(dur_x, outer.top(), 58, outer.height())
+                dur_x = bar_x - 62
+                dur_rect = QRectF(dur_x, outer.top(), 48, outer.height())
                 painter.setPen(QColor(COLORS["text_dim"]))
-                painter.setFont(QFont("Segoe UI", 7 if compact else 10))
+                painter.setFont(QFont("Segoe UI", 7 if compact else 8))
                 painter.drawText(dur_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, _duration_text(action))
 
             # Per-action progress bar.
-            bar_y = outer.center().y() - 4
-            bar_h = 7 if compact else 8
+            bar_y = outer.center().y() - 3
+            bar_h = 6 if compact else 7
             track = QRectF(bar_x, bar_y, bar_w, bar_h)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(COLORS["lane"]))
@@ -284,19 +286,19 @@ class TimelineDelegate(QStyledItemDelegate):
             pct = f"{int(round(progress * 100)):d}%"
             pct_x = bar_x + bar_w + (8 if compact else 26)
             painter.setPen(QColor(COLORS["text_dim"] if progress < 1 else COLORS["text"]))
-            painter.setFont(QFont("Segoe UI", 7 if compact else 10, QFont.Weight.DemiBold))
+            painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold))
             painter.drawText(QRectF(pct_x, outer.top(), pct_w, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
 
             # Image threshold metadata chip.
             if kind == "image" and chip_w:
                 sim = int(float(getattr(action, "similarity", 0.95) or 0.95) * 100)
-                chip = QRectF(outer.right() - menu_reserve - 42, outer.center().y() - 11, 36, 22)
+                chip = QRectF(outer.right() - menu_reserve - 40, outer.center().y() - 10, 34, 20)
                 self._rounded_rect(painter, chip, 7, COLORS["bg_secondary"], COLORS["border_light"], 1)
                 painter.setPen(QColor(COLORS["text_dim"]))
                 painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, f"{sim}%")
 
             # Kebab menu dots.
-            dot_x = outer.right() - (20 if compact else 32)
+            dot_x = outer.right() - (16 if compact else 22)
             painter.setBrush(QColor(COLORS["text_dim"]))
             painter.setPen(Qt.PenStyle.NoPen)
             for dy in (-7, 0, 7):
@@ -314,8 +316,8 @@ class TimelineDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         view = option.widget
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
-        base_height = 72 if getattr(option.widget, "width", lambda: 999)() < 700 else 86
-        height = max(62, int(base_height * zoom))
+        base_height = 56 if getattr(option.widget, "width", lambda: 999)() < 700 else 64
+        height = max(48, int(base_height * zoom))
         return QSize(100, height)
 
 
@@ -328,7 +330,8 @@ class TimelineView(QListView):
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
 
-        self.zoom = 1.0
+        # Start slightly compact by default while preserving Ctrl+wheel zoom.
+        self.zoom = 0.90
         self.selected_indices = set()
         self.playing_index = -1
         self.paused = False
@@ -423,7 +426,7 @@ class TimelineView(QListView):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             old = self.zoom
             delta = event.angleDelta().y()
-            self.zoom = max(0.65, min(1.85, self.zoom * (1.08 if delta > 0 else 1 / 1.08)))
+            self.zoom = max(0.55, min(1.60, self.zoom * (1.08 if delta > 0 else 1 / 1.08)))
             if self.zoom != old:
                 self.setUniformItemSizes(False)
                 self.doItemsLayout()
