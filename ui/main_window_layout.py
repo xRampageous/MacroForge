@@ -207,9 +207,13 @@ def build_main_layout(window):
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
         btn_w = 216 if colspan > 1 else 104
-        btn.setFixedSize(btn_w, 42)
-        btn.setMinimumSize(btn_w, 42)
-        btn.setMaximumSize(btn_w, 42)
+        # Explicitly lock the regular Add Action buttons to 42px high.
+        # Loop and Group already had the desired height, so keep their existing
+        # fixed height from _add_btn instead of recalculating it here.
+        btn_h = btn.height() if icon_name in ("loop", "group") else 42
+        btn.setFixedSize(btn_w, btn_h)
+        btn.setMinimumSize(btn_w, btn_h)
+        btn.setMaximumSize(btn_w, btn_h)
         btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
     add_lo.addLayout(add_grid)

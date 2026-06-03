@@ -300,7 +300,12 @@ class MainWindow(QMainWindow):
         btn.setText("")
         btn.setIcon(QIcon())
         btn_w = 216 if action_kind == "group" else 104
-        btn_h = 42
+        # Keep Loop and Group on their existing dimensions. Normalize only the
+        # regular Add Action buttons to a 42px height while preserving width.
+        if action_kind in ("loop", "group"):
+            btn_h = 42
+        else:
+            btn_h = 42
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
