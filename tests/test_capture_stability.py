@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
 from PyQt6.QtCore import QEvent, QPoint, QTimer
-from PyQt6.QtWidgets import QApplication, QDialog, QMenu, QPushButton
+from PyQt6.QtWidgets import QApplication, QDialog, QMenu, QPushButton, QWidget
 
 from debugger import DebugLogger
 from models import Action, ActionListModel, ProfileManager
@@ -379,9 +379,45 @@ class TestPlaybackVisibility(QtTestCase):
     def test_compact_layout_keeps_header_and_bottom_panel_readable_at_target_size(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("enter", 1.0),
+                Action("[DELAY]", 4.0, action_type="pause"),
+                Action("w", 21.0, hold_mode=True),
+                Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1, wait_timeout=10.0),
+            ])
+            window.refresh()
             window.resize(760, 1050)
             window.show()
             self.app.processEvents()
+
+            self.assertEqual(window.size().width(), 760)
+            self.assertEqual(window.size().height(), 1050)
+
+            def rect_in_window(widget: QWidget):
+                top_left = widget.mapTo(window, widget.rect().topLeft())
+                return widget.rect().translated(top_left)
+
+            def assert_visible(widget: QWidget, name: str):
+                self.assertFalse(widget.isHidden(), name)
+                self.assertGreater(widget.width(), 0, name)
+                self.assertGreater(widget.height(), 0, name)
+                rect = rect_in_window(widget)
+                self.assertGreaterEqual(rect.left(), 0, name)
+                self.assertGreaterEqual(rect.top(), 0, name)
+                self.assertLessEqual(rect.right(), window.width(), name)
+                self.assertLessEqual(rect.bottom(), window.height(), name)
+                return rect
+
+            header_rect = assert_visible(window.status_pill.parentWidget(), "header dock")
+            timeline_rect = assert_visible(window.timeline, "timeline")
+            playback_rect = assert_visible(window.playback_panel, "playback panel")
+            dock_rect = assert_visible(window.playback_dock, "playback dock")
+
+            self.assertLess(header_rect.bottom(), timeline_rect.top())
+            self.assertLess(timeline_rect.bottom(), playback_rect.top())
+            self.assertGreaterEqual(window.height() - playback_rect.bottom(), 0)
+            self.assertLessEqual(window.height() - playback_rect.bottom(), 2)
+            self.assertEqual(dock_rect.bottom(), playback_rect.bottom() - 8)
 
             update_x = window.update_top_btn.mapToGlobal(window.update_top_btn.rect().topLeft()).x()
             status_right = window.status_pill.mapToGlobal(window.status_pill.rect().topRight()).x()
@@ -392,9 +428,33 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertGreaterEqual(window.status_pill.width(), 180)
             self.assertLessEqual(window.status_pill.width(), 360)
             self.assertEqual(window.playback_panel.height(), 188)
+            for widget, name in (
+                (window.profile_btn, "profile selector"),
+                (window.update_top_btn, "update button"),
+                (window.menu_top_btn, "menu button"),
+                (window.start_btn, "start button"),
+                (window.pause_btn, "pause button"),
+                (window.stop_btn, "stop button"),
+                (window.speed_combo, "speed selector"),
+                (window.loops_spin, "loop selector"),
+                (window.sim_check, "sim checkbox"),
+                (window.human_check, "human checkbox"),
+                (window.focus_check, "focus checkbox"),
+                (window.playback_feedback_label, "playback status label"),
+                (window.progress_bar, "global progress bar"),
+                (window._stat_actions_w, "played stat"),
+                (window._stat_loops_w, "loops stat"),
+                (window._stat_seq_w, "sequence stat"),
+                (window._stat_time_w, "time stat"),
+            ):
+                assert_visible(widget, name)
+
             self.assertGreaterEqual(window.start_btn.width(), 68)
-            self.assertGreaterEqual(window.speed_combo.width(), 74)
+            self.assertGreaterEqual(window.speed_combo.width(), 96)
+            self.assertGreaterEqual(window.playback_feedback_label.width(), 280)
+            self.assertGreaterEqual(window.progress_bar.width(), 200)
             self.assertGreaterEqual(window._stat_time_w.width(), 78)
+            self.assertGreater(window.timeline.model().rowCount(), 0)
             window.hide()
             self._dispose_window(window)
 

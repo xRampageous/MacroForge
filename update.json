@@ -1,6 +1,6 @@
 {
-  "version": "3.2.4",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.4/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.4/MacroForge-v3.2.4.zip",
-  "notes": "v3.2.4: Adds Profile Library smoke coverage, profile validation/repair, profile import/export controls, autosave Saved/Unsaved clarity, bottom-panel playback status, top status cleanup, menu import/export dedupe, and removes stale snapshot UI modules."
+  "version": "3.2.5",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.5/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.5/MacroForge-v3.2.5.zip",
+  "notes": "v3.2.5: Expanded layout regression coverage - widget visibility/geometry assertions for all playback controls, header, timeline and bottom-panel at 760x1050; playback feedback label and progress bar size guards; sequence and stat chip coverage."
 }
