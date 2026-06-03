@@ -1,6 +1,6 @@
 {
-  "version": "3.4.1",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.1/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.1/MacroForge-v3.4.1.zip",
-  "notes": "v3.4.1: Apply add action 42 height patch - updated icons.py, main_window.py and main_window_layout.py with 42px button height."
+  "version": "3.4.2",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.2/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.2/MacroForge-v3.4.2.zip",
+  "notes": "v3.4.2: Apply recorder gradient 42 buttons patch - updated icons.py, main_window.py, main_window_layout.py, theme.py and theme_compact.py with recorder gradient 42px buttons."
 }
