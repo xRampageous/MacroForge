@@ -924,7 +924,10 @@ class MainWindow(QMainWindow):
                 self._normalize_groups()
                 settings = session.get("settings", {})
                 self.loops_spin.setValue(int(settings.get("loops", 1)))
-                self.speed_combo.setCurrentText(f"{float(settings.get('speed', 1.0)):.1f}x")
+                speed = float(settings.get("speed", 1.0) or 1.0)
+                speed_text = f"{speed:g}x"
+                if self.speed_combo.findText(speed_text) >= 0:
+                    self.speed_combo.setCurrentText(speed_text)
                 self.inf_check.setChecked(settings.get("infinite_loop", False))
                 self.human_check.setChecked(settings.get("human_curve", True))
                 self.macro_variables = dict(settings.get("macro_variables", {}) or {})

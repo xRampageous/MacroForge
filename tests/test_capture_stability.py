@@ -15,7 +15,7 @@ from PyQt6.QtCore import QEvent, QPoint, QTimer
 from PyQt6.QtWidgets import QApplication, QDialog, QMenu
 
 from debugger import DebugLogger
-from models import Action, ActionListModel
+from models import Action, ActionListModel, ProfileManager
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
 from ui.timeline import TimelineView, _action_text
@@ -617,6 +617,49 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertIn("LIBRARY", captured)
             self.assertIn("Profile / macro library     Ctrl+Alt+P", captured)
             self.assertIn("Macro health / pre-flight     Ctrl+Shift+P", captured)
+            self._dispose_window(window)
+
+    def test_profile_switch_loads_actions_and_exact_speed_settings(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_manager = ProfileManager()
+            profile_manager.base_dir = tmpdir
+            profile_manager.profiles_dir = os.path.join(tmpdir, "profiles")
+            profile_manager.settings_file = os.path.join(tmpdir, "settings.json")
+            os.makedirs(profile_manager.profiles_dir, exist_ok=True)
+            profile_manager.save_profile(
+                [Action("alpha", 1.0)],
+                {"loops": 3, "speed": 1.25, "infinite_loop": False, "human_curve": True},
+                "alpha",
+            )
+            profile_manager.save_profile(
+                [Action("beta", 2.0)],
+                {"loops": 4, "speed": 0.75, "infinite_loop": True, "human_curve": False},
+                "beta",
+            )
+            profile_manager.switch_profile("alpha")
+            patches = (
+                patch.object(MainWindow, "_check_update_silent"),
+                patch.object(MainWindow, "_restore_window_geometry"),
+                patch.object(MainWindow, "_setup_tray"),
+            )
+            for item in patches:
+                item.start()
+                self.addCleanup(item.stop)
+            window = MainWindow(profile_manager=profile_manager)
+
+            self.assertEqual(window.action_model.get(0).key, "alpha")
+            self.assertEqual(window.loops_spin.value(), 3)
+            self.assertEqual(window.speed_combo.currentText(), "1.25x")
+
+            window._switch_profile("beta")
+            self.assertEqual(window.session_manager.active, "beta")
+            self.assertEqual(window.action_model.rowCount(), 1)
+            self.assertEqual(window.action_model.get(0).key, "beta")
+            self.assertEqual(window.loops_spin.value(), 4)
+            self.assertEqual(window.speed_combo.currentText(), "0.75x")
+            self.assertTrue(window.inf_check.isChecked())
+            self.assertFalse(window.human_check.isChecked())
+            self.assertIn("beta", window.profile_btn.text())
             self._dispose_window(window)
 
 

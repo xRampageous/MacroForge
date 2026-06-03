@@ -1,7 +1,7 @@
 """Menu and profile actions for MacroForge main window."""
 
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QMenu
+from PyQt6.QtWidgets import QInputDialog, QMenu, QMessageBox
 
 from ui.icons import icon
 from ui.theme import COLORS
@@ -26,6 +26,56 @@ def show_profile_menu(window):
     menu.addSeparator()
     menu.addAction(icon("folder", 14, C["accent"]), "Open Profile / Macro Library     Ctrl+Alt+P", self.open_profile_library)
     menu.exec(self.profile_btn.mapToGlobal(self.profile_btn.rect().bottomLeft()))
+
+
+def switch_profile(window, name):
+    self = window
+    if not name or name == self.session_manager.active:
+        return
+    self._do_save_session()
+    self.session_manager.switch_profile(name)
+    self.load_last_session()
+    self._refresh_profile_btn()
+    self.status(f"Switched to '{name}'")
+
+
+def new_profile_dialog(window):
+    self = window
+    name, ok = QInputDialog.getText(self, "New Profile", "Profile name:")
+    if ok and name.strip():
+        name = name.strip()
+        self.session_manager.save_profile([], {}, name)
+        self._switch_profile(name)
+
+
+def rename_profile_dialog(window):
+    self = window
+    old = self.session_manager.active
+    name, ok = QInputDialog.getText(self, "Rename Profile", "New name:", text=old)
+    if ok and name.strip() and name.strip() != old:
+        new = name.strip()
+        if self.session_manager.rename_profile(old, new):
+            self._refresh_profile_btn()
+            self.status(f"Renamed profile '{old}' to '{new}'")
+        else:
+            QMessageBox.warning(self, "Rename Profile", f"Could not rename '{old}' to '{new}'.")
+
+
+def delete_profile_confirm(window):
+    self = window
+    name = self.session_manager.active
+    reply = QMessageBox.question(
+        self,
+        "Delete Profile",
+        f"Delete profile '{name}'?",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+    )
+    if reply == QMessageBox.StandardButton.Yes:
+        if self.session_manager.delete_profile(name):
+            self.load_last_session()
+            self._refresh_profile_btn()
+        else:
+            QMessageBox.information(self, "Delete Profile", f"Profile '{name}' cannot be deleted.")
 
 
 def _menu_style():
