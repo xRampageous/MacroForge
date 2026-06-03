@@ -32,7 +32,7 @@ from debugger import logger, DebugViewer
 from ui.theme import build_stylesheet, COLORS
 from ui.status_dot import StatusDot
 from ui.timeline import TimelineView
-from ui.icons import icon
+from ui.icons import icon, timeline_action_icon
 
 
 class MainWindow(QMainWindow):
@@ -230,72 +230,98 @@ class MainWindow(QMainWindow):
 
     def _add_btn(self, text, callback, color, layout, icon_name="plus"):
         type_map = {"key": "add_key", "click": "add_click", "delay": "add_pause",
-                    "image": "add_image", "condition": "add_condition",
-                    "loop": "add_loop", "folder": "add_group"}
+                    "pause": "add_pause", "image": "add_image", "condition": "add_condition",
+                    "loop": "add_loop", "folder": "add_group", "group": "add_group"}
+        kind_map = {"delay": "pause", "folder": "group"}
+        action_kind = kind_map.get(icon_name, icon_name)
         obj = type_map.get(icon_name, "action_add")
+
+        # Reference-matched Add Action skins.  These values are sampled from the
+        # supplied dark button mock-up so the side panel keeps the same action
+        # colors, but uses a deeper, less washed-out gaming-style gradient.
+        add_action_skins = {
+            "key": {
+                "border": "#0783D4", "hover_border": "#03B5F5",
+                "top": "#0A2853", "mid": "#03162C", "bottom": "#000C1A",
+                "hover_top": "#0D346C", "hover_mid": "#041B38", "hover_bottom": "#000E1E",
+            },
+            "click": {
+                "border": "#CB111C", "hover_border": "#FF2330",
+                "top": "#53111B", "mid": "#2C0A13", "bottom": "#11060F",
+                "hover_top": "#651520", "hover_mid": "#360C16", "hover_bottom": "#160711",
+            },
+            "pause": {
+                "border": "#99A1A2", "hover_border": "#C6D0D2",
+                "top": "#242C2F", "mid": "#121A1E", "bottom": "#050C0F",
+                "hover_top": "#2F383C", "hover_mid": "#182126", "hover_bottom": "#081014",
+            },
+            "image": {
+                "border": "#EBC310", "hover_border": "#FFD000",
+                "top": "#493E0F", "mid": "#24210C", "bottom": "#0F110B",
+                "hover_top": "#5A4C12", "hover_mid": "#2E290E", "hover_bottom": "#14160D",
+            },
+            "condition": {
+                "border": "#8C21BB", "hover_border": "#D932FF",
+                "top": "#351052", "mid": "#1F0834", "bottom": "#0C041A",
+                "hover_top": "#421467", "hover_mid": "#290A43", "hover_bottom": "#110522",
+            },
+            "loop": {
+                "border": "#04AF8A", "hover_border": "#00E5A8",
+                "top": "#00413C", "mid": "#002123", "bottom": "#001013",
+                "hover_top": "#00524B", "hover_mid": "#002B2D", "hover_bottom": "#001519",
+            },
+            "group": {
+                "border": "#7030BD", "hover_border": "#8B5CF6",
+                "top": "#261452", "mid": "#170D36", "bottom": "#0B0820",
+                "hover_top": "#31196A", "hover_mid": "#1E1146", "hover_bottom": "#100A2C",
+            },
+        }
+        skin = add_action_skins.get(action_kind, {
+            "border": color, "hover_border": color,
+            "top": "#04101A", "mid": "#020A13", "bottom": "#000207",
+            "hover_top": "#071A2A", "hover_mid": "#03101B", "hover_bottom": "#000309",
+        })
+
         btn = QPushButton(text)
         btn.setObjectName(obj)
         btn.setText("")
         btn.setIcon(QIcon())
-        btn.setFixedSize(90, 45)
+        btn.setFixedSize(104, 42)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setProperty("qt_stacked_add_action", True)
-        
-        # Map icon names to neon button images
-        color_map = {
-            "key": "button_blue.png",
-            "click": "button_teal.png",
-            "delay": "button_grey.png",
-            "image": "button_purple.png",
-            "condition": "button_gold.png",
-            "loop": "button_blue.png",
-            "folder": "button_wide_purple.png",
-        }
-        
-        bg_image = color_map.get(icon_name, "button_grey.png")
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        bg_path = os.path.join(current_dir, "assets", bg_image)
-        
-        if os.path.exists(bg_path):
-            btn.setStyleSheet(
-                f"QPushButton {{ "
-                f"background-image: url({bg_path}); "
-                f"background-repeat: no-repeat; "
-                f"background-position: center; "
-                f"background-color: transparent; "
-                f"border: none; "
-                f"color: #FFFFFF; }}"
-                f"QPushButton:hover {{ "
-                f"background-image: url({bg_path}); "
-                f"border: 1px solid {COLORS['accent']}; "
-                f"border-radius: 8px; }}"
-                f"QPushButton:pressed {{ "
-                f"background-image: url({bg_path}); "
-                f"opacity: 0.8; }}"
-            )
-        else:
-            # Fallback to gradient if image fails to load
-            tint = color.lstrip("#")
-            btn.setStyleSheet(
-                f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
-                f"stop:0 #55101011, stop:0.35 #66{tint}, stop:1 #020309); "
-                f"color: {COLORS['text_inverse']}; border: 2px solid {color}; "
-                f"border-radius: 11px; padding: 0px; text-align: center; }}"
-                f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
-                f"stop:0 #88111111, stop:0.45 #99{tint}, stop:1 #000000); border-color: #FFFFFF; }}"
-                f"QPushButton:pressed {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
-                f"stop:0 #33111111, stop:1 #55{tint}); }}"
-            )
-        
+        btn.setStyleSheet(
+            "QPushButton {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {skin['top']}, stop:0.52 {skin['mid']}, stop:1 {skin['bottom']});"
+            f"color: {COLORS['text_inverse']};"
+            f"border: 1px solid {skin['border']};"
+            "border-radius: 10px; padding: 0px; text-align: center; font-weight: 800;"
+            "}"
+            "QPushButton:hover {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {skin['hover_top']}, stop:0.52 {skin['hover_mid']}, stop:1 {skin['hover_bottom']});"
+            f"border: 1px solid {skin['hover_border']};"
+            "}"
+            "QPushButton:pressed {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {skin['bottom']}, stop:0.55 {skin['mid']}, stop:1 {skin['top']});"
+            f"border: 1px solid {skin['hover_border']};"
+            "}"
+            "QPushButton:disabled {"
+            f"background: {COLORS['bg_secondary']}; color: {COLORS['text_dark']}; "
+            f"border: 1px solid {COLORS['border']};"
+            "}"
+        )
         content_lo = QVBoxLayout(btn)
         content_lo.setContentsMargins(4, 3, 4, 3)
         content_lo.setSpacing(1)
-        icon_size = 19 if icon_name != "folder" else 18
+        icon_size = 19 if action_kind != "group" else 18
         icon_lbl = QLabel()
         icon_lbl.setObjectName(f"{obj}_icon")
         icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setPixmap(icon(icon_name, icon_size, color).pixmap(icon_size, icon_size))
+        icon_color = skin["hover_border"] if action_kind != "pause" else "#C6D0D2"
+        icon_lbl.setPixmap(timeline_action_icon(action_kind, icon_size, icon_color).pixmap(icon_size, icon_size))
         icon_lbl.setFixedSize(icon_size + 2, icon_size + 2)
         text_lbl = QLabel(text)
         text_lbl.setObjectName(f"{obj}_label")
