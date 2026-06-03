@@ -240,17 +240,53 @@ class MainWindow(QMainWindow):
         btn.setFixedSize(90, 45)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setProperty("qt_stacked_add_action", True)
-        tint = color.lstrip("#")
-        btn.setStyleSheet(
-            f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
-            f"stop:0 #55101010, stop:0.35 #66{tint}, stop:1 #020309); "
-            f"color: {COLORS['text_inverse']}; border: 2px solid {color}; "
-            f"border-radius: 11px; padding: 0px; text-align: center; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
-            f"stop:0 #88111111, stop:0.45 #99{tint}, stop:1 #000000); border-color: #FFFFFF; }}"
-            f"QPushButton:pressed {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
-            f"stop:0 #33111111, stop:1 #55{tint}); }}"
-        )
+        
+        # Map icon names to neon button images
+        color_map = {
+            "key": "button_blue.png",
+            "click": "button_teal.png",
+            "delay": "button_grey.png",
+            "image": "button_purple.png",
+            "condition": "button_gold.png",
+            "loop": "button_blue.png",
+            "folder": "button_wide_purple.png",
+        }
+        
+        bg_image = color_map.get(icon_name, "button_grey.png")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        bg_path = os.path.join(current_dir, "assets", bg_image)
+        
+        if os.path.exists(bg_path):
+            btn.setStyleSheet(
+                f"QPushButton {{ "
+                f"background-image: url({bg_path}); "
+                f"background-repeat: no-repeat; "
+                f"background-position: center; "
+                f"background-color: transparent; "
+                f"border: none; "
+                f"color: #FFFFFF; }}"
+                f"QPushButton:hover {{ "
+                f"background-image: url({bg_path}); "
+                f"border: 1px solid {COLORS['accent']}; "
+                f"border-radius: 8px; }}"
+                f"QPushButton:pressed {{ "
+                f"background-image: url({bg_path}); "
+                f"opacity: 0.8; }}"
+            )
+        else:
+            # Fallback to gradient if image fails to load
+            tint = color.lstrip("#")
+            btn.setStyleSheet(
+                f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
+                f"stop:0 #55101011, stop:0.35 #66{tint}, stop:1 #020309); "
+                f"color: {COLORS['text_inverse']}; border: 2px solid {color}; "
+                f"border-radius: 11px; padding: 0px; text-align: center; }}"
+                f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
+                f"stop:0 #88111111, stop:0.45 #99{tint}, stop:1 #000000); border-color: #FFFFFF; }}"
+                f"QPushButton:pressed {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
+                f"stop:0 #33111111, stop:1 #55{tint}); }}"
+            )
+        
         content_lo = QVBoxLayout(btn)
         content_lo.setContentsMargins(4, 3, 4, 3)
         content_lo.setSpacing(1)
