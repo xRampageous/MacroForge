@@ -343,9 +343,9 @@ class MainWindow(QMainWindow):
         # button: same glyph size, same vertical offsets, same label box.
         icon_size = 16
         icon_box = icon_size + 2
-        icon_y = 6
-        label_y = 20
-        label_h = 15
+        icon_y = 5
+        label_y = 22
+        label_h = 14
 
         icon_lbl = QLabel(btn)
         icon_lbl.setObjectName(f"{obj}_icon")
@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
         text_lbl.setGeometry(0, label_y, btn_w, label_h)
         text_lbl.setStyleSheet(
             "QLabel { background: transparent; color: #F4F7FF; "
-            "font-size: 11px; font-weight: 900; }"
+            "font-size: 11px; font-weight: 900; qproperty-alignment: AlignCenter; }"
         )
         btn.clicked.connect(callback)
         if layout is not None:
@@ -470,16 +470,67 @@ class MainWindow(QMainWindow):
         else:
             self.status("No image action selected")
 
-    def _capture_active_image_region(self):
+    def _browse_active_image_file(self):
+        """Browse for a replacement image template without opening the full dialog."""
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
             self.status("No image action selected")
             return
-        self._open_image_editor(self.active_index)
+        action = self.action_model.get(self.active_index)
+        if getattr(action, "action_type", "") != "image":
+            self.status("Selected action is not an image action")
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+        if not path:
+            return
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            if not data:
+                QMessageBox.warning(self, "Invalid Image", "The selected image file is empty.")
+                return
+            self.history.push(self.action_model.actions())
+            action.image_data = base64.b64encode(data).decode()
+            self._stamp_action_environment(action)
+            self.refresh()
+            self._set_image_inspector_preview(action)
+            self.save_session()
+            self.status("Image template updated")
+        except Exception as exc:
+            logger.exception("Failed to browse active image template")
+            QMessageBox.critical(self, "Image Error", str(exc))
+
+    def _capture_active_image_region(self):
+        """Capture only the image search region from the side Inspector button."""
+        if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
+            self.status("No image action selected")
+            return
+        action = self.action_model.get(self.active_index)
+        if getattr(action, "action_type", "") != "image":
+            self.status("Selected action is not an image action")
+            return
+        try:
+            from ui.dialogs.image_dialog import CaptureOverlay
+            overlay = CaptureOverlay()
+            result = overlay.exec()
+            if result == QDialog.DialogCode.Accepted and overlay.region:
+                x, y, w, h = overlay.region
+                self.history.push(self.action_model.actions())
+                action.search_region = f"{x},{y},{w},{h}"
+                self._stamp_action_environment(action)
+                self.refresh()
+                self.save_session()
+                self.status(f"Image search region captured: {x},{y},{w},{h}")
+            else:
+                self.status("Capture region cancelled")
+        except Exception as exc:
+            logger.exception("Failed to capture active image search region")
+            QMessageBox.critical(self, "Capture Error", str(exc))
 
     def _setup_inspector_autosave(self):
         widgets = [
             getattr(self, name, None)
             for name in (
+                "inspector_label",
                 "ik_key", "ik_dur", "ik_repeat", "ik_label", "ik_hold",
                 "ip_dur", "ip_label",
                 "ic_x", "ic_y", "ic_btn", "ic_rand", "ic_repeat", "ic_label",
@@ -747,7 +798,7 @@ class MainWindow(QMainWindow):
                     action.group_name = name
                     changed = True
                 if getattr(action, "label", "") != name:
-                    action.label = name
+                    action.label = inspector_label_text or name
                     changed = True
                 if getattr(action, "block_depth", 0) != 0:
                     action.block_depth = 0
@@ -1318,6 +1369,12 @@ class MainWindow(QMainWindow):
                 self.inspector_selector.addItem("Select an action")
                 if hasattr(self, "inspector_type_badge"):
                     self.inspector_type_badge.setText("ACTION")
+                    self.inspector_type_badge.setEnabled(False)
+                if hasattr(self, "inspector_label"):
+                    self.inspector_label.blockSignals(True)
+                    self.inspector_label.clear()
+                    self.inspector_label.setEnabled(False)
+                    self.inspector_label.blockSignals(False)
                 self._set_image_inspector_preview(None)
                 self._show_inspector(False)
                 if hasattr(self.timeline, "set_link_targets"):
@@ -1343,6 +1400,18 @@ class MainWindow(QMainWindow):
                 self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
             if hasattr(self, "inspector_type_badge"):
                 self.inspector_type_badge.setText(str(action.action_type or "action").upper())
+                self.inspector_type_badge.setEnabled(True)
+            if hasattr(self, "inspector_label"):
+                timeline_name = (
+                    getattr(action, "label", "")
+                    or getattr(action, "group_name", "")
+                    or getattr(action, "key", "")
+                    or f"Action {index + 1}"
+                )
+                self.inspector_label.blockSignals(True)
+                self.inspector_label.setText(str(timeline_name))
+                self.inspector_label.setEnabled(True)
+                self.inspector_label.blockSignals(False)
             self._show_inspector(True, action.action_type)
             if action.action_type == "key":
                 self.ik_key.setText(action.key)
@@ -1432,23 +1501,27 @@ class MainWindow(QMainWindow):
             action = self.action_model.get(self.active_index)
             if not autosave:
                 self.history.push(self.action_model.actions())
+            inspector_label_text = ""
+            if hasattr(self, "inspector_label"):
+                inspector_label_text = self.inspector_label.text().strip()
             if action.action_type == "key":
                 action.key = self.ik_key.text().strip()
                 action.duration = float(self.ik_dur.text())
                 action.hold_mode = self.ik_hold.isChecked()
                 action.repeat_count = max(1, int(self.ik_repeat.text() or 1))
-                action.label = self.ik_label.text().strip()
+                action.label = inspector_label_text
             elif action.action_type == "pause":
                 action.duration = float(self.ip_dur.text())
-                action.label = self.ip_label.text().strip()
+                action.label = inspector_label_text
             elif action.action_type == "click":
                 action.click_x = int(self.ic_x.text())
                 action.click_y = int(self.ic_y.text())
                 action.click_button = self.ic_btn.currentText()
                 action.click_rand_radius = int(self.ic_rand.text() or 0)
                 action.repeat_count = max(1, int(self.ic_repeat.text() or 1))
-                action.label = self.ic_label.text().strip()
+                action.label = inspector_label_text
             elif action.action_type == "image":
+                action.label = inspector_label_text
                 action.similarity = float(self.ii_sim.text())
                 action.wait_timeout = float(self.ii_wait.text() or 0) / 1000.0
                 if hasattr(self, "ii_retry_count"):
@@ -1459,17 +1532,17 @@ class MainWindow(QMainWindow):
             elif action.action_type == "group":
                 name = self.ig_name.text().strip() or "Group"
                 action.group_name = name
-                action.label = name
+                action.label = inspector_label_text or name
                 action.group_collapsed = self.ig_collapsed.isChecked()
                 if hasattr(self, "ig_recovery"):
                     action.group_role = "recovery" if self.ig_recovery.isChecked() else "normal"
             elif action.action_type == "loop":
-                action.label = self.il_label.text().strip() or f"Loop x{self.il_count.value()}"
+                action.label = inspector_label_text or f"Loop x{self.il_count.value()}"
                 action.loop_count = int(self.il_count.value())
                 action.repeat_count = int(self.il_count.value())
                 action.loop_target = int(self.il_target.currentData() if self.il_target.currentData() is not None else -1)
             elif action.action_type == "condition":
-                action.label = self.ico_label.text().strip()
+                action.label = inspector_label_text
                 action.condition_type = self.ico_type.currentText()
                 action.condition_jump_true = int(self.ico_true.currentData() if self.ico_true.currentData() is not None else -1)
                 action.condition_jump_false = int(self.ico_false.currentData() if self.ico_false.currentData() is not None else -1)
@@ -3067,7 +3140,7 @@ class MainWindow(QMainWindow):
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
             "stop:0 #66131D, stop:0.52 #2B0810, stop:1 #070306);"
             "color: #F7FAFF; border: 1px solid #FF3142; border-radius: 10px; "
-            "padding: 0px 10px; font-size: 12px; font-weight: 900;"
+            "padding: 0px; min-width: 100px; max-width: 100px; min-height: 45px; max-height: 45px; font-size: 12px; font-weight: 900; text-align: center;"
             "}"
             "QPushButton:hover {"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
@@ -3088,7 +3161,7 @@ class MainWindow(QMainWindow):
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
             "stop:0 #064756, stop:0.52 #06232B, stop:1 #031014);"
             "color: #F7FAFF; border: 1px solid #25D8FF; border-radius: 10px; "
-            "padding: 0px 10px; font-size: 12px; font-weight: 900;"
+            "padding: 0px; min-width: 100px; max-width: 100px; min-height: 45px; max-height: 45px; font-size: 12px; font-weight: 900; text-align: center;"
             "}"
             "QPushButton:hover {"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "

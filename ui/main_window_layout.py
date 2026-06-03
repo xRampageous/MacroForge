@@ -75,43 +75,67 @@ def build_main_layout(window):
         caret.setToolTip("Expand panel" if collapsed else "Collapse panel")
         body_widget.setVisible(not collapsed)
 
-        # The Inspector card is added with stretch=1 so simply hiding its body
-        # can leave a large empty shell.  Clamp the parent card while collapsed
-        # and release it again on expand; this also makes all caret panels feel
-        # like true collapse/expand sections.
+        # True card collapse/expand.  The Inspector card is added with stretch=1,
+        # so a plain body hide can leave a tall empty shell.  Clamp collapsed
+        # cards to their header height, then restore the Inspector to an
+        # expanding policy so it fills the side panel correctly after expanding.
         parent = body_widget.parentWidget()
         if parent is not None:
+            parent_name = parent.objectName() or ""
             if collapsed:
-                parent.setMaximumHeight(parent.sizeHint().height() + 2)
+                parent.setMinimumHeight(0)
+                parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
                 parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
             else:
+                parent.setMinimumHeight(0)
                 parent.setMaximumHeight(16777215)
-                parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                if parent_name == "inspector_card":
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+                else:
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
         body_widget.updateGeometry()
 
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(7)
+        row.setSpacing(0)
+
+        left_balance = QWidget()
+        left_balance.setFixedSize(20, 20)
+        row.addWidget(left_balance)
+
+        title_wrap = QWidget()
+        title_lo = QHBoxLayout(title_wrap)
+        title_lo.setContentsMargins(0, 0, 0, 0)
+        title_lo.setSpacing(7)
+        title_lo.addStretch()
+
         ico = QLabel()
+        ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ico.setPixmap(icon(icon_name, 16, color).pixmap(16, 16))
         ico.setFixedSize(18, 18)
-        row.addWidget(ico)
+        title_lo.addWidget(ico)
+
         lbl = QLabel(text)
         lbl.setObjectName("section")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             f"color: {C['text']}; font-size: 12px; font-weight: 850; "
             "letter-spacing: 0.7px; background: transparent;"
         )
-        row.addWidget(lbl)
-        row.addStretch()
+        title_lo.addWidget(lbl)
+        title_lo.addStretch()
+        row.addWidget(title_wrap, stretch=1)
+
         if body_widget is not None:
             caret = _caret_button(20)
             caret.clicked.connect(lambda checked=False, body=body_widget, btn=caret: _toggle_collapsible_body(body, btn))
             row.addWidget(caret)
         else:
             caret = QLabel("^")
+            caret.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            caret.setFixedSize(20, 20)
             caret.setStyleSheet(f"color: {C['text_dim']}; font-size: 12px; background: transparent;")
             row.addWidget(caret)
         return row
@@ -169,21 +193,39 @@ def build_main_layout(window):
         body_lo.setSpacing(7)
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
-        head.setSpacing(6)
+        head.setSpacing(0)
+
+        left_balance = QWidget()
+        left_balance.setFixedSize(18, 18)
+        head.addWidget(left_balance)
+
+        title_wrap = QWidget()
+        title_lo = QHBoxLayout(title_wrap)
+        title_lo.setContentsMargins(0, 0, 0, 0)
+        title_lo.setSpacing(6)
+        title_lo.addStretch()
+
         ico = QLabel()
+        ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
         ico.setFixedSize(15, 15)
-        head.addWidget(ico)
+        title_lo.addWidget(ico)
+
         lbl = QLabel(title)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             f"color: {C['text']}; font-size: 11px; font-weight: 850; "
             "letter-spacing: 0.35px; background: transparent;"
         )
-        head.addWidget(lbl)
+        title_lo.addWidget(lbl)
+
         info = QLabel("ⓘ")
+        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-        head.addWidget(info)
-        head.addStretch()
+        title_lo.addWidget(info)
+        title_lo.addStretch()
+        head.addWidget(title_wrap, stretch=1)
+
         caret = _caret_button(18)
         caret.setStyleSheet(
             f"QPushButton#panel_caret_btn {{ color: {C['text_dim']}; background: transparent; "
@@ -224,22 +266,40 @@ def build_main_layout(window):
 
     brand_row = QHBoxLayout()
     brand_row.setContentsMargins(0, 0, 0, 0)
+    brand_row.setSpacing(6)
+
+    brand_box = QFrame()
+    brand_box.setObjectName("macroforge_brand_box")
+    brand_box.setFixedHeight(36)
+    brand_box.setStyleSheet(
+        f"QFrame#macroforge_brand_box {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 #07172A, stop:0.55 #03101E, stop:1 #01070E); "
+        f"border: 1px solid {C['border']}; border-radius: 10px; }}"
+    )
+    brand_box_lo = QHBoxLayout(brand_box)
+    brand_box_lo.setContentsMargins(10, 0, 6, 0)
+    brand_box_lo.setSpacing(6)
+
     brand = QLabel("MACROFORGE")
+    brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
     brand.setStyleSheet(
-        f"color: {C['text']}; font-size: 20px; font-weight: 900; "
-        "letter-spacing: -0.7px; background: transparent;"
+        f"color: {C['text']}; font-size: 18px; font-weight: 950; "
+        "letter-spacing: 0.4px; background: transparent;"
     )
-    brand_row.addWidget(brand)
-    brand_row.addStretch()
-    ver = QLabel(VERSION)
+    brand_box_lo.addWidget(brand, stretch=1)
+
+    ver = QLabel(f"v{VERSION}")
     ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    ver.setFixedSize(54, 30)
+    ver.setFixedSize(58, 23)
     ver.setStyleSheet(
-        f"color: {C['accent']}; background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 8px; "
-        "font-size: 12px; font-weight: 900;"
+        f"color: {C['accent']}; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 {C['bg_tertiary']}, stop:1 #010913); "
+        f"border: 1px solid {C['accent_glow']}; border-radius: 8px; "
+        "font-size: 11px; font-weight: 900;"
     )
-    brand_row.addWidget(ver)
+    brand_box_lo.addWidget(ver)
+
+    brand_row.addWidget(brand_box, stretch=1)
     self.sidebar_collapse_btn = _caret_button(22)
     self.sidebar_collapse_btn.setText("<")
     self.sidebar_collapse_btn.setToolTip("Collapse side panel")
@@ -327,20 +387,22 @@ def build_main_layout(window):
     self.rec_btn.setObjectName("rec_round_btn")
     self.rec_btn.setIcon(icon("record", 16, C["error"]))
     self.rec_btn.setIconSize(QSize(16, 16))
+    self.rec_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
     # Keep the icon-only recorder button but make it the requested wide
     # recording-control size.  Colors remain controlled by the existing theme.
-    self.rec_btn.setFixedSize(100, 49)
-    self.rec_btn.setMinimumSize(100, 49)
-    self.rec_btn.setMaximumSize(100, 49)
+    self.rec_btn.setFixedSize(100, 45)
+    self.rec_btn.setMinimumSize(100, 45)
+    self.rec_btn.setMaximumSize(100, 45)
     self.rec_btn.setToolTip("Record (F7)")
     self.rec_btn.clicked.connect(self._toggle_record)
     self.rec_pause_btn = QPushButton("Pause")
     self.rec_pause_btn.setObjectName("rec_pause_btn")
     self.rec_pause_btn.setIcon(icon("pause", 16, C["text_dim"]))
     self.rec_pause_btn.setIconSize(QSize(16, 16))
-    self.rec_pause_btn.setFixedSize(100, 49)
-    self.rec_pause_btn.setMinimumSize(100, 49)
-    self.rec_pause_btn.setMaximumSize(100, 49)
+    self.rec_pause_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+    self.rec_pause_btn.setFixedSize(100, 45)
+    self.rec_pause_btn.setMinimumSize(100, 45)
+    self.rec_pause_btn.setMaximumSize(100, 45)
     self.rec_pause_btn.setToolTip("Pause")
     self.rec_pause_btn.setEnabled(False)
     self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
@@ -380,15 +442,33 @@ def build_main_layout(window):
         "QComboBox::drop-down { border: none; width: 20px; }"
     )
     selector_row.addWidget(self.inspector_selector, stretch=1)
-    self.inspector_type_badge = QLabel("IMAGE")
-    self.inspector_type_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    self.inspector_type_badge.setFixedSize(46, 24)
-    self.inspector_type_badge.setStyleSheet(
-        f"color: {C['text_dim']}; background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; "
-        "font-size: 10px; font-weight: 850;"
+
+    self.inspector_label = form_input("timeline label")
+    self.inspector_label.setObjectName("inspector_label")
+    self.inspector_label.setToolTip("Timeline label/name for the selected action")
+    self.inspector_label.setEnabled(False)
+    self.inspector_label.setFixedWidth(86)
+    selector_row.addWidget(self.inspector_label)
+
+    self.inspector_type_btn = QPushButton("ACTION")
+    self.inspector_type_btn.setObjectName("inspector_type_btn")
+    self.inspector_type_btn.setEnabled(False)
+    self.inspector_type_btn.setFixedSize(54, 30)
+    self.inspector_type_btn.setToolTip("Open the selected action dialog")
+    self.inspector_type_btn.clicked.connect(lambda checked=False: self._open_active_dialog())
+    self.inspector_type_btn.setStyleSheet(
+        f"QPushButton#inspector_type_btn {{ color: {C['text']}; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 {C['bg_tertiary']}, stop:1 #020A13); "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 0; "
+        "font-size: 10px; font-weight: 900; text-align: center; }}"
+        f"QPushButton#inspector_type_btn:hover {{ border-color: {C['accent']}; color: #FFFFFF; }}"
+        f"QPushButton#inspector_type_btn:disabled {{ color: {C['text_dark']}; border-color: {C['border']}; }}"
     )
-    selector_row.addWidget(self.inspector_type_badge)
+    selector_row.addWidget(self.inspector_type_btn)
+
+    # Backwards-compatible alias for older update code paths.
+    self.inspector_type_badge = self.inspector_type_btn
+
     more_btn = QPushButton()
     more_btn.setObjectName("icon_btn")
     more_btn.setFixedSize(24, 30)
@@ -421,10 +501,10 @@ def build_main_layout(window):
         ("Key", self.ik_key),
         ("Duration", self.ik_dur),
         ("Repeat", self.ik_repeat),
-        ("Label", self.ik_label),
     ]:
         ik_lo.addWidget(form_label(label))
         ik_lo.addWidget(widget)
+    self.ik_label.setVisible(False)
     ik_lo.addWidget(self.ik_hold)
     ik_outer.addWidget(key_card)
 
@@ -437,8 +517,7 @@ def build_main_layout(window):
     self.ip_label = form_input("label")
     ip_lo.addWidget(form_label("Duration"))
     ip_lo.addWidget(self.ip_dur)
-    ip_lo.addWidget(form_label("Label"))
-    ip_lo.addWidget(self.ip_label)
+    self.ip_label.setVisible(False)
     ip_outer.addWidget(pause_card)
 
     self.insp_click = QWidget()
@@ -462,10 +541,10 @@ def build_main_layout(window):
         ("Button", self.ic_btn),
         ("Randomness", self.ic_rand),
         ("Repeat", self.ic_repeat),
-        ("Label", self.ic_label),
     ]:
         ic_lo.addWidget(form_label(label))
         ic_lo.addWidget(widget)
+    self.ic_label.setVisible(False)
     ic_outer.addWidget(click_card)
 
     self.insp_image = QWidget()
@@ -504,8 +583,8 @@ def build_main_layout(window):
     preview_actions = QHBoxLayout()
     preview_actions.setContentsMargins(0, 0, 0, 0)
     preview_actions.setSpacing(6)
-    change_btn = QPushButton("Change Image")
-    change_btn.setIcon(icon("edit", 13, C["text_dim"]))
+    change_btn = QPushButton("Browse")
+    change_btn.setIcon(icon("image", 13, C["text_dim"]))
     change_btn.setIconSize(QSize(13, 13))
     change_btn.setFixedHeight(28)
     change_btn.setStyleSheet(
@@ -514,13 +593,13 @@ def build_main_layout(window):
         "font-size: 10px; font-weight: 750; text-align: left; }}"
         f"QPushButton:hover {{ border-color: {C['accent']}; }}"
     )
-    change_btn.clicked.connect(lambda: self._open_active_dialog())
+    change_btn.clicked.connect(self._browse_active_image_file)
     preview_actions.addWidget(change_btn)
     preview_actions.addStretch()
     for attr, name, tip, slot in (
         ("ii_zoom_btn", "search", "Zoom image", self._zoom_image_preview),
         ("ii_fit_btn", "move", "Fit preview", self._fit_image_preview),
-        ("ii_capture_btn", "target", "Capture region", self._capture_active_image_region),
+        ("ii_capture_btn", "target", "Capture search region", self._capture_active_image_region),
     ):
         btn = QPushButton()
         btn.setObjectName("icon_btn")
@@ -653,8 +732,7 @@ def build_main_layout(window):
     self.il_count.setRange(2, 9999)
     self.il_count.setFixedHeight(30)
     self.il_target = compact_combo()
-    il_lo.addWidget(form_label("Label"))
-    il_lo.addWidget(self.il_label)
+    self.il_label.setVisible(False)
     il_lo.addWidget(form_label("Repeat count"))
     il_lo.addWidget(self.il_count)
     il_lo.addWidget(form_label("Target"))
@@ -682,8 +760,8 @@ def build_main_layout(window):
     ico_retry.setSpacing(5)
     ico_retry.addWidget(self.ico_retry_count)
     ico_retry.addWidget(self.ico_retry_delay)
+    self.ico_label.setVisible(False)
     for label, widget in [
-        ("Label", self.ico_label),
         ("Type", self.ico_type),
         ("True target", self.ico_true),
         ("False target", self.ico_false),
@@ -720,16 +798,16 @@ def build_main_layout(window):
     def _set_side_panel_collapsed(collapsed):
         collapsed = bool(collapsed)
         self._side_panel_collapsed = collapsed
-        sidebar.setFixedWidth(44 if collapsed else 270)
-        margin = 6 if collapsed else 10
+        sidebar.setFixedWidth(22 if collapsed else 270)
+        margin = 0 if collapsed else 10
         sb_lo.setContentsMargins(margin, 14, margin, 10)
-        brand.setVisible(not collapsed)
-        ver.setVisible(not collapsed)
+        brand_box.setVisible(not collapsed)
         add_card.setVisible(not collapsed)
         rec_card.setVisible(not collapsed)
         insp_card.setVisible(not collapsed)
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
+        sb_lo.setSpacing(0 if collapsed else 8)
 
     self.sidebar_collapse_btn.clicked.connect(
         lambda checked=False: _set_side_panel_collapsed(not bool(getattr(self, "_side_panel_collapsed", False)))

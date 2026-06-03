@@ -150,6 +150,7 @@ def build_stylesheet() -> str:
         border-radius: 10px;
         padding: 8px 16px;
         font-weight: 500;
+        text-align: center;
     }}
     QPushButton:hover {{
         background-color: {C['bg_hover']};
@@ -651,15 +652,16 @@ def build_stylesheet() -> str:
         color: #FF5A68;
         border: 1px solid #B8202E;
         border-radius: 10px;
-        padding: 0px 10px;
+        padding: 0px;
         min-width: 100px;
         max-width: 100px;
         width: 100px;
-        min-height: 49px;
-        max-height: 49px;
-        height: 49px;
+        min-height: 45px;
+        max-height: 45px;
+        height: 45px;
         font-size: 12px;
         font-weight: 900;
+        text-align: center;
     }}
     QPushButton#rec_round_btn:hover {{
         background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #47131E, stop:0.52 #21080E, stop:1 #070306);
@@ -676,15 +678,16 @@ def build_stylesheet() -> str:
         color: #DDE8F2;
         border: 1px solid #2A5560;
         border-radius: 10px;
-        padding: 0px 10px;
+        padding: 0px;
         min-width: 100px;
         max-width: 100px;
         width: 100px;
-        min-height: 49px;
-        max-height: 49px;
-        height: 49px;
+        min-height: 45px;
+        max-height: 45px;
+        height: 45px;
         font-size: 12px;
         font-weight: 900;
+        text-align: center;
     }}
     QPushButton#rec_pause_btn:hover {{
         background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #063C49, stop:0.52 #061F26, stop:1 #030E12);
