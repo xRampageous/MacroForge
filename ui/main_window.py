@@ -481,65 +481,12 @@ class MainWindow(QMainWindow):
         self.status("Fixed window height enabled" if locked else "Fixed window height disabled")
         self._apply_panel_size_locks()
 
-    def _measure_longest_inspector_side_height(self):
-        """Measure the tallest fully-expanded Inspector pane without changing selection.
-
-        The locked window height should not grow when the user clicks a taller
-        action while locked, so measure all Inspector panes and use the longest.
-        """
-        sidebar = getattr(self, "sidebar_frame", None)
-        card = getattr(self, "insp_card", None)
-        body = getattr(self, "insp_body", None)
-        panes = [
-            getattr(self, "insp_key", None),
-            getattr(self, "insp_pause", None),
-            getattr(self, "insp_click", None),
-            getattr(self, "insp_image", None),
-            getattr(self, "insp_group", None),
-            getattr(self, "insp_loop", None),
-            getattr(self, "insp_condition", None),
-            getattr(self, "insp_empty", None),
-        ]
-        panes = [p for p in panes if p is not None]
-        if sidebar is None or card is None:
-            return 0
-
-        old_vis = [(p, p.isVisible()) for p in panes]
-        body_visible = body.isVisible() if body is not None else True
-        card_max = card.maximumHeight()
-        body_max = body.maximumHeight() if body is not None else 16777215
-
-        try:
-            if body is not None:
-                body.setVisible(True)
-                body.setMaximumHeight(16777215)
-            card.setMaximumHeight(16777215)
-
-            best = 0
-            for pane in panes:
-                for other in panes:
-                    other.setVisible(other is pane)
-                card.updateGeometry()
-                sidebar.updateGeometry()
-                best = max(
-                    best,
-                    int(sidebar.sizeHint().height()),
-                    int(sidebar.minimumSizeHint().height()),
-                )
-
-            return best
-        finally:
-            for pane, visible in old_vis:
-                pane.setVisible(visible)
-            if body is not None:
-                body.setVisible(body_visible)
-                body.setMaximumHeight(body_max)
-            card.setMaximumHeight(card_max)
-            card.updateGeometry()
-            sidebar.updateGeometry()
-
     def _preferred_panel_lock_height(self):
-        """Fixed window height while locked, based on the longest side-panel state."""
+        """Fixed window height while locked, following the current side-panel size.
+
+        The bottom of the window should hug the current side-panel/Inspector
+        layout instead of reserving space for the longest possible Inspector.
+        """
         try:
             if not bool(getattr(self, "_measuring_panel_lock_height", False)):
                 self._measuring_panel_lock_height = True
@@ -553,18 +500,19 @@ class MainWindow(QMainWindow):
             side_h = 0
             if sidebar is not None:
                 sidebar.updateGeometry()
+                # Use the actual current side-panel natural height.  Do not use
+                # the longest Inspector measurement here; locked height should
+                # auto-size to the selected side-panel state.
                 side_h = max(
                     int(sidebar.sizeHint().height()),
                     int(sidebar.minimumSizeHint().height()),
-                    int(sidebar.height()) if sidebar.isVisible() else 0,
-                    int(self._measure_longest_inspector_side_height()),
                 )
 
             playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 188
             base_min_h = int(getattr(self, "_base_min_height", 420))
-            # Extra padding covers the central header/runtime margins and keeps
-            # the side-panel stack from squeezing/clipping while locked.
-            target = max(side_h + 18, playback_h + 260, base_min_h)
+            # Small padding accounts for the root layout margins without leaving
+            # the bottom of the window far below the side panel.
+            target = max(side_h + 8, playback_h + 220, base_min_h)
             return max(base_min_h, min(1800, int(target)))
         except Exception:
             return max(int(getattr(self, "_base_min_height", 420)), int(self.height()))
@@ -1932,6 +1880,7 @@ class MainWindow(QMainWindow):
             self._inspector_loading = False
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
                 QTimer.singleShot(0, self._apply_panel_size_locks)
+                QTimer.singleShot(35, self._apply_panel_size_locks)
 
     def _apply_inspector(self, autosave=False):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
