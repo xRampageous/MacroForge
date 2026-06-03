@@ -1,6 +1,6 @@
 {
-  "version": "3.3.3",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.3/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.3/MacroForge-v3.3.3.zip",
-  "notes": "v3.3.3: Add Action panel uses scoped neon PNG button assets with centered icon/name content, hover and pressed variants, build packaging support, and regression coverage."
+  "version": "3.3.4",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.4/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.4/MacroForge-v3.3.4.zip",
+  "notes": "v3.3.4: Replaces Add Action neon button assets with normalized transparent PNGs and stacks large centered icons above labels, keeping Group as a folder button. Adds regression coverage for scoped Add Action button layout and transparent asset edges."
 }

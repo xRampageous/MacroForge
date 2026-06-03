@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -14,7 +15,7 @@ from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QMenu, QPushButton, QWidget
+from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QMenu, QPushButton, QWidget
 
 from debugger import DebugLogger
 from models import Action, ActionListModel, ProfileManager
@@ -481,12 +482,41 @@ class TestPlaybackVisibility(QtTestCase):
                 self.assertIn("_hover.png", button.styleSheet(), name)
                 self.assertIn("_pressed.png", button.styleSheet(), name)
                 self.assertIn("text-align: center", button.styleSheet(), name)
-                self.assertEqual(button.iconSize().width(), 20, name)
+                self.assertEqual(button.text(), "", name)
+                self.assertTrue(button.property("stacked_content"), name)
+                self.assertGreaterEqual(button.iconSize().width(), 32, name)
+                self.assertIsNotNone(button.findChild(QLabel, f"{name}_icon"), name)
+                self.assertIsNotNone(button.findChild(QLabel, f"{name}_label"), name)
 
             for button in (window.start_btn, window.pause_btn, window.stop_btn, window.rec_btn, window.rec_pause_btn):
                 self.assertNotEqual(button.property("neon_add_action"), True)
                 self.assertNotIn("neon_buttons", button.styleSheet())
             self._dispose_window(window)
+
+    def test_neon_png_button_assets_have_transparent_edges(self):
+        assets_dir = Path(__file__).resolve().parents[1] / "ui" / "assets" / "neon_buttons"
+        assets = sorted(assets_dir.glob("add_*.png"))
+        self.assertTrue(assets, "expected Add Action neon button assets")
+        for path in assets:
+            with Image.open(path).convert("RGBA") as img:
+                width, height = img.size
+                corners = (
+                    img.getpixel((0, 0)),
+                    img.getpixel((width - 1, 0)),
+                    img.getpixel((0, height - 1)),
+                    img.getpixel((width - 1, height - 1)),
+                )
+                self.assertTrue(all(pixel[3] == 0 for pixel in corners), path.name)
+                border_pixels = []
+                border_pixels.extend(img.getpixel((x, 0)) for x in range(width))
+                border_pixels.extend(img.getpixel((x, height - 1)) for x in range(width))
+                border_pixels.extend(img.getpixel((0, y)) for y in range(height))
+                border_pixels.extend(img.getpixel((width - 1, y)) for y in range(height))
+                white_edge = [
+                    pixel for pixel in border_pixels
+                    if pixel[3] > 20 and pixel[0] > 220 and pixel[1] > 220 and pixel[2] > 220
+                ]
+                self.assertFalse(white_edge, f"{path.name} has opaque white edge pixels")
 
     def test_timeline_row_clicks_keep_window_alive_and_select_row(self):
         with tempfile.TemporaryDirectory() as tmpdir:

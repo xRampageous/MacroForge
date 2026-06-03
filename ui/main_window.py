@@ -260,14 +260,40 @@ class MainWindow(QMainWindow):
             pressed_url = pressed_path.replace("\\", "/") if os.path.exists(pressed_path) else bg_url
             btn.setProperty("neon_add_action", True)
             btn.setProperty("content_centered", True)
+            btn.setProperty("stacked_content", True)
+            btn.setText("")
+            btn.setIcon(QIcon())
             btn.setStyleSheet(
                 f"QPushButton {{ border-image: url(\"{bg_url}\") 0 0 0 0 stretch stretch; "
                 f"background: transparent; color: {COLORS['text_inverse']}; border: none; "
-                f"padding: 0px 8px; text-align: center; font-size: 14px; font-weight: 900; }}"
+                f"padding: 0px; text-align: center; font-size: 15px; font-weight: 950; }}"
                 f"QPushButton:hover {{ border-image: url(\"{hover_url}\") 0 0 0 0 stretch stretch; color: #FFFFFF; }}"
                 f"QPushButton:pressed {{ border-image: url(\"{pressed_url}\") 0 0 0 0 stretch stretch; "
-                f"color: {color}; padding: 1px 8px 0px 8px; }}"
+                f"color: {color}; padding-top: 1px; }}"
             )
+            content_lo = QVBoxLayout(btn)
+            content_lo.setContentsMargins(6, 9, 6, 9)
+            content_lo.setSpacing(3)
+            content_lo.addStretch(1)
+            icon_size = 34 if icon_name == "folder" else 32
+            icon_lbl = QLabel()
+            icon_lbl.setObjectName(f"{obj}_icon")
+            icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_lbl.setPixmap(icon(icon_name, icon_size, color).pixmap(icon_size, icon_size))
+            icon_lbl.setFixedSize(icon_size + 4, icon_size + 4)
+            icon_lbl.setScaledContents(False)
+            text_lbl = QLabel(text)
+            text_lbl.setObjectName(f"{obj}_label")
+            text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            text_lbl.setStyleSheet(
+                "QLabel { background: transparent; color: #F5F7FF; "
+                "font-size: 15px; font-weight: 950; letter-spacing: 0px; }"
+            )
+            content_lo.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+            content_lo.addWidget(text_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+            content_lo.addStretch(1)
         else:
             btn.setStyleSheet(
                 f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
