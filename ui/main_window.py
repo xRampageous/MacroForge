@@ -300,12 +300,9 @@ class MainWindow(QMainWindow):
         btn.setText("")
         btn.setIcon(QIcon())
         btn_w = 216 if action_kind == "group" else 104
-        # Keep Loop and Group on their existing dimensions. Normalize only the
-        # regular Add Action buttons to a 42px height while preserving width.
-        if action_kind in ("loop", "group"):
-            btn_h = 42
-        else:
-            btn_h = 42
+        # Hard-lock every Add Action button to the same 42px visual height.
+        # Widths stay unchanged: 104px regular buttons, 216px Group button.
+        btn_h = 42
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
@@ -319,6 +316,7 @@ class MainWindow(QMainWindow):
             f"color: {COLORS['text_inverse']};"
             f"border: 1px solid {skin['border']};"
             "border-radius: 10px; padding: 0px; text-align: center; font-weight: 800;"
+            f"min-width: {btn_w}px; max-width: {btn_w}px; min-height: {btn_h}px; max-height: {btn_h}px;"
             "}"
             "QPushButton:hover {"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
@@ -3056,6 +3054,59 @@ class MainWindow(QMainWindow):
         self.engine.start()
 
     # ═══════════════════════════════════════════════════════
+    #  RECORDER BUTTON SKINS
+    # ═══════════════════════════════════════════════════════
+
+    def _rec_record_active_style(self):
+        """Active Stop/Record button gradient, matched to the dark neon buttons."""
+        return (
+            "QPushButton {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #66131D, stop:0.52 #2B0810, stop:1 #070306);"
+            "color: #F7FAFF; border: 1px solid #FF3142; border-radius: 10px; "
+            "padding: 0px 10px; font-size: 12px; font-weight: 900;"
+            "}"
+            "QPushButton:hover {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #7A1823, stop:0.52 #360B14, stop:1 #0B0408);"
+            "border-color: #FF5464;"
+            "}"
+            "QPushButton:pressed {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #18060A, stop:0.55 #3A0B14, stop:1 #7A1823);"
+            "border-color: #FF7380;"
+            "}"
+        )
+
+    def _rec_pause_active_style(self):
+        """Active Pause/Resume button gradient, matched to the dark neon buttons."""
+        return (
+            "QPushButton {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #064756, stop:0.52 #06232B, stop:1 #031014);"
+            "color: #F7FAFF; border: 1px solid #25D8FF; border-radius: 10px; "
+            "padding: 0px 10px; font-size: 12px; font-weight: 900;"
+            "}"
+            "QPushButton:hover {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #075A6C, stop:0.52 #07303A, stop:1 #03161B);"
+            "border-color: #52E5FF;"
+            "}"
+            "QPushButton:pressed {"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #031014, stop:0.55 #07303A, stop:1 #075A6C);"
+            "border-color: #7AF0FF;"
+            "}"
+        )
+
+    def _recorder_reset_button_styles(self):
+        """Return recorder buttons to their inactive themed gradients."""
+        if hasattr(self, "rec_btn"):
+            self.rec_btn.setStyleSheet("")
+        if hasattr(self, "rec_pause_btn"):
+            self.rec_pause_btn.setStyleSheet("")
+
+    # ═══════════════════════════════════════════════════════
     #  RECORDER
     # ═══════════════════════════════════════════════════════
 
@@ -3074,7 +3125,7 @@ class MainWindow(QMainWindow):
             rec["paused"] = False
             rec["last_time"] = time.time()
             self.rec_pause_btn.setText(" Pause")
-            self.rec_pause_btn.setStyleSheet(f"background: {COLORS['playing']}; color: #fff; border-radius: 8px;")
+            self.rec_pause_btn.setStyleSheet(self._rec_pause_active_style())
             self.rec_dot.set_color(COLORS["error"], glow=True)
             self.rec_status.setText("RECORDING")
             self.rec_status.setStyleSheet(f"color: {COLORS['error']}; font-size: 11px; font-weight: 600;")
@@ -3141,10 +3192,10 @@ class MainWindow(QMainWindow):
         rec["modifiers"].clear()
         rec["queue"] = queue.Queue()
         self.rec_btn.setText(" Stop")
-        self.rec_btn.setStyleSheet(f"background-color: {COLORS['error']}; color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600;")
+        self.rec_btn.setStyleSheet(self._rec_record_active_style())
         self.rec_pause_btn.setText(" Pause")
         self.rec_pause_btn.setEnabled(True)
-        self.rec_pause_btn.setStyleSheet(f"background: {COLORS['playing']}; color: #fff; border-radius: 8px;")
+        self.rec_pause_btn.setStyleSheet(self._rec_pause_active_style())
         self.rec_dot.set_color(COLORS["error"], glow=True)
         self.rec_status.setText("RECORDING")
         self.rec_status.setStyleSheet(f"color: {COLORS['error']}; font-size: 11px; font-weight: 600;")
@@ -3350,10 +3401,9 @@ class MainWindow(QMainWindow):
             rec["scroll_thread"].join(timeout=0.2)
         self._show_rec_badge(False)
         self.rec_btn.setText("")
-        self.rec_btn.setStyleSheet("")
+        self._recorder_reset_button_styles()
         self.rec_pause_btn.setText("")
         self.rec_pause_btn.setEnabled(False)
-        self.rec_pause_btn.setStyleSheet("")
         self.rec_dot.set_color(COLORS["text_dark"])
         self.rec_status.setText("IDLE")
         self.rec_status.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px; font-weight: 600;")

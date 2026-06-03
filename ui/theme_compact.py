@@ -9,20 +9,20 @@ quiet blue-grey borders, and restrained neon accents used as outlines.
 # ═══════════════════════════════════════════════════════
 COLORS = {
     # ── Surfaces ──
-    "bg": "#000207",
-    "bg_secondary": "#010711",
-    "bg_tertiary": "#04101A",
-    "bg_card": "#020A13",
-    "bg_hover": "#071A2A",
-    "bg_pressed": "#0B2438",
-    "bg_glass": "#020A13",
+    "bg": "#00050B",
+    "bg_secondary": "#02070D",
+    "bg_tertiary": "#050B12",
+    "bg_card": "#01060C",
+    "bg_hover": "#091522",
+    "bg_pressed": "#0E1C2A",
+    "bg_glass": "#02070D",
 
     # ── Primary accent ──
-    "accent": "#0096FF",
-    "accent_secondary": "#006FDC",
-    "accent_glow": "rgba(0, 150, 255, 0.18)",
-    "accent_hover": "#32B1FF",
-    "accent_dim": "#1A5B86",
+    "accent": "#008DFF",
+    "accent_secondary": "#006ED6",
+    "accent_glow": "rgba(0, 141, 255, 0.14)",
+    "accent_hover": "#28A3FF",
+    "accent_dim": "#1E5E91",
 
     # ── Semantic ──
     "error": "#FF2330",
@@ -36,15 +36,15 @@ COLORS = {
 
     # ── Text ──
     "text": "#F3F6FA",
-    "text_dim": "#B0C0D6",
-    "text_dark": "#65788D",
+    "text_dim": "#AAB6C8",
+    "text_dark": "#687787",
     "text_inverse": "#F3F6FA",
     "btn_text": "#F3F6FA",
 
     # ── Borders ──
-    "border": "#143047",
-    "border_light": "#25506E",
-    "border_accent": "#0096FF",
+    "border": "#1E2B3A",
+    "border_light": "#334A5D",
+    "border_accent": "#008DFF",
 
     # ── Action-type accents (from reference) ──
     "key": "#008DFF",
@@ -52,14 +52,12 @@ COLORS = {
     "image": "#FFD000",
     "pause": "#B9B9B9",
     "condition": "#D932FF",
-    "group": "#8B5CF6",
-    "loop": "#00E5A8",
     "pause_cyan": "#00C8FF",
 
     # ── Playback ──
     "playing": "#00D75A",
     "playing_glow": "rgba(0, 215, 90, 0.14)",
-    "lane": "#203142",
+    "lane": "#27333D",
 
     # ── Neon highlights ──
     "neon_blue": "#008DFF",
@@ -75,8 +73,6 @@ TYPE_COLORS = {
     "image": COLORS["image"],
     "click": COLORS["click"],
     "condition": COLORS["condition"],
-    "group": COLORS["group"],
-    "loop": COLORS["loop"],
 }
 
 TYPE_GLOW = {
@@ -85,8 +81,6 @@ TYPE_GLOW = {
     "image": "#FFD000",
     "click": "#FF2330",
     "condition": "#D932FF",
-    "group": "#8B5CF6",
-    "loop": "#00E5A8",
 }
 
 
@@ -562,37 +556,7 @@ def build_stylesheet() -> str:
     /* ═══════════════════════════════════════════════════════ */
     /*  DIALOG                                                */
     /* ═══════════════════════════════════════════════════════ */
-    QDialog {{
-        background-color: {C['bg']};
-        color: {C['text']};
-    }}
-
-    QMessageBox, QFileDialog, QInputDialog {{
-        background-color: {C['bg']};
-        color: {C['text']};
-    }}
-
-    QMessageBox QLabel, QFileDialog QLabel, QInputDialog QLabel {{
-        color: {C['text']};
-        font-size: 12px;
-        background: transparent;
-    }}
-
-    QMessageBox QPushButton, QInputDialog QPushButton, QFileDialog QPushButton {{
-        background-color: {C['bg_tertiary']};
-        color: {C['text']};
-        border: 1px solid {C['border']};
-        border-radius: 8px;
-        padding: 7px 14px;
-        min-width: 76px;
-        font-size: 12px;
-        font-weight: 800;
-    }}
-
-    QMessageBox QPushButton:hover, QInputDialog QPushButton:hover, QFileDialog QPushButton:hover {{
-        border-color: {C['accent']};
-        background-color: {C['bg_secondary']};
-    }}
+    QDialog {{ background-color: {C['bg']}; }}
 
     /* ═══════════════════════════════════════════════════════ */
     /*  TAB BAR (Profile tabs)                                */

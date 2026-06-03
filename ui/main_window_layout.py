@@ -195,6 +195,8 @@ def build_main_layout(window):
     add_grid.setContentsMargins(0, 0, 0, 0)
     add_grid.setHorizontalSpacing(6)
     add_grid.setVerticalSpacing(5)
+    add_grid.setColumnMinimumWidth(0, 104)
+    add_grid.setColumnMinimumWidth(1, 104)
     action_specs = [
         ("Key", self._open_key_dialog, C["key"], "key", 0, 0, 1, 1),
         ("Click", self._open_click_dialog, C["click"], "click", 0, 1, 1, 1),
@@ -207,14 +209,13 @@ def build_main_layout(window):
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
         btn_w = 216 if colspan > 1 else 104
-        # Explicitly lock the regular Add Action buttons to 42px high.
-        # Loop and Group already had the desired height, so keep their existing
-        # fixed height from _add_btn instead of recalculating it here.
-        btn_h = btn.height() if icon_name in ("loop", "group") else 42
+        # Hard-lock every Add Action button to 42px tall. Widths remain unchanged.
+        btn_h = 42
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
         btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        add_grid.setRowMinimumHeight(row, btn_h)
         add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
     add_lo.addLayout(add_grid)
     sb_lo.addWidget(add_card)
