@@ -618,6 +618,9 @@ def build_main_layout(window):
     ii_lo.setContentsMargins(0, 0, 0, 0)
     ii_lo.setSpacing(7)
 
+    image_card, image_card_lo = inspector_group("IMAGE", "image", C["image"])
+    self.ii_image_card = image_card
+
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
     preview.setFixedHeight(150)
@@ -676,7 +679,8 @@ def build_main_layout(window):
         setattr(self, attr, btn)
         preview_actions.addWidget(btn)
     preview_lo.addLayout(preview_actions)
-    ii_lo.addWidget(preview)
+    image_card_lo.addWidget(preview)
+    ii_lo.addWidget(image_card)
 
     matching, matching_lo = inspector_group("MATCHING", "target", C["accent"])
     self.ii_matching_card = matching
@@ -878,17 +882,19 @@ def build_main_layout(window):
     self._height_auto_playback_collapse = 1100
     self._height_auto_playback_expand = 1170
     # Image Inspector sub-panels auto-hide first while unlocked and resizing
-    # height. Collapse order is top-to-bottom as requested:
-    # Matching, Retry, On Fail, Fail Target.  Main panels collapse only after
-    # all Image sub-panels have had a chance to close.
-    self._height_auto_image_matching_collapse = 1040
-    self._height_auto_image_matching_expand = 1110
-    self._height_auto_image_retry_collapse = 980
-    self._height_auto_image_retry_expand = 1050
-    self._height_auto_image_on_fail_collapse = 920
-    self._height_auto_image_on_fail_expand = 990
-    self._height_auto_image_fail_target_collapse = 860
-    self._height_auto_image_fail_target_expand = 930
+    # height. Collapse order is top-to-bottom:
+    # Image, Matching, Retry, On Fail, Fail Target.  Main panels collapse only
+    # after all Image sub-panels have had a chance to close.
+    self._height_auto_image_table_collapse = 1060
+    self._height_auto_image_table_expand = 1130
+    self._height_auto_image_matching_collapse = 1020
+    self._height_auto_image_matching_expand = 1090
+    self._height_auto_image_retry_collapse = 960
+    self._height_auto_image_retry_expand = 1030
+    self._height_auto_image_on_fail_collapse = 900
+    self._height_auto_image_on_fail_expand = 970
+    self._height_auto_image_fail_target_collapse = 840
+    self._height_auto_image_fail_target_expand = 910
     self._height_auto_inspector_collapse = 760
     self._height_auto_inspector_expand = 840
     self._height_auto_recorder_collapse = 650

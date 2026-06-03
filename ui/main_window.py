@@ -293,7 +293,11 @@ class MainWindow(QMainWindow):
     def _update_responsive_side_panel(self):
         """Auto-collapse the side panel at narrow widths and restore it later."""
         setter = getattr(self, "_set_side_panel_collapsed", None)
-        if setter is None or bool(getattr(self, "_side_panel_locked", False)):
+        if (
+            setter is None
+            or bool(getattr(self, "_side_panel_locked", False))
+            or bool(getattr(self, "_bottom_panel_locked", False))
+        ):
             return
         try:
             width = int(self.width())
@@ -328,58 +332,78 @@ class MainWindow(QMainWindow):
                 return
 
             # Image Inspector sub-panels collapse first while an Image action is
-            # selected.  Order while shrinking: MATCHING -> RETRY -> ON FAIL ->
-            # FAIL TARGET.  The main panel order starts only after those
-            # sub-panels have had room to close.
+            # selected. Order while shrinking: IMAGE -> MATCHING -> RETRY ->
+            # ON FAIL -> FAIL TARGET.  Collapse/expand is staged one section per
+            # resize pass so it feels smoother and never visually collapses into
+            # FAIL TARGET as the "main" table.
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
                 image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
                 controls = getattr(self, "_panel_collapse_controls", {})
-                inspector_ctl = controls.get("inspector_body")
-                inspector_collapsed = bool(inspector_ctl and inspector_ctl[1] and inspector_ctl[1].property("collapsed"))
 
+                def _panel_collapsed(body_name: str) -> bool:
+                    ctl = controls.get(body_name)
+                    return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
+
+                inspector_collapsed = _panel_collapsed("inspector_body")
+                image_steps = [
+                    ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand"),
+                    ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
+                    ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
+                    ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
+                    ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
+                ]
+
+                image_sequence_complete = True
                 if image_visible and not inspector_collapsed:
-                    image_steps = [
-                        ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
-                        ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
-                        ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
-                        ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
-                    ]
-                    for body_name, collapse_attr, expand_attr in image_steps:
-                        if height <= int(getattr(self, collapse_attr, 0)):
-                            set_panel(body_name, True, auto=True)
-                        elif height >= int(getattr(self, expand_attr, 16777215)):
+                    # Shrinking: collapse the first still-open section whose
+                    # threshold has been crossed, then wait for the next resize
+                    # pass before collapsing the next one.
+                    for body_name, collapse_attr, _expand_attr in image_steps:
+                        if not _panel_collapsed(body_name):
+                            image_sequence_complete = False
+                            if height <= int(getattr(self, collapse_attr, 0)):
+                                set_panel(body_name, True, auto=True)
+                            break
+                    else:
+                        image_sequence_complete = True
+
+                    # Expanding: restore in reverse order, one section per pass.
+                    for body_name, _collapse_attr, expand_attr in reversed(image_steps):
+                        if _panel_collapsed(body_name) and height >= int(getattr(self, expand_attr, 16777215)):
                             set_panel(body_name, False, auto=True)
+                            image_sequence_complete = False
+                            break
 
-                # Main panel order after Image sub-panels: bottom playback,
-                # Inspector body, Recorder, then Add Action.  This stops at the
-                # collapsed side-panel/header stack due to the lowered min height.
-                if hasattr(self, "playback_panel"):
-                    if (
-                        height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
-                        and not bool(getattr(self, "_playback_collapsed", False))
-                    ):
-                        self._set_playback_collapsed(True, auto=True)
-                    elif (
-                        height >= int(getattr(self, "_height_auto_playback_expand", 1170))
-                        and bool(getattr(self, "_playback_auto_collapsed", False))
-                        and not bool(getattr(self, "_playback_user_collapsed", False))
-                    ):
-                        self._set_playback_collapsed(False, auto=True)
+                # Main panel order starts only after all Image sub-panels are
+                # collapsed or a non-image action is selected.
+                if (not image_visible) or image_sequence_complete:
+                    if hasattr(self, "playback_panel"):
+                        if (
+                            height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
+                            and not bool(getattr(self, "_playback_collapsed", False))
+                        ):
+                            self._set_playback_collapsed(True, auto=True)
+                        elif (
+                            height >= int(getattr(self, "_height_auto_playback_expand", 1170))
+                            and bool(getattr(self, "_playback_auto_collapsed", False))
+                            and not bool(getattr(self, "_playback_user_collapsed", False))
+                        ):
+                            self._set_playback_collapsed(False, auto=True)
 
-                if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
-                    set_panel("inspector_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
-                    set_panel("inspector_body", False, auto=True)
+                    if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
+                        set_panel("inspector_body", True, auto=True)
+                    elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
+                        set_panel("inspector_body", False, auto=True)
 
-                if height <= int(getattr(self, "_height_auto_recorder_collapse", 650)):
-                    set_panel("recorder_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_recorder_expand", 720)):
-                    set_panel("recorder_body", False, auto=True)
+                    if height <= int(getattr(self, "_height_auto_recorder_collapse", 650)):
+                        set_panel("recorder_body", True, auto=True)
+                    elif height >= int(getattr(self, "_height_auto_recorder_expand", 720)):
+                        set_panel("recorder_body", False, auto=True)
 
-                if height <= int(getattr(self, "_height_auto_add_collapse", 540)):
-                    set_panel("add_action_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_add_expand", 610)):
-                    set_panel("add_action_body", False, auto=True)
+                    if height <= int(getattr(self, "_height_auto_add_collapse", 540)):
+                        set_panel("add_action_body", True, auto=True)
+                    elif height >= int(getattr(self, "_height_auto_add_expand", 610)):
+                        set_panel("add_action_body", False, auto=True)
         except Exception:
             pass
 
