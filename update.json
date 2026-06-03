@@ -1,6 +1,6 @@
 {
-  "version": "3.4.4",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.4/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.4/MacroForge-v3.4.4.zip",
-  "notes": "v3.4.4: Apply side panel recorder inspector polish patch - updated icons.py, main_window.py, main_window_layout.py, theme.py and theme_compact.py with side panel recorder inspector polish."
+  "version": "3.4.5",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.5/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.5/MacroForge-v3.4.5.zip",
+  "notes": "v3.4.5: Apply side panel inspector image polish patch - updated icons.py, main_window.py, main_window_layout.py, theme.py and theme_compact.py with side panel inspector image polish."
 }
