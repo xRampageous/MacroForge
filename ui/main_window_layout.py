@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -335,11 +336,75 @@ def build_main_layout(window):
     ii_lo.addWidget(form_label("Wait timeout"))
     ii_lo.addWidget(self.ii_wait)
 
+    # Group inspector
+    self.insp_group = QWidget()
+    ig_lo = QVBoxLayout(self.insp_group)
+    ig_lo.setContentsMargins(0, 0, 0, 0)
+    ig_lo.setSpacing(5)
+    self.ig_name = form_input()
+    self.ig_name.setPlaceholderText("group name")
+    self.ig_collapsed = QCheckBox("Collapsed")
+    self.ig_collapsed.setStyleSheet(f"color: {C['text']}; font-size: 10px; background: transparent;")
+    self.ig_meta = QLabel("0 actions · ~0.0s")
+    self.ig_meta.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+    ig_lo.addWidget(form_label("Group name"))
+    ig_lo.addWidget(self.ig_name)
+    ig_lo.addWidget(self.ig_collapsed)
+    ig_lo.addWidget(self.ig_meta)
+
+    # Loop inspector
+    self.insp_loop = QWidget()
+    il_lo = QVBoxLayout(self.insp_loop)
+    il_lo.setContentsMargins(0, 0, 0, 0)
+    il_lo.setSpacing(5)
+    self.il_label = form_input()
+    self.il_label.setPlaceholderText("loop label")
+    self.il_count = QSpinBox()
+    self.il_count.setRange(2, 9999)
+    self.il_count.setStyleSheet(f"QSpinBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }}")
+    self.il_target = QComboBox()
+    self.il_target.setStyleSheet(f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }} QComboBox::drop-down {{ border: none; }}")
+    il_lo.addWidget(form_label("Label"))
+    il_lo.addWidget(self.il_label)
+    il_lo.addWidget(form_label("Repeat count"))
+    il_lo.addWidget(self.il_count)
+    il_lo.addWidget(form_label("Target"))
+    il_lo.addWidget(self.il_target)
+
+    # Condition inspector
+    self.insp_condition = QWidget()
+    ico_lo = QVBoxLayout(self.insp_condition)
+    ico_lo.setContentsMargins(0, 0, 0, 0)
+    ico_lo.setSpacing(5)
+    self.ico_label = form_input()
+    self.ico_label.setPlaceholderText("condition label")
+    self.ico_type = QComboBox()
+    self.ico_type.addItems(["pixel_color", "variable", "none"])
+    self.ico_type.setStyleSheet(f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }} QComboBox::drop-down {{ border: none; }}")
+    self.ico_true = QComboBox()
+    self.ico_false = QComboBox()
+    for combo in (self.ico_true, self.ico_false):
+        combo.setStyleSheet(f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }} QComboBox::drop-down {{ border: none; }}")
+    self.ico_rule = QLabel("Edit for pixel/variable values")
+    self.ico_rule.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+    ico_lo.addWidget(form_label("Label"))
+    ico_lo.addWidget(self.ico_label)
+    ico_lo.addWidget(form_label("Type"))
+    ico_lo.addWidget(self.ico_type)
+    ico_lo.addWidget(form_label("True target"))
+    ico_lo.addWidget(self.ico_true)
+    ico_lo.addWidget(form_label("False target"))
+    ico_lo.addWidget(self.ico_false)
+    ico_lo.addWidget(self.ico_rule)
+
     self._insp_lo.addWidget(self.insp_key)
     self._insp_lo.addWidget(self.insp_pause)
     self._insp_lo.addWidget(self.insp_click)
     self._insp_lo.addWidget(self.insp_image)
-    for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
+    self._insp_lo.addWidget(self.insp_group)
+    self._insp_lo.addWidget(self.insp_loop)
+    self._insp_lo.addWidget(self.insp_condition)
+    for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image, self.insp_group, self.insp_loop, self.insp_condition):
         w.setVisible(False)
     icard_lo.addLayout(self._insp_lo)
     sb_lo.addWidget(insp_card)

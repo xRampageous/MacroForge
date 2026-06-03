@@ -1,6 +1,6 @@
 {
-  "version": "3.1.8",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.8/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.8/MacroForge-v3.1.8.zip",
-  "notes": "v3.1.8: UI refinement - group collapse/expand locked to three-dot hit zone, drag locked to grip zone, fused header row, profile selector moved to right-side header, auto-sizing status capsule, reworked playback panel spacing, longer progress bar, improved Speed/Loops controls readability."
+  "version": "3.1.9",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.9/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.9/MacroForge-v3.1.9.zip",
+  "notes": "v3.1.9: Group stability + inspector upgrade - group/loop/condition inspector, group header metadata, group-aware playback with auto-expand, loop targets show group labels, condition builder targets group headers, preflight apply auto-fixes action, recovery/version-history window, clean release builder in menu."
 }

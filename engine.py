@@ -340,6 +340,20 @@ class ExecutionEngine:
 
         return action
 
+
+    def _target_label(self, row: int) -> str:
+        try:
+            if 0 <= row < len(self.actions):
+                action = self.actions[row]
+                if getattr(action, "action_type", "") == "group":
+                    name = getattr(action, "group_name", "") or getattr(action, "label", "") or "Group"
+                    number = 1 + sum(1 for a in self.actions[:row] if getattr(a, "action_type", "") == "group")
+                    return f"G{number} {name}"
+                return f"row {row + 1}"
+        except Exception:
+            pass
+        return f"row {row + 1}"
+
     def _after_deploy(self, action: Action):
         """Notify observers after an action has actually reached its execution path."""
         if self.after_action_hook:
@@ -406,7 +420,7 @@ class ExecutionEngine:
                             remaining = self._loop_counters.get(i, count - 1)
                             if remaining > 0:
                                 self._loop_counters[i] = remaining - 1
-                                self.status(f"Loop row {i + 1}: jumping to row {target + 1} ({remaining} left)")
+                                self.status(f"Loop row {i + 1}: jumping to {self._target_label(target)} ({remaining} left)")
                                 i = target
                                 continue
                             self._loop_counters.pop(i, None)

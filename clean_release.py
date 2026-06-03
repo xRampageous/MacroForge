@@ -26,10 +26,11 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "dist"
 EXCLUDE_DIRS = {
     ".git", ".github", ".idea", ".vscode", ".windsurf", "__pycache__",
-    "build", "dist", "installer", ".local_snapshots",
+    "build", "dist", "installer", ".local_snapshots", "recovery",
+    "MacroForge",
 }
 EXCLUDE_SUFFIXES = {".pyc", ".pyo", ".pyd", ".log", ".rar"}
-EXCLUDE_NAMES = {"debug.log", "macroforge_session.json"}
+EXCLUDE_NAMES = {"debug.log", "macroforge_session.json", "settings.json", "update_health.json"}
 
 
 def should_include(path: Path) -> bool:

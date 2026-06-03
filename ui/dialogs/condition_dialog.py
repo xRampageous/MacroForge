@@ -85,18 +85,46 @@ class ConditionDialog(QDialog):
         var_row = QHBoxLayout(); var_row.addWidget(self.var_name); var_row.addWidget(self.var_value)
         body_lo.addLayout(var_row)
 
-        max_row = max(0, self._row_count)
-        self.true_jump = QSpinBox(); self.true_jump.setRange(0, max_row); self.true_jump.setSpecialValueText("Next row")
-        self.false_jump = QSpinBox(); self.false_jump.setRange(0, max_row); self.false_jump.setSpecialValueText("Next row")
+        self.true_jump = QComboBox()
+        self.false_jump = QComboBox()
+
+        def add_targets(combo):
+            combo.addItem("Next row", -1)
+            group_meta = {}
+            try:
+                if parent is not None and hasattr(parent, "_group_headers"):
+                    group_meta = {m["row"]: m for m in parent._group_headers()}
+            except Exception:
+                group_meta = {}
+            for row in range(max(0, self._row_count)):
+                meta = group_meta.get(row)
+                if meta:
+                    combo.addItem(f"{meta['badge']} {meta['name']}  · row {row + 1}", row)
+                else:
+                    combo.addItem(f"Row {row + 1}", row)
+
+        def select_target(combo, target):
+            for i in range(combo.count()):
+                if int(combo.itemData(i)) == int(target):
+                    combo.setCurrentIndex(i)
+                    return
+            combo.setCurrentIndex(0)
+
+        add_targets(self.true_jump)
+        add_targets(self.false_jump)
         tj = int(getattr(existing, "condition_jump_true", -1) if existing else -1)
         fj = int(getattr(existing, "condition_jump_false", -1) if existing else -1)
-        self.true_jump.setValue(tj + 1 if tj >= 0 else 0)
-        self.false_jump.setValue(fj + 1 if fj >= 0 else 0)
+        select_target(self.true_jump, tj)
+        select_target(self.false_jump, fj)
         body_lo.addWidget(label("Jump targets"))
         jump_row = QHBoxLayout()
         jump_row.addWidget(QLabel("True →")); jump_row.addWidget(self.true_jump)
         jump_row.addWidget(QLabel("False →")); jump_row.addWidget(self.false_jump)
         body_lo.addLayout(jump_row)
+        hint = QLabel("Targets can point to normal rows or group headers such as G1/G2.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; background: transparent;")
+        body_lo.addWidget(hint)
 
         lo.addWidget(body)
         lo.addLayout(make_buttons(self, "Save Condition", C["condition"], self._on_ok, "check"))
@@ -117,6 +145,6 @@ class ConditionDialog(QDialog):
         a.condition_color = self.color_edit.text().strip()
         a.condition_var_name = self.var_name.text().strip()
         a.condition_var_value = self.var_value.text().strip()
-        a.condition_jump_true = self.true_jump.value() - 1 if self.true_jump.value() > 0 else -1
-        a.condition_jump_false = self.false_jump.value() - 1 if self.false_jump.value() > 0 else -1
+        a.condition_jump_true = int(self.true_jump.currentData() if self.true_jump.currentData() is not None else -1)
+        a.condition_jump_false = int(self.false_jump.currentData() if self.false_jump.currentData() is not None else -1)
         return a

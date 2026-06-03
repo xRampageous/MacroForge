@@ -7,6 +7,7 @@ import csv
 import queue
 import ctypes
 import threading
+import subprocess
 from copy import deepcopy
 
 from PyQt6.QtWidgets import (
@@ -16,7 +17,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QFrame, QMenu,
     QSpinBox, QDoubleSpinBox,
     QFileDialog, QMessageBox, QInputDialog,
-    QDialog, QPlainTextEdit
+    QDialog, QPlainTextEdit, QListWidget
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon
@@ -243,7 +244,10 @@ class MainWindow(QMainWindow):
         return row
 
     def _show_inspector(self, show=True, action_type="key"):
-        for w in (self.insp_key, self.insp_pause, self.insp_click, self.insp_image):
+        for w in (
+            self.insp_key, self.insp_pause, self.insp_click, self.insp_image,
+            self.insp_group, self.insp_loop, self.insp_condition,
+        ):
             w.setVisible(False)
         self.insp_empty.setVisible(False)
         if show:
@@ -252,6 +256,9 @@ class MainWindow(QMainWindow):
                 "pause": self.insp_pause,
                 "click": self.insp_click,
                 "image": self.insp_image,
+                "group": self.insp_group,
+                "loop": self.insp_loop,
+                "condition": self.insp_condition,
             }
             pane = mapping.get(action_type)
             if pane is not None:
@@ -326,6 +333,71 @@ class MainWindow(QMainWindow):
         palette = self._group_palette()
         return palette[max(0, number) % len(palette)]
 
+    def _group_stats_for_id(self, group_id: str):
+        """Return action count and estimated duration for a group id."""
+        count = 0
+        duration = 0.0
+        for action in self.action_model.actions():
+            if getattr(action, "action_type", "") == "group":
+                continue
+            if getattr(action, "group_id", "") != group_id:
+                continue
+            count += 1
+            if not bool(getattr(action, "enabled", True)):
+                continue
+            kind = getattr(action, "action_type", "key") or "key"
+            if kind in {"loop", "condition"}:
+                continue
+            if kind == "image" and float(getattr(action, "wait_timeout", 0.0) or 0.0) > 0:
+                duration += float(getattr(action, "wait_timeout", 0.0) or 0.0)
+            else:
+                duration += float(getattr(action, "duration", 0.0) or 0.0)
+        return count, duration
+
+    def _group_display_label(self, row: int) -> str:
+        meta = self._group_header_for_row(row)
+        if not meta:
+            return f"row {row + 1}"
+        return f"{meta['badge']} {meta['name']}"
+
+    def _row_target_text(self, row: int) -> str:
+        if row < 0:
+            return "Next row"
+        if row >= self.action_model.rowCount():
+            return f"Row {row + 1}"
+        action = self.action_model.get(row)
+        if getattr(action, "action_type", "") == "group":
+            meta = self._group_header_for_row(row)
+            if meta:
+                return f"{meta['badge']} {meta['name']}"
+        return f"Row {row + 1}"
+
+    def _populate_target_combo(self, combo, selected=-1, *, include_next=True, max_row=None):
+        """Populate row/group target combos. Stores zero-based row in itemData, -1 for fall-through."""
+        combo.blockSignals(True)
+        combo.clear()
+        if include_next:
+            combo.addItem("Next row", -1)
+        group_meta = {m["row"]: m for m in self._group_headers()}
+        limit = self.action_model.rowCount() if max_row is None else max(0, min(int(max_row), self.action_model.rowCount()))
+        for row in range(limit):
+            meta = group_meta.get(row)
+            if meta:
+                text = f"{meta['badge']} {meta['name']}  · row {row + 1}"
+            else:
+                text = f"Row {row + 1}"
+            combo.addItem(text, row)
+        found = False
+        for i in range(combo.count()):
+            if int(combo.itemData(i)) == int(selected):
+                combo.setCurrentIndex(i)
+                found = True
+                break
+        if not found and combo.count():
+            combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+
+
     def _normalize_groups(self):
         """Ensure group headers/members have stable ids, colors, and badges."""
         actions = self.action_model.actions()
@@ -392,6 +464,8 @@ class MainWindow(QMainWindow):
                     "name": getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}",
                     "color": getattr(action, "group_color", "") or self._group_color_for_number(len(headers)),
                     "badge": f"G{len(headers) + 1}",
+                    "count": self._group_stats_for_id(getattr(action, "group_id", ""))[0],
+                    "duration": self._group_stats_for_id(getattr(action, "group_id", ""))[1],
                 })
         return headers
 
@@ -786,6 +860,28 @@ class MainWindow(QMainWindow):
         elif action.action_type == "image":
             self.ii_sim.setText(str(getattr(action, 'similarity', 0.8)))
             self.ii_wait.setText(str(getattr(action, 'wait_timeout', 10.0)))
+        elif action.action_type == "group":
+            self.ig_name.setText(getattr(action, "group_name", "") or getattr(action, "label", ""))
+            self.ig_collapsed.setChecked(bool(getattr(action, "group_collapsed", False)))
+            gid = getattr(action, "group_id", "")
+            count, duration = self._group_stats_for_id(gid)
+            self.ig_meta.setText(f"{self._group_display_label(index)} · {count} action{'s' if count != 1 else ''} · ~{duration:.1f}s")
+        elif action.action_type == "loop":
+            self.il_label.setText(getattr(action, "label", ""))
+            self.il_count.setValue(max(2, int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)))
+            self._populate_target_combo(self.il_target, int(getattr(action, "loop_target", -1) or -1), include_next=False, max_row=index)
+        elif action.action_type == "condition":
+            self.ico_label.setText(getattr(action, "label", ""))
+            self.ico_type.setCurrentText(getattr(action, "condition_type", "none") or "none")
+            self._populate_target_combo(self.ico_true, int(getattr(action, "condition_jump_true", -1) or -1), include_next=True)
+            self._populate_target_combo(self.ico_false, int(getattr(action, "condition_jump_false", -1) or -1), include_next=True)
+            ctype = getattr(action, "condition_type", "none") or "none"
+            if ctype == "pixel_color":
+                self.ico_rule.setText(f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}")
+            elif ctype == "variable":
+                self.ico_rule.setText(f"{getattr(action, 'condition_var_name', '') or 'variable'} = {getattr(action, 'condition_var_value', '') or 'value'}")
+            else:
+                self.ico_rule.setText("No rule selected")
 
     def _apply_inspector(self):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
@@ -813,6 +909,21 @@ class MainWindow(QMainWindow):
             elif action.action_type == "image":
                 action.similarity = float(self.ii_sim.text())
                 action.wait_timeout = float(self.ii_wait.text())
+            elif action.action_type == "group":
+                name = self.ig_name.text().strip() or "Group"
+                action.group_name = name
+                action.label = name
+                action.group_collapsed = self.ig_collapsed.isChecked()
+            elif action.action_type == "loop":
+                action.label = self.il_label.text().strip() or f"Loop x{self.il_count.value()}"
+                action.loop_count = int(self.il_count.value())
+                action.repeat_count = int(self.il_count.value())
+                action.loop_target = int(self.il_target.currentData() if self.il_target.currentData() is not None else -1)
+            elif action.action_type == "condition":
+                action.label = self.ico_label.text().strip()
+                action.condition_type = self.ico_type.currentText()
+                action.condition_jump_true = int(self.ico_true.currentData() if self.ico_true.currentData() is not None else -1)
+                action.condition_jump_false = int(self.ico_false.currentData() if self.ico_false.currentData() is not None else -1)
             self.refresh()
             self.update_statistics()
             self.save_session()
@@ -1091,7 +1202,7 @@ class MainWindow(QMainWindow):
             lines.append("Ready to run — no validation issues found.")
         return "\n".join(lines)
 
-    def run_preflight_check(self, show_success=True, allow_warning_prompt=True):
+    def run_preflight_check(self, show_success=True, allow_warning_prompt=True, auto_fix=True):
         """Validate the visible timeline before playback.
 
         Returns True when playback may continue. Errors block playback;
@@ -1149,22 +1260,28 @@ class MainWindow(QMainWindow):
                 target = int(getattr(action, "loop_target", -1) or -1)
                 count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 1)) or 1)
                 if count < 2:
-                    begin_autofix()
-                    action.loop_count = 2
-                    action.repeat_count = 2
-                    warnings.append(f"{prefix}: loop count was auto-fixed to x2.")
-                    count = 2
+                    if auto_fix:
+                        begin_autofix()
+                        action.loop_count = 2
+                        action.repeat_count = 2
+                        warnings.append(f"{prefix}: loop count was auto-fixed to x2.")
+                        count = 2
+                    else:
+                        warnings.append(f"{prefix}: loop count can be auto-fixed to x2.")
                 if not (0 <= target < idx - 1):
                     suggested = self._suggest_loop_target(idx - 1)
                     if 0 <= suggested < idx - 1:
-                        begin_autofix()
-                        action.loop_target = suggested
                         target_action = actions[suggested]
-                        if getattr(target_action, "action_type", "") == "group":
-                            group_name = getattr(target_action, "group_name", "") or getattr(target_action, "label", "") or f"row {suggested + 1}"
-                            warnings.append(f"{prefix}: loop target auto-fixed to group '{group_name}' on row {suggested + 1}.")
+                        if auto_fix:
+                            begin_autofix()
+                            action.loop_target = suggested
+                            if getattr(target_action, "action_type", "") == "group":
+                                group_name = getattr(target_action, "group_name", "") or getattr(target_action, "label", "") or f"row {suggested + 1}"
+                                warnings.append(f"{prefix}: loop target auto-fixed to group '{group_name}' on row {suggested + 1}.")
+                            else:
+                                warnings.append(f"{prefix}: loop target auto-fixed to row {suggested + 1}.")
                         else:
-                            warnings.append(f"{prefix}: loop target auto-fixed to row {suggested + 1}.")
+                            warnings.append(f"{prefix}: loop target can be auto-fixed to {self._row_target_text(suggested)}.")
                     else:
                         errors.append(f"{prefix}: loop target must be an earlier row or group header.")
                 continue
@@ -1285,6 +1402,46 @@ class MainWindow(QMainWindow):
         return True
 
 
+    def apply_preflight_autofixes(self):
+        """Apply safe pre-flight repairs without starting playback."""
+        total = self.action_model.rowCount()
+        if total <= 0:
+            self.status("No pre-flight fixes available")
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        fixed = 0
+        if self._normalize_groups():
+            fixed += 1
+        for idx, action in enumerate(self.action_model.actions()):
+            kind = getattr(action, "action_type", "key") or "key"
+            if kind == "group":
+                if not (getattr(action, "group_name", "") or getattr(action, "label", "")):
+                    action.group_name = f"Group {idx + 1}"
+                    action.label = action.group_name
+                    fixed += 1
+            elif kind == "loop":
+                count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 1)) or 1)
+                if count < 2:
+                    action.loop_count = 2
+                    action.repeat_count = 2
+                    fixed += 1
+                target = int(getattr(action, "loop_target", -1) or -1)
+                if not (0 <= target < idx):
+                    suggested = self._suggest_loop_target(idx)
+                    if 0 <= suggested < idx:
+                        action.loop_target = suggested
+                        fixed += 1
+            elif kind == "condition":
+                for attr in ("condition_jump_true", "condition_jump_false"):
+                    target = int(getattr(action, attr, -1) or -1)
+                    if target >= total:
+                        setattr(action, attr, -1)
+                        fixed += 1
+        self.refresh()
+        self.update_statistics(immediate=True)
+        self.save_session()
+        self.status(f"Applied {fixed} pre-flight auto-fix{'es' if fixed != 1 else ''}")
+
     def _current_screen_size(self):
         try:
             screen = QApplication.primaryScreen()
@@ -1313,7 +1470,7 @@ class MainWindow(QMainWindow):
 
     def open_preflight_report(self):
         """Show the macro health checker without asking to continue playback."""
-        self.run_preflight_check(show_success=False, allow_warning_prompt=False)
+        self.run_preflight_check(show_success=False, allow_warning_prompt=False, auto_fix=False)
         report = self._format_preflight_report(
             self._last_preflight.get("errors", []),
             self._last_preflight.get("warnings", []),
@@ -1341,6 +1498,9 @@ class MainWindow(QMainWindow):
         lo.addWidget(edit, 1)
         row = QHBoxLayout()
         row.addStretch()
+        fix_btn = QPushButton("Apply auto-fixes")
+        fix_btn.clicked.connect(lambda: (self.apply_preflight_autofixes(), dlg.accept(), self.open_preflight_report()))
+        row.addWidget(fix_btn)
         scale_btn = QPushButton("Scale coordinates to screen")
         scale_btn.clicked.connect(lambda: (self.scale_actions_to_current_screen(), dlg.accept()))
         row.addWidget(scale_btn)
@@ -1483,11 +1643,33 @@ class MainWindow(QMainWindow):
         self.save_session()
         self.status(f"Scaled {changed} coordinate action(s) to {sw}×{sh}")
 
-    def _recovery_path(self):
+    def _recovery_dir(self):
         base = getattr(self.session_manager, "base_dir", os.path.dirname(os.path.abspath(__file__)))
         path = os.path.join(base, "recovery")
         os.makedirs(path, exist_ok=True)
-        return os.path.join(path, "last_session.json")
+        return path
+
+    def _recovery_path(self):
+        return os.path.join(self._recovery_dir(), "last_session.json")
+
+    def _version_history_dir(self):
+        path = os.path.join(self._recovery_dir(), "versions")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _trim_version_history(self, keep=10):
+        try:
+            files = sorted(
+                [os.path.join(self._version_history_dir(), f) for f in os.listdir(self._version_history_dir()) if f.endswith(".json")],
+                key=os.path.getmtime, reverse=True,
+            )
+            for old in files[int(keep):]:
+                try:
+                    os.remove(old)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _write_recovery_snapshot(self, clean_shutdown=False):
         try:
@@ -1496,6 +1678,13 @@ class MainWindow(QMainWindow):
             payload["active_profile"] = self.session_manager.active
             with open(self._recovery_path(), "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
+            if not clean_shutdown and payload.get("actions"):
+                stamp = time.strftime("%Y%m%d-%H%M%S")
+                name = f"{self.session_manager.active}-{stamp}.json".replace("/", "_").replace("\\", "_")
+                hist_path = os.path.join(self._version_history_dir(), name)
+                with open(hist_path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, indent=2)
+                self._trim_version_history(keep=10)
         except Exception:
             pass
 
@@ -1527,6 +1716,79 @@ class MainWindow(QMainWindow):
             self._write_recovery_snapshot(clean_shutdown=True)
         except Exception as e:
             logger.debug(f"recovery check failed: {e}")
+
+    def open_recovery_history(self):
+        """Open saved autosave/version snapshots and restore one."""
+        C = COLORS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Recovery / Version History")
+        dlg.resize(560, 420)
+        dlg.setStyleSheet(
+            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
+            f"QListWidget {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 6px; }}"
+            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 7px 12px; }}"
+            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+        )
+        lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(14, 14, 14, 14)
+        title = QLabel("Recovery / Version History")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 17px; font-weight: 900; background: transparent;")
+        lo.addWidget(title)
+        hint = QLabel("Restore one of the latest autosaved macro snapshots. A backup of the current macro is saved before restoring.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; background: transparent;")
+        lo.addWidget(hint)
+        items = QListWidget()
+        files = []
+        try:
+            files = sorted(
+                [os.path.join(self._version_history_dir(), f) for f in os.listdir(self._version_history_dir()) if f.endswith(".json")],
+                key=os.path.getmtime, reverse=True,
+            )
+            for path in files:
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        payload = json.load(f)
+                    ts = payload.get("exported_at", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(path))))
+                    count = len(payload.get("actions", []))
+                    prof = payload.get("active_profile", payload.get("profile", "Profile"))
+                    items.addItem(f"{ts} · {prof} · {count} row(s)")
+                except Exception:
+                    items.addItem(os.path.basename(path))
+        except Exception:
+            pass
+        lo.addWidget(items, 1)
+        row = QHBoxLayout()
+        row.addStretch()
+        restore = QPushButton("Restore selected")
+        close = QPushButton("Close")
+        def do_restore():
+            idx = items.currentRow()
+            if idx < 0 or idx >= len(files):
+                self.status("Select a recovery snapshot first")
+                return
+            try:
+                with open(files[idx], "r", encoding="utf-8") as f:
+                    payload = json.load(f)
+                actions_data = payload.get("actions", [])
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
+                self._write_recovery_snapshot(clean_shutdown=False)
+                self.action_model.set_actions([Action.from_dict(d) for d in actions_data])
+                self._normalize_groups()
+                self.active_index = -1
+                self.refresh()
+                self.update_statistics(immediate=True)
+                self.save_session()
+                self.status(f"Restored recovery snapshot with {len(actions_data)} row(s)")
+                dlg.accept()
+            except Exception as e:
+                QMessageBox.critical(self, "Restore failed", str(e))
+        restore.clicked.connect(do_restore)
+        close.clicked.connect(dlg.accept)
+        row.addWidget(restore)
+        row.addWidget(close)
+        lo.addLayout(row)
+        dlg.exec()
 
     # ═══════════════════════════════════════════════════════
     #  PLAYBACK
@@ -1608,17 +1870,30 @@ class MainWindow(QMainWindow):
         self.playing_index = display_idx
         # Auto-expand a collapsed group when playback reaches one of its member rows;
         # group headers themselves are skipped by the engine and never become active.
+        active_group_label = ""
         try:
             meta = self._group_header_for_row(display_idx)
-            if meta and bool(getattr(meta["action"], "group_collapsed", False)):
-                meta["action"].group_collapsed = False
-                self.timeline.refresh()
+            if meta:
+                active_group_label = f"{meta['badge']} {meta['name']}"
+                if bool(getattr(meta["action"], "group_collapsed", False)):
+                    meta["action"].group_collapsed = False
+                    self.timeline.refresh()
         except Exception:
             pass
         self.actions_played += 1
         speed = max(self.engine.speed_multiplier, 0.01)
         adjusted_dur = dur / speed
         self.timeline.set_playing(display_idx, adjusted_dur)
+        action_name = ""
+        try:
+            current = self.action_model.get(display_idx)
+            action_name = getattr(current, "label", "") or getattr(current, "key", "") or getattr(current, "action_type", "Action")
+        except Exception:
+            pass
+        if active_group_label:
+            self.status(f"Playing · {active_group_label} · Row {display_idx + 1} {action_name}")
+        else:
+            self.status(f"Playing · Row {display_idx + 1} {action_name}")
         self._diag(f"[PLAY] Timeline row {display_idx + 1} active for ~{adjusted_dur:.2f}s")
         self.update_statistics()
 
@@ -1640,7 +1915,15 @@ class MainWindow(QMainWindow):
         if paused:
             self.pause_btn.setIcon(icon("play", 14, COLORS["text_inverse"]))
             self.pause_btn.setToolTip("Resume (Esc)")
-            self.status_text.setText("Paused")
+            label = "Paused"
+            try:
+                if 0 <= self.playing_index < self.action_model.rowCount():
+                    meta = self._group_header_for_row(self.playing_index)
+                    if meta:
+                        label = f"Paused · {meta['badge']} {meta['name']}"
+            except Exception:
+                pass
+            self.status_text.setText(label)
         else:
             self.pause_btn.setIcon(icon("pause", 14, COLORS["text_inverse"]))
             self.pause_btn.setToolTip("Pause (Esc)")
@@ -2289,7 +2572,7 @@ class MainWindow(QMainWindow):
             "screen": {"width": sw, "height": sh},
             "profile": self.session_manager.active,
             "groups": [
-                {"row": meta["row"], "id": meta["gid"], "badge": meta["badge"], "name": meta["name"], "color": meta["color"], "collapsed": bool(getattr(meta["action"], "group_collapsed", False))}
+                {"row": meta["row"], "id": meta["gid"], "badge": meta["badge"], "name": meta["name"], "color": meta["color"], "collapsed": bool(getattr(meta["action"], "group_collapsed", False)), "action_count": meta.get("count", 0), "duration": meta.get("duration", 0.0)}
                 for meta in self._group_headers()
             ],
             "actions": [a.to_dict() for a in self.action_model.actions()],
@@ -2725,6 +3008,22 @@ class MainWindow(QMainWindow):
             self.update_statistics()
         except Exception:
             logger.exception("refresh() crashed")
+
+    def run_clean_release_builder(self):
+        """Run the clean source ZIP builder from the app menu."""
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "clean_release.py"))
+        if not os.path.exists(script):
+            QMessageBox.warning(self, "Clean release", "clean_release.py was not found.")
+            return
+        try:
+            result = subprocess.run([sys.executable, script, "--source-only"], cwd=os.path.dirname(script), capture_output=True, text=True, timeout=90)
+            if result.returncode != 0:
+                QMessageBox.critical(self, "Clean release failed", result.stderr or result.stdout or "Unknown build error")
+                return
+            self.status("Clean source ZIP built in dist")
+            QMessageBox.information(self, "Clean release", result.stdout.strip() or "Clean source ZIP built in dist.")
+        except Exception as e:
+            QMessageBox.critical(self, "Clean release failed", str(e))
 
     def open_debug_viewer(self):
         try:

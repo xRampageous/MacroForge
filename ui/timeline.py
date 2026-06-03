@@ -182,6 +182,11 @@ class TimelineDelegate(QStyledItemDelegate):
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
             group_badge = view.group_badge(row) if hasattr(view, "group_badge") else None
+            active_group = bool(
+                kind == "group"
+                and getattr(view, "active_group_id", "")
+                and getattr(action, "group_id", "") == getattr(view, "active_group_id", "")
+            )
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
             if group_badge and group_badge.get("color") and kind != "group":
                 type_color = group_badge.get("color")
@@ -200,8 +205,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
             if selected and hovered:
                 bg = _mix(bg, type_color, 0.12)
-            if queued:
-                bg = _mix(bg, type_color, 0.07)
+            if queued or active_group:
+                bg = _mix(bg, type_color, 0.07 if queued else 0.10)
             if dragging:
                 bg = _mix(bg, type_color, 0.18)
                 outer.translate(0, -2)
@@ -367,6 +372,11 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
+            if kind == "group" and group_badge:
+                count = int(group_badge.get("count", 0) or 0)
+                dur = float(group_badge.get("duration", 0.0) or 0.0)
+                hidden = " hidden" if bool(getattr(action, "group_collapsed", False)) else ""
+                detail = f"{count} action{'s' if count != 1 else ''}{hidden} · ~{dur:.1f}s"
             if kind == "loop" and hasattr(view, "group_badge"):
                 target = int(getattr(action, "loop_target", -1) or -1)
                 meta = view.group_badge(target) if target >= 0 else None
@@ -434,7 +444,7 @@ class TimelineDelegate(QStyledItemDelegate):
             if not enabled:
                 status, status_col = "Disabled", COLORS["text_dark"]
             elif kind == "group":
-                status, status_col = "Folder", type_color
+                status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
             elif kind == "loop":
                 status, status_col = "Loop", type_color
             elif playing:
@@ -535,6 +545,7 @@ class TimelineView(QListView):
         self.selected_indices = set()
         self.playing_index = -1
         self.next_index = -1
+        self.active_group_id = ""
         self.paused = False
         self.image_states = {}
         self._search = ""
@@ -596,12 +607,34 @@ class TimelineView(QListView):
 
     def _group_headers(self):
         headers = []
-        for row, action in enumerate(self._actions()):
+        actions = self._actions()
+        for row, action in enumerate(actions):
             if getattr(action, "action_type", "") == "group":
                 gid = getattr(action, "group_id", "") or f"row-{row}"
                 color = getattr(action, "group_color", "") or COLORS.get("group", COLORS.get("accent", "#45c8ff"))
                 name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}"
-                headers.append({"row": row, "action": action, "gid": gid, "color": color, "name": name, "badge": f"G{len(headers) + 1}"})
+                count = 0
+                duration = 0.0
+                for child in actions:
+                    if child is action or getattr(child, "action_type", "") == "group":
+                        continue
+                    if getattr(child, "group_id", "") != gid:
+                        continue
+                    count += 1
+                    if not bool(getattr(child, "enabled", True)):
+                        continue
+                    kind = getattr(child, "action_type", "key") or "key"
+                    if kind in {"loop", "condition"}:
+                        continue
+                    if kind == "image" and float(getattr(child, "wait_timeout", 0.0) or 0.0) > 0:
+                        duration += float(getattr(child, "wait_timeout", 0.0) or 0.0)
+                    else:
+                        duration += float(getattr(child, "duration", 0.0) or 0.0)
+                headers.append({
+                    "row": row, "action": action, "gid": gid, "color": color,
+                    "name": name, "badge": f"G{len(headers) + 1}",
+                    "count": count, "duration": duration,
+                })
         return headers
 
     def group_badge(self, row: int):
@@ -957,6 +990,13 @@ class TimelineView(QListView):
     def set_playing(self, index, duration=0.0):
         self.playing_index = index
         self.next_index = index + 1 if index + 1 < self.model().rowCount() else -1
+        self.active_group_id = ""
+        try:
+            header = self.group_header_for_row(index)
+            if header:
+                self.active_group_id = getattr(header[1], "group_id", "")
+        except Exception:
+            self.active_group_id = ""
         self.paused = False
         self._playing_duration = max(0.0, float(duration or 0.0))
         self._playing_started = time.monotonic()
@@ -972,6 +1012,7 @@ class TimelineView(QListView):
     def clear_playing(self):
         self.playing_index = -1
         self.next_index = -1
+        self.active_group_id = ""
         self.paused = False
         self._frozen_progress = 0.0
         self.setDragEnabled(False)
