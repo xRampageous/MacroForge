@@ -1,7 +1,7 @@
 """Menu and profile actions for MacroForge main window."""
 
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QInputDialog, QMenu, QMessageBox
+from PyQt6.QtWidgets import QMenu
 
 from ui.icons import icon
 from ui.theme import COLORS
@@ -18,6 +18,36 @@ def show_profile_menu(window):
         f"QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }} "
         f"QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}"
     )
+    active = self.session_manager.active
+    for name in self.session_manager.list_profiles():
+        label = f"\u2713  {name}" if name == active else f"     {name}"
+        action = menu.addAction(label)
+        action.triggered.connect(lambda checked=False, n=name: self._switch_profile(n))
+    menu.addSeparator()
+    menu.addAction(icon("folder", 14, C["accent"]), "Open Profile / Macro Library     Ctrl+Alt+P", self.open_profile_library)
+    menu.exec(self.profile_btn.mapToGlobal(self.profile_btn.rect().bottomLeft()))
+
+
+def _menu_style():
+    C = COLORS
+    return f"""
+        QMenu {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }}
+        QMenu::item {{ padding: 6px 18px; border-radius: 6px; }}
+        QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}
+        QMenu::separator {{ height: 1px; background-color: {C['border']}; margin: 4px 8px; }}
+    """
+
+
+def show_action_menu(window):
+    self = window
+    menu = QMenu(self)
+    menu.setStyleSheet(_menu_style())
+
+    def add_heading(text):
+        action = QAction(text.upper(), self)
+        action.setEnabled(False)
+        menu.addAction(action)
+
     add_heading("Library")
     menu.addAction("Profile / macro library     Ctrl+Alt+P", self.open_profile_library)
     menu.addSeparator()
@@ -42,8 +72,8 @@ def show_profile_menu(window):
     menu.addSeparator()
 
     add_heading("Diagnostics")
-    menu.addAction("Playback diagnostics\u2026", self.open_playback_diagnostics)
-    menu.addAction("App diagnostics\u2026", self.open_app_diagnostics)
+    menu.addAction("Playback diagnostics…", self.open_playback_diagnostics)
+    menu.addAction("App diagnostics…", self.open_app_diagnostics)
     menu.addSeparator()
 
     add_heading("App")
@@ -51,5 +81,7 @@ def show_profile_menu(window):
     menu.addAction("Debug log", self.open_debug_viewer)
     menu.addAction("Build clean source ZIP…", self.run_clean_release_builder)
     menu.addAction("Check for Updates", self._check_update_manual)
+
     sender = self.sender()
-    menu.exec(sender.mapToGlobal(sender.rect().bottomLeft()))
+    anchor = sender if sender is not None else getattr(self, "menu_top_btn", self)
+    menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))

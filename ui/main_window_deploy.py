@@ -2297,7 +2297,6 @@ class MainWindow(QMainWindow):
             QApplication.quit()
         except Exception:
             pass
-        os._exit(0)
 
     def closeEvent(self, event):
         self._do_save_session()

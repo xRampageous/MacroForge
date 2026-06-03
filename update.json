@@ -1,6 +1,6 @@
 {
-  "version": "3.2.1",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.1/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.1/MacroForge-v3.2.1.zip",
-  "notes": "v3.2.1: Power editor polish - playback timeline feedback indicator, group context menu polish (rename/duplicate/ungroup/delete/color), drag-into-group visual feedback, timeline search/filter with query tokens, smart retry fields, recovery group type, macro variables manager, full hotkey editor in Settings, profile/macro library screen, bottom panel layout polish."
+  "version": "3.2.2",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.2/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.2/MacroForge-v3.2.2.zip",
+  "notes": "v3.2.2: Fixes the Profile / Macro Library menu wiring, restores the quick profile selector, keeps the consolidated library entry in the top-right menu, removes stale os._exit quit paths from snapshot UI modules, and adds regression coverage for both menu paths."
 }

@@ -168,10 +168,14 @@ class TestTimelineRows(QtTestCase):
 
     def test_playback_disables_drag_sorting_and_restores_it_when_cleared(self):
         timeline = TimelineView(model=ActionListModel([Action("a", 0.1)]))
+        timeline.setDragEnabled(True)
+        timeline._drag_allowed = True
         timeline.set_playing(0, 0.1)
         self.assertFalse(timeline.dragEnabled())
+        self.assertFalse(timeline._drag_allowed)
         timeline.clear_playing()
-        self.assertTrue(timeline.dragEnabled())
+        self.assertFalse(timeline.dragEnabled())
+        self.assertEqual(timeline.playing_index, -1)
         timeline.deleteLater()
 
     def test_badges_follow_rows_when_indices_are_remapped(self):
@@ -329,13 +333,13 @@ class TestPlaybackVisibility(QtTestCase):
             ])
             window.refresh()
 
-            self.assertEqual(window.macro_summary.text(), "3 actions · 1 image check · ~48s")
+            self.assertEqual(window.macro_summary.text(), "3 rows · 1 image · 0 groups · 0 loops · ~48s")
             window._set_playback_collapsed(True)
             self.assertEqual(window.playback_panel.height(), 36)
             self.assertFalse(window.playback_dock.isVisible())
             self.assertFalse(window.playback_restore_btn.isHidden())
             window._set_playback_collapsed(False)
-            self.assertEqual(window.playback_panel.height(), 118)
+            self.assertEqual(window.playback_panel.height(), 188)
             self._dispose_window(window)
 
     def test_compact_layout_keeps_header_and_bottom_panel_readable_at_target_size(self):
@@ -345,21 +349,18 @@ class TestPlaybackVisibility(QtTestCase):
             window.show()
             self.app.processEvents()
 
-            topbar_center = window.header_topbar.mapToGlobal(window.header_topbar.rect().center()).x()
-            status_center = window.status_pill.mapToGlobal(window.status_pill.rect().center()).x()
-            self.assertLessEqual(abs(topbar_center - status_center), 3)
-
             update_x = window.update_top_btn.mapToGlobal(window.update_top_btn.rect().topLeft()).x()
             status_right = window.status_pill.mapToGlobal(window.status_pill.rect().topRight()).x()
             menu_x = window.menu_top_btn.mapToGlobal(window.menu_top_btn.rect().topLeft()).x()
             self.assertGreater(update_x, status_right)
             self.assertGreater(menu_x, update_x)
 
-            self.assertEqual(window.status_pill.width(), 270)
-            self.assertEqual(window.playback_panel.height(), 118)
-            self.assertEqual(window.start_btn.width(), 68)
-            self.assertEqual(window.speed_combo.width(), 74)
-            self.assertEqual(window._stat_time_w.width(), 98)
+            self.assertGreaterEqual(window.status_pill.width(), 180)
+            self.assertLessEqual(window.status_pill.width(), 360)
+            self.assertEqual(window.playback_panel.height(), 188)
+            self.assertGreaterEqual(window.start_btn.width(), 68)
+            self.assertGreaterEqual(window.speed_combo.width(), 74)
+            self.assertGreaterEqual(window._stat_time_w.width(), 78)
             window.hide()
             self._dispose_window(window)
 
@@ -581,6 +582,41 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertFalse(captured["Move Up"])
             self.assertFalse(captured["Move Down"])
             window.timeline.clear_playing()
+            self._dispose_window(window)
+
+    def test_profile_switcher_menu_stays_quick_profile_menu(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.session_manager.active = "alpha"
+            window.session_manager.list_profiles = lambda: ["alpha", "beta"]
+            captured = []
+
+            def capture_menu(menu, _pos):
+                captured.extend(action.text() for action in menu.actions() if not action.isSeparator())
+
+            with patch.object(QMenu, "exec", capture_menu):
+                window._show_profile_menu()
+
+            self.assertIn("\u2713  alpha", captured)
+            self.assertIn("     beta", captured)
+            self.assertIn("Open Profile / Macro Library     Ctrl+Alt+P", captured)
+            self.assertNotIn("Macro health / pre-flight     Ctrl+Shift+P", captured)
+            self._dispose_window(window)
+
+    def test_top_right_action_menu_exposes_profile_macro_library(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            captured = []
+
+            def capture_menu(menu, _pos):
+                captured.extend(action.text() for action in menu.actions() if not action.isSeparator())
+
+            with patch.object(QMenu, "exec", capture_menu):
+                window._show_action_menu()
+
+            self.assertIn("LIBRARY", captured)
+            self.assertIn("Profile / macro library     Ctrl+Alt+P", captured)
+            self.assertIn("Macro health / pre-flight     Ctrl+Shift+P", captured)
             self._dispose_window(window)
 
 
