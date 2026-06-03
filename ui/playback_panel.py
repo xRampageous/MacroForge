@@ -201,7 +201,7 @@ def make_playback_panel(window):
     top.addWidget(options_section, stretch=1)
 
     self.collapse_playback_btn = QPushButton("Hide  ^")
-    self.collapse_playback_btn.setToolTip("Collapse playback panel")
+    self.collapse_playback_btn.setToolTip("Collapse playback panel upward")
     self.collapse_playback_btn.setFixedSize(68, 34)
     self.collapse_playback_btn.setStyleSheet(
         f"QPushButton {{ color: {C['accent']}; background-color: {C['bg_tertiary']}; "
@@ -258,7 +258,7 @@ def make_playback_panel(window):
     self.playback_dock = dock
 
     self.playback_restore_btn = QPushButton("Show playback panel")
-    self.playback_restore_btn.setToolTip("Restore playback controls")
+    self.playback_restore_btn.setToolTip("Expand playback panel downward")
     self.playback_restore_btn.setFixedHeight(30)
     self.playback_restore_btn.clicked.connect(lambda: self._set_playback_collapsed(False))
     self.playback_restore_btn.setVisible(False)

@@ -167,6 +167,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         QTimer.singleShot(0, self._update_responsive_side_panel)
+        QTimer.singleShot(0, self._update_responsive_panel_heights)
         self._setup_inspector_autosave()
         self._setup_shortcuts()
         self._setup_timeline_connections()
@@ -282,7 +283,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_responsive_side_panel()
-        self._autosize_inspector_panel()
+        self._update_responsive_panel_heights()
 
     def _update_responsive_side_panel(self):
         """Auto-collapse the side panel at narrow widths and restore it later."""
@@ -301,6 +302,87 @@ class MainWindow(QMainWindow):
                 setter(True, auto=True)
             elif width >= expand_at and auto_collapsed and not user_collapsed:
                 setter(False, auto=True)
+        except Exception:
+            pass
+
+    def _find_height_collapse_section(self, body_name):
+        for entry in getattr(self, "_height_collapse_sections", []):
+            try:
+                if entry.get("name") == body_name:
+                    return entry
+            except Exception:
+                continue
+        return None
+
+    def _set_auto_height_section(self, body_name, collapsed):
+        entry = self._find_height_collapse_section(body_name)
+        setter = getattr(self, "_set_collapsible_body_collapsed", None)
+        if not entry or setter is None:
+            return
+        body = entry.get("body")
+        caret = entry.get("caret")
+        if body is None or caret is None:
+            return
+        setter(body, caret, bool(collapsed), auto=True)
+
+    def _apply_auto_height_section(self, body_name, collapse_at, expand_at, height=None):
+        height = int(self.height() if height is None else height)
+        entry = self._find_height_collapse_section(body_name)
+        if not entry:
+            return
+        caret = entry.get("caret")
+        if caret is None:
+            return
+
+        collapsed = bool(caret.property("collapsed"))
+        auto_collapsed = bool(caret.property("auto_collapsed"))
+        user_collapsed = bool(caret.property("user_collapsed"))
+
+        if height <= collapse_at and not collapsed:
+            self._set_auto_height_section(body_name, True)
+        elif height >= expand_at and auto_collapsed and not user_collapsed:
+            self._set_auto_height_section(body_name, False)
+
+    def _apply_auto_playback_height(self, height=None):
+        height = int(self.height() if height is None else height)
+        collapsed = bool(getattr(self, "_playback_collapsed", False))
+        auto_collapsed = bool(getattr(self, "_playback_auto_collapsed", False))
+        user_collapsed = bool(getattr(self, "_playback_user_collapsed", False))
+        collapse_at = int(getattr(self, "_playback_auto_collapse_height", 840))
+        expand_at = int(getattr(self, "_playback_auto_expand_height", 950))
+
+        if height <= collapse_at and not collapsed:
+            self._set_playback_collapsed(True, auto=True)
+        elif height >= expand_at and auto_collapsed and not user_collapsed:
+            self._set_playback_collapsed(False, auto=True)
+
+    def _update_responsive_panel_heights(self):
+        """Auto-collapse vertical panels when the window gets short.
+
+        Mirrors the side-panel width behavior:
+        - auto-collapse when below a lower threshold
+        - auto-expand when above a higher threshold
+        - do not auto-expand something the user manually collapsed
+        """
+        try:
+            height = int(self.height())
+            self._apply_auto_playback_height(height)
+
+            # When the whole side panel is width-collapsed, its card bodies are
+            # already hidden; keep their manual/auto height state untouched.
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                return
+
+            self._apply_auto_height_section("inspector_body", 880, 1010, height)
+            self._apply_auto_height_section("recorder_body", 760, 900, height)
+            self._apply_auto_height_section("add_action_body", 660, 780, height)
+
+            # Inspector sub-tables are optional detail; on short windows collapse
+            # only auto-managed sections and restore them when space returns.
+            for entry in getattr(self, "_height_collapse_sections", []):
+                name = entry.get("name", "")
+                if name.startswith("inspector_group_") and name.endswith("_body"):
+                    self._apply_auto_height_section(name, 800, 930, height)
         except Exception:
             pass
 
@@ -500,52 +582,6 @@ class MainWindow(QMainWindow):
             else:
                 self.insp_empty.setText("Use Edit for this block")
                 self.insp_empty.setVisible(True)
-        self._autosize_inspector_panel()
-
-    def _autosize_inspector_panel(self):
-        """Resize Inspector to the selected action pane instead of stretching.
-
-        The Inspector must stay immediately below the panels above it.  It uses
-        Maximum vertical policy and the bottom spacer consumes leftover height,
-        so collapse is visually upward into the Inspector header and expansion
-        grows downward from that header.
-        """
-        card = getattr(self, "insp_card", None)
-        body = getattr(self, "insp_body", None)
-        if card is None:
-            return
-
-        try:
-            card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-            if body is not None:
-                body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-
-            if body is not None and not body.isVisible():
-                # Collapsed Inspector: clamp to the header-only size.
-                card.setMinimumHeight(0)
-                card.setMaximumHeight(max(32, card.minimumSizeHint().height() + 2))
-            else:
-                # Expanded Inspector: release clamps, compute current selected
-                # pane size, then clamp to that natural size to avoid a tall
-                # empty shell.
-                if body is not None:
-                    body.setMinimumHeight(0)
-                    body.setMaximumHeight(16777215)
-                card.setMinimumHeight(0)
-                card.setMaximumHeight(16777215)
-                card.updateGeometry()
-                if body is not None:
-                    body.updateGeometry()
-                natural_h = max(card.sizeHint().height(), card.minimumSizeHint().height())
-                if natural_h <= 0:
-                    natural_h = 140
-                card.setMaximumHeight(natural_h + 4)
-
-            card.updateGeometry()
-            if hasattr(self, "sidebar_frame"):
-                self.sidebar_frame.updateGeometry()
-        except Exception:
-            pass
 
     def _decode_action_image_pixmap(self, action) -> QPixmap:
         pixmap = QPixmap()
@@ -1521,8 +1557,6 @@ class MainWindow(QMainWindow):
                     self.inspector_label.clear()
                     self.inspector_label.setEnabled(False)
                     self.inspector_label.blockSignals(False)
-                self._autosize_inspector_panel()
-                QTimer.singleShot(0, self._autosize_inspector_panel)
                 self._set_image_inspector_preview(None)
                 self._show_inspector(False)
                 if hasattr(self.timeline, "set_link_targets"):
@@ -1561,7 +1595,6 @@ class MainWindow(QMainWindow):
                 self.inspector_label.setEnabled(True)
                 self.inspector_label.blockSignals(False)
             self._show_inspector(True, action.action_type)
-            QTimer.singleShot(0, self._autosize_inspector_panel)
             if action.action_type == "key":
                 self.ik_key.setText(action.key)
                 self.ik_dur.setText(str(action.duration))
@@ -4171,11 +4204,33 @@ class MainWindow(QMainWindow):
             parts.insert(-1, f"{disabled} disabled")
         self.macro_summary.setText(" · ".join(parts))
 
-    def _set_playback_collapsed(self, collapsed):
+    def _set_playback_collapsed(self, collapsed, auto=False):
         collapsed = bool(collapsed)
+        auto = bool(auto)
+
+        if auto:
+            if collapsed:
+                self._playback_auto_collapsed = True
+            else:
+                if bool(getattr(self, "_playback_user_collapsed", False)):
+                    return
+                if not bool(getattr(self, "_playback_auto_collapsed", False)):
+                    return
+                self._playback_auto_collapsed = False
+        else:
+            self._playback_user_collapsed = collapsed
+            self._playback_auto_collapsed = False
+
+        self._playback_collapsed = collapsed
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
         self.playback_panel.setFixedHeight(36 if collapsed else 188)
+        self.playback_panel.setMinimumHeight(36 if collapsed else 188)
+        self.playback_panel.setMaximumHeight(36 if collapsed else 188)
+        if hasattr(self, "collapse_playback_btn"):
+            self.collapse_playback_btn.setToolTip("Collapse playback panel upward")
+        if hasattr(self, "playback_restore_btn"):
+            self.playback_restore_btn.setToolTip("Expand playback panel downward")
 
     @staticmethod
     def _format_hms(seconds: float) -> str:
