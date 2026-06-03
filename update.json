@@ -1,6 +1,6 @@
 {
-  "version": "3.4.8",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.8/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.8/MacroForge-v3.4.8.zip",
-  "notes": "v3.4.8: Apply responsive panel heights patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with responsive panel heights."
+  "version": "3.4.9",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.9/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.9/MacroForge-v3.4.9.zip",
+  "notes": "v3.4.9: Apply bottom up height collapse patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with bottom up height collapse."
 }
