@@ -1,6 +1,6 @@
 {
-  "version": "3.5.8",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.8/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.8/MacroForge-v3.5.8.zip",
-  "notes": "v3.5.8: Apply fixed height lock expanded panel patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with fixed height lock expanded panel."
+  "version": "3.5.9",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.9/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.9/MacroForge-v3.5.9.zip",
+  "notes": "v3.5.9: Apply lock to longest panel patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with lock to longest panel."
 }
