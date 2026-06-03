@@ -1086,7 +1086,12 @@ class MainWindow(QMainWindow):
         action = self.action_model.get(index)
         self._update_timeline_links(index)
         self.inspector_selector.clear()
-        self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
+        if action.action_type == "image":
+            self.inspector_selector.addItem(icon("image", 14, COLORS["image"]), "Image Action")
+        else:
+            self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
+        if hasattr(self, "inspector_type_badge"):
+            self.inspector_type_badge.setText(str(action.action_type or "action").upper())
         self._show_inspector(True, action.action_type)
         if action.action_type == "key":
             self.ik_key.setText(action.key)
@@ -1105,12 +1110,18 @@ class MainWindow(QMainWindow):
             self.ic_repeat.setText(str(getattr(action, 'repeat_count', 1)))
             self.ic_label.setText(getattr(action, 'label', ''))
         elif action.action_type == "image":
-            self.ii_sim.setText(str(getattr(action, 'similarity', 0.8)))
-            self.ii_wait.setText(str(getattr(action, 'wait_timeout', 10.0)))
+            similarity = float(getattr(action, 'similarity', 0.85) or 0.85)
+            self.ii_sim.setText(f"{similarity:.2f}")
+            if hasattr(self, "ii_sim_slider"):
+                self.ii_sim_slider.blockSignals(True)
+                self.ii_sim_slider.setValue(max(0, min(100, int(round(similarity * 100)))))
+                self.ii_sim_slider.blockSignals(False)
+            self.ii_wait.setText(str(int(round(float(getattr(action, 'wait_timeout', 1.0) or 0.0) * 1000))))
             if hasattr(self, "ii_retry_count"):
                 self.ii_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
-                self.ii_retry_delay.setText(str(getattr(action, "retry_delay", 0.25)))
-                self.ii_fail_mode.setCurrentText(getattr(action, "on_fail_action", "default") or "default")
+                self.ii_retry_delay.setText(str(int(round(float(getattr(action, "retry_delay", 0.25) or 0.0) * 1000))))
+                fail_mode = (getattr(action, "on_fail_action", "default") or "default").replace("_", " ").title()
+                self.ii_fail_mode.setCurrentText(fail_mode)
                 self._populate_target_combo(self.ii_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
         elif action.action_type == "group":
             self.ig_name.setText(getattr(action, "group_name", "") or getattr(action, "label", ""))
@@ -1168,11 +1179,11 @@ class MainWindow(QMainWindow):
                 action.label = self.ic_label.text().strip()
             elif action.action_type == "image":
                 action.similarity = float(self.ii_sim.text())
-                action.wait_timeout = float(self.ii_wait.text())
+                action.wait_timeout = float(self.ii_wait.text() or 0) / 1000.0
                 if hasattr(self, "ii_retry_count"):
                     action.retry_attempts = int(self.ii_retry_count.value())
-                    action.retry_delay = float(self.ii_retry_delay.text() or 0)
-                    action.on_fail_action = self.ii_fail_mode.currentText()
+                    action.retry_delay = float(self.ii_retry_delay.text() or 0) / 1000.0
+                    action.on_fail_action = self.ii_fail_mode.currentText().strip().lower().replace(" ", "_")
                     action.on_fail_target = int(self.ii_fail_target.currentData() if self.ii_fail_target.currentData() is not None else -1)
             elif action.action_type == "group":
                 name = self.ig_name.text().strip() or "Group"

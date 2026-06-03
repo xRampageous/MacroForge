@@ -1,6 +1,6 @@
 {
-  "version": "3.2.6",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.6/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.6/MacroForge-v3.2.6.zip",
-  "notes": "v3.2.6: UI overhaul - deeper navy theme palette, richer borders, 850x1100 window, timeline rows taller at 1.0 zoom, icon section headers in playback panel, gradient panel backgrounds, panel_frame/section_header helpers, profile name truncation, status pill width fix."
+  "version": "3.2.7",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.7/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.7/MacroForge-v3.2.7.zip",
+  "notes": "v3.2.7: Image inspector upgrade - preview frame with gradient/art, change image button + zoom/fit/capture icons, card groups (MATCHING/RETRY/ON FAIL/FAIL TARGET), similarity slider with scale labels, ms units throughout, inspector type badge, selector icon for image actions."
 }

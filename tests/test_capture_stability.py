@@ -376,6 +376,41 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertEqual(window.playback_feedback_label.text(), "Playing · Row 1 Enter")
             self._dispose_window(window)
 
+    def test_image_inspector_uses_editor_cards_and_ms_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action(
+                "[IMAGE]",
+                0.05,
+                action_type="image",
+                image_data=PNG_1X1,
+                similarity=0.85,
+                wait_timeout=1.0,
+                retry_delay=0.25,
+            )
+            window.action_model.set_actions([action])
+            window.select(0)
+
+            self.assertEqual(window.inspector_selector.itemText(0), "Image Action")
+            self.assertEqual(window.inspector_type_badge.text(), "IMAGE")
+            self.assertFalse(window.insp_image.isHidden())
+            self.assertEqual(window.ii_sim.text(), "0.85")
+            self.assertEqual(window.ii_wait.text(), "1000")
+            self.assertEqual(window.ii_retry_delay.text(), "250")
+
+            old_toolbar_tips = {"Apply", "Test selected action", "Cancel", "Delete", "Duplicate", "Edit"}
+            inspector_buttons = window.insp_image.parentWidget().findChildren(QPushButton)
+            self.assertFalse(old_toolbar_tips.intersection({button.toolTip() for button in inspector_buttons}))
+
+            window.ii_wait.setText("1500")
+            window.ii_retry_delay.setText("125")
+            window.ii_fail_mode.setCurrentText("Continue")
+            window._apply_inspector()
+            self.assertAlmostEqual(window.action_model.get(0).wait_timeout, 1.5)
+            self.assertAlmostEqual(window.action_model.get(0).retry_delay, 0.125)
+            self.assertEqual(window.action_model.get(0).on_fail_action, "continue")
+            self._dispose_window(window)
+
     def test_compact_layout_keeps_header_and_bottom_panel_readable_at_target_size(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)

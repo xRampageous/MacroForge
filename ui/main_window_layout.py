@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSlider,
     QSpinBox,
     QSizePolicy,
     QVBoxLayout,
@@ -106,6 +107,52 @@ def build_main_layout(window):
             "QComboBox::drop-down { border: none; width: 18px; }"
         )
         return combo
+
+    def inspector_group(title, icon_name, color):
+        card = QFrame()
+        card.setObjectName(f"inspector_group_{title.lower().replace(' ', '_')}")
+        card.setStyleSheet(
+            f"QFrame#{card.objectName()} {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            f"stop:0 #04111D, stop:1 #00060E); border: 1px solid {C['border']}; "
+            "border-radius: 8px; }}"
+        )
+        lo = QVBoxLayout(card)
+        lo.setContentsMargins(8, 8, 8, 8)
+        lo.setSpacing(7)
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        head.setSpacing(6)
+        ico = QLabel()
+        ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
+        ico.setFixedSize(15, 15)
+        head.addWidget(ico)
+        lbl = QLabel(title)
+        lbl.setStyleSheet(
+            f"color: {C['text']}; font-size: 11px; font-weight: 850; "
+            "letter-spacing: 0.35px; background: transparent;"
+        )
+        head.addWidget(lbl)
+        info = QLabel("ⓘ")
+        info.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+        head.addWidget(info)
+        head.addStretch()
+        caret = QLabel("^")
+        caret.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; background: transparent;")
+        head.addWidget(caret)
+        lo.addLayout(head)
+        return card, lo
+
+    def inspector_value(text="", width=58):
+        inp = QLineEdit(text)
+        inp.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        inp.setFixedSize(width, 28)
+        inp.setStyleSheet(
+            f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 6px; "
+            "font-size: 11px; font-weight: 750; }}"
+            f"QLineEdit:focus {{ border-color: {C['accent']}; }}"
+        )
+        return inp
 
     # Left command rail.
     sidebar = QFrame()
@@ -233,56 +280,29 @@ def build_main_layout(window):
     selector_row.setSpacing(6)
     self.inspector_selector = compact_combo(["Select an action"])
     self.inspector_selector.setEnabled(False)
+    self.inspector_selector.setIconSize(QSize(15, 15))
+    self.inspector_selector.setStyleSheet(
+        f"QComboBox {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 8px; "
+        "font-size: 11px; }}"
+        "QComboBox::drop-down { border: none; width: 20px; }"
+    )
     selector_row.addWidget(self.inspector_selector, stretch=1)
+    self.inspector_type_badge = QLabel("IMAGE")
+    self.inspector_type_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.inspector_type_badge.setFixedSize(46, 24)
+    self.inspector_type_badge.setStyleSheet(
+        f"color: {C['text_dim']}; background-color: {C['bg_tertiary']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; "
+        "font-size: 10px; font-weight: 850;"
+    )
+    selector_row.addWidget(self.inspector_type_badge)
     more_btn = QPushButton()
     more_btn.setObjectName("icon_btn")
-    more_btn.setFixedSize(30, 30)
+    more_btn.setFixedSize(24, 30)
     more_btn.setIcon(icon("menu", 14, C["text_dim"]))
     selector_row.addWidget(more_btn)
     insp_lo.addLayout(selector_row)
-
-    preview = QFrame()
-    preview.setObjectName("inspector_preview")
-    preview.setFixedHeight(118)
-    preview.setStyleSheet(
-        f"QFrame#inspector_preview {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-        f"stop:0 #06182A, stop:1 {C['bg_secondary']}); border: 1px solid {C['border']}; "
-        "border-radius: 9px; }}"
-    )
-    preview_lo = QVBoxLayout(preview)
-    preview_lo.setContentsMargins(8, 8, 8, 8)
-    preview_lo.setSpacing(3)
-    preview_icon = QLabel()
-    preview_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    preview_icon.setPixmap(icon("image", 50, C["image"]).pixmap(50, 50))
-    preview_lo.addWidget(preview_icon, stretch=1)
-    preview_text = QLabel("Image/action preview")
-    preview_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    preview_text.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-    preview_lo.addWidget(preview_text)
-    insp_lo.addWidget(preview)
-
-    toolbar = QHBoxLayout()
-    toolbar.setContentsMargins(0, 0, 0, 0)
-    toolbar.setSpacing(5)
-    for name, slot, tip, clr in [
-        ("check", self._apply_inspector, "Apply", C["success"]),
-        ("play", self.test_selected_action, "Test selected action", C["success"]),
-        ("cross", self._cancel_inspector, "Cancel", C["error"]),
-        ("trash", lambda: self.delete_action(self.active_index), "Delete", C["error"]),
-        ("duplicate", self._duplicate_inspector, "Duplicate", C["accent"]),
-        ("edit", self._open_active_dialog, "Edit", C["accent"]),
-    ]:
-        btn = QPushButton()
-        btn.setObjectName("icon_btn")
-        btn.setIcon(icon(name, 14, clr))
-        btn.setToolTip(tip)
-        btn.setFixedSize(30, 30)
-        if slot:
-            btn.clicked.connect(slot)
-        toolbar.addWidget(btn)
-    toolbar.addStretch()
-    insp_lo.addLayout(toolbar)
 
     self.insp_empty = QLabel("Select an action to inspect")
     self.insp_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -353,31 +373,152 @@ def build_main_layout(window):
     self.insp_image = QWidget()
     ii_lo = QVBoxLayout(self.insp_image)
     ii_lo.setContentsMargins(0, 0, 0, 0)
-    ii_lo.setSpacing(4)
-    self.ii_sim = form_input("similarity", "0.8")
-    self.ii_wait = form_input("wait timeout", "10.0")
+    ii_lo.setSpacing(7)
+
+    preview = QFrame()
+    preview.setObjectName("image_inspector_preview")
+    preview.setFixedHeight(150)
+    preview.setStyleSheet(
+        f"QFrame#image_inspector_preview {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 #07182A, stop:1 #020A13); border: 1px solid {C['border']}; "
+        "border-radius: 8px; }}"
+    )
+    preview_lo = QVBoxLayout(preview)
+    preview_lo.setContentsMargins(7, 7, 7, 7)
+    preview_lo.setSpacing(5)
+    art = QFrame()
+    art.setObjectName("image_preview_art")
+    art.setStyleSheet(
+        f"QFrame#image_preview_art {{ background-color: #071525; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; }}"
+    )
+    art_lo = QVBoxLayout(art)
+    art_lo.setContentsMargins(0, 0, 0, 0)
+    art_lo.setSpacing(0)
+    art_icon = QLabel()
+    art_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    art_icon.setPixmap(icon("image", 62, C["image"]).pixmap(62, 62))
+    art_lo.addWidget(art_icon, stretch=1)
+    preview_lo.addWidget(art, stretch=1)
+
+    preview_actions = QHBoxLayout()
+    preview_actions.setContentsMargins(0, 0, 0, 0)
+    preview_actions.setSpacing(6)
+    change_btn = QPushButton("Change Image")
+    change_btn.setIcon(icon("edit", 13, C["text_dim"]))
+    change_btn.setIconSize(QSize(13, 13))
+    change_btn.setFixedHeight(28)
+    change_btn.setStyleSheet(
+        f"QPushButton {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
+        f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 8px; "
+        "font-size: 10px; font-weight: 750; text-align: left; }}"
+        f"QPushButton:hover {{ border-color: {C['accent']}; }}"
+    )
+    change_btn.clicked.connect(lambda: self._open_active_dialog())
+    preview_actions.addWidget(change_btn)
+    preview_actions.addStretch()
+    for name, tip in (("search", "Zoom image"), ("move", "Fit preview"), ("target", "Capture region")):
+        btn = QPushButton()
+        btn.setObjectName("icon_btn")
+        btn.setIcon(icon(name, 13, C["text_dim"]))
+        btn.setToolTip(tip)
+        btn.setFixedSize(28, 28)
+        preview_actions.addWidget(btn)
+    preview_lo.addLayout(preview_actions)
+    ii_lo.addWidget(preview)
+
+    matching, matching_lo = inspector_group("MATCHING", "target", C["accent"])
+    sim_row = QHBoxLayout()
+    sim_row.setContentsMargins(0, 0, 0, 0)
+    sim_lbl = form_label("Similarity  ⓘ")
+    sim_row.addWidget(sim_lbl)
+    sim_row.addStretch()
+    self.ii_sim = inspector_value("0.85", 54)
+    sim_row.addWidget(self.ii_sim)
+    matching_lo.addLayout(sim_row)
+    self.ii_sim_slider = QSlider(Qt.Orientation.Horizontal)
+    self.ii_sim_slider.setRange(0, 100)
+    self.ii_sim_slider.setValue(85)
+    self.ii_sim_slider.setFixedHeight(18)
+    self.ii_sim_slider.setStyleSheet(
+        f"QSlider::groove:horizontal {{ height: 3px; background: {C['lane']}; border-radius: 2px; }}"
+        f"QSlider::sub-page:horizontal {{ background: {C['accent']}; border-radius: 2px; }}"
+        f"QSlider::handle:horizontal {{ background: {C['accent']}; width: 10px; height: 10px; "
+        "border-radius: 5px; margin: -4px 0; }}"
+    )
+    self.ii_sim_slider.valueChanged.connect(lambda v: self.ii_sim.setText(f"{v / 100:.2f}"))
+    matching_lo.addWidget(self.ii_sim_slider)
+    scale_row = QHBoxLayout()
+    scale_row.setContentsMargins(0, 0, 0, 0)
+    left_scale = QLabel("0.00")
+    right_scale = QLabel("1.00")
+    for lbl in (left_scale, right_scale):
+        lbl.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; background: transparent;")
+    scale_row.addWidget(left_scale)
+    scale_row.addStretch()
+    scale_row.addWidget(right_scale)
+    matching_lo.addLayout(scale_row)
+    wait_row = QHBoxLayout()
+    wait_row.setContentsMargins(0, 0, 0, 0)
+    wait_row.addWidget(form_label("Wait timeout  ⓘ"))
+    wait_row.addStretch()
+    self.ii_wait = inspector_value("1000", 58)
+    wait_row.addWidget(self.ii_wait)
+    wait_ms = QLabel("ms")
+    wait_ms.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+    wait_row.addWidget(wait_ms)
+    matching_lo.addLayout(wait_row)
+    ii_lo.addWidget(matching)
+
+    retry, retry_lo = inspector_group("RETRY", "update", C["accent"])
     self.ii_retry_count = QSpinBox()
     self.ii_retry_count.setRange(1, 99)
-    self.ii_retry_count.setFixedHeight(30)
-    self.ii_retry_delay = form_input("delay", "0.25")
-    self.ii_fail_mode = compact_combo(["default", "continue", "stop", "jump", "recovery_group"])
-    self.ii_fail_target = compact_combo()
+    self.ii_retry_count.setFixedSize(76, 28)
+    self.ii_retry_count.setStyleSheet(
+        f"QSpinBox {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 8px; font-size: 11px; }}"
+    )
+    self.ii_retry_delay = inspector_value("250", 76)
     retry_row = QHBoxLayout()
-    retry_row.setSpacing(5)
-    retry_row.addWidget(self.ii_retry_count)
-    retry_row.addWidget(self.ii_retry_delay)
-    for label, widget in [
-        ("MATCHING - Similarity", self.ii_sim),
-        ("Wait timeout", self.ii_wait),
-    ]:
-        ii_lo.addWidget(form_label(label))
-        ii_lo.addWidget(widget)
-    ii_lo.addWidget(form_label("RETRY - attempts / delay"))
-    ii_lo.addLayout(retry_row)
-    ii_lo.addWidget(form_label("ON FAIL"))
-    ii_lo.addWidget(self.ii_fail_mode)
-    ii_lo.addWidget(form_label("FAIL TARGET"))
-    ii_lo.addWidget(self.ii_fail_target)
+    retry_row.setContentsMargins(0, 0, 0, 0)
+    retry_row.setSpacing(8)
+    retry_row.addWidget(form_label("Retry attempts / delay"))
+    retry_lo.addLayout(retry_row)
+    retry_values = QHBoxLayout()
+    retry_values.setContentsMargins(0, 0, 0, 0)
+    retry_values.setSpacing(7)
+    slash = QLabel("/")
+    slash.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    slash.setStyleSheet(f"color: {C['text']}; font-size: 12px; background: transparent;")
+    retry_values.addWidget(self.ii_retry_count)
+    retry_values.addWidget(slash)
+    retry_values.addWidget(self.ii_retry_delay)
+    retry_values.addWidget(form_label("ms"))
+    retry_values.addStretch()
+    retry_lo.addLayout(retry_values)
+    ii_lo.addWidget(retry)
+
+    on_fail, on_fail_lo = inspector_group("ON FAIL", "condition", C["accent"])
+    on_fail_row = QHBoxLayout()
+    on_fail_row.setContentsMargins(0, 0, 0, 0)
+    on_fail_row.addWidget(form_label("On fail"))
+    on_fail_row.addStretch()
+    self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery group"])
+    self.ii_fail_mode.setFixedWidth(118)
+    on_fail_row.addWidget(self.ii_fail_mode)
+    on_fail_lo.addLayout(on_fail_row)
+    ii_lo.addWidget(on_fail)
+
+    fail_target, fail_target_lo = inspector_group("FAIL TARGET", "target", C["accent"])
+    target_row = QHBoxLayout()
+    target_row.setContentsMargins(0, 0, 0, 0)
+    target_row.addWidget(form_label("Fail target"))
+    target_row.addStretch()
+    self.ii_fail_target = compact_combo()
+    self.ii_fail_target.setFixedWidth(118)
+    target_row.addWidget(self.ii_fail_target)
+    fail_target_lo.addLayout(target_row)
+    ii_lo.addWidget(fail_target)
 
     self.insp_group = QWidget()
     ig_lo = QVBoxLayout(self.insp_group)
