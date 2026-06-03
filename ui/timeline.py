@@ -582,12 +582,24 @@ class TimelineDelegate(QStyledItemDelegate):
             if line_y is not None:
                 line_left = outer.left() + 8
                 line_right = outer.right() - 8
-                painter.setPen(QPen(QColor(COLORS["accent"]), 2))
+                accent = QColor(COLORS["accent"])
+                glow = QColor(COLORS["accent"])
+                glow.setAlpha(85)
+                painter.setPen(QPen(glow, 6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(QPointF(line_left, line_y), QPointF(line_right, line_y))
+                painter.setPen(QPen(accent, 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 painter.drawLine(QPointF(line_left, line_y), QPointF(line_right, line_y))
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(COLORS["accent"]))
-                painter.drawEllipse(QRectF(line_left - 3, line_y - 3, 6, 6))
-                painter.drawEllipse(QRectF(line_right - 3, line_y - 3, 6, 6))
+                painter.setBrush(accent)
+                painter.drawEllipse(QRectF(line_left - 4, line_y - 4, 8, 8))
+                painter.drawEllipse(QRectF(line_right - 4, line_y - 4, 8, 8))
+
+                tag_rect = QRectF(line_left + 12, line_y - 10, 82, 20)
+                painter.setBrush(QColor(0, 10, 18, 224))
+                painter.drawRoundedRect(tag_rect, 7, 7)
+                painter.setPen(accent)
+                painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Black))
+                painter.drawText(tag_rect, Qt.AlignmentFlag.AlignCenter, "INSERT HERE")
         except Exception as e:
             painter.setBrush(QColor(COLORS.get("bg_secondary", "#202020")))
             painter.setPen(Qt.PenStyle.NoPen)
@@ -638,6 +650,9 @@ class TimelineView(QListView):
         self.drag_source_row = -1
         self.drop_insert_row = -1
         self.drop_group_row = -1
+        self.drop_feedback_label = ""
+        self.drop_feedback_kind = ""
+        self.drop_feedback_valid = False
         self.hover_row = -1
         self.flash_row = -1
         self.flash_opacity = 0.0
@@ -948,6 +963,36 @@ class TimelineView(QListView):
         super().mousePressEvent(event)
         self.sync_selection()
 
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.drag_source_row < 0:
+            return
+        label = getattr(self, "drop_feedback_label", "") or "Drag row"
+        kind = getattr(self, "drop_feedback_kind", "")
+        valid = bool(getattr(self, "drop_feedback_valid", False))
+        try:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            vw = self.viewport().width()
+            accent_key = "success" if kind == "group" else ("accent" if valid else "error")
+            accent = QColor(COLORS.get(accent_key, COLORS.get("accent", "#45c8ff")))
+            shell = QRectF(max(12, vw // 2 - 154), 10, min(308, vw - 24), 30)
+
+            glow = QColor(accent)
+            glow.setAlpha(55)
+            painter.setPen(QPen(glow, 5))
+            painter.setBrush(QColor(0, 9, 18, 232))
+            painter.drawRoundedRect(shell, 11, 11)
+
+            painter.setPen(QPen(accent, 1.2))
+            painter.drawRoundedRect(shell, 11, 11)
+
+            painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Black))
+            painter.setPen(QColor(COLORS.get("text", "#F5F8FF")))
+            painter.drawText(shell, Qt.AlignmentFlag.AlignCenter, label)
+        except Exception:
+            pass
+
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
         index = self.indexAt(pos)
@@ -998,9 +1043,18 @@ class TimelineView(QListView):
             if group_row >= 0:
                 self.drop_group_row = group_row
                 self.drop_insert_row = -1
+                self.drop_feedback_kind = "group"
+                self.drop_feedback_valid = True
+                self.drop_feedback_label = self.drop_feedback_text(group_row)
             else:
                 self.drop_group_row = -1
                 self.drop_insert_row = self._drop_insert_row(pos)
+                self.drop_feedback_kind = "insert"
+                self.drop_feedback_valid = self.drop_insert_row >= 0
+                if self.drop_feedback_valid:
+                    self.drop_feedback_label = f"Move to row {self.drop_insert_row + 1}"
+                else:
+                    self.drop_feedback_label = "Drop unavailable"
             self.viewport().update()
             event.acceptProposedAction()
             return
@@ -1027,7 +1081,19 @@ class TimelineView(QListView):
         scrollbar = self.verticalScrollBar()
         scrollbar.setValue(scrollbar.value() + (18 * self._auto_scroll_direction))
         if self._last_drag_pos is not None:
-            self.drop_insert_row = self._drop_insert_row(self._last_drag_pos)
+            group_row = self._drop_group_row(self._last_drag_pos)
+            if group_row >= 0:
+                self.drop_group_row = group_row
+                self.drop_insert_row = -1
+                self.drop_feedback_kind = "group"
+                self.drop_feedback_valid = True
+                self.drop_feedback_label = self.drop_feedback_text(group_row)
+            else:
+                self.drop_group_row = -1
+                self.drop_insert_row = self._drop_insert_row(self._last_drag_pos)
+                self.drop_feedback_kind = "insert"
+                self.drop_feedback_valid = self.drop_insert_row >= 0
+                self.drop_feedback_label = f"Move to row {self.drop_insert_row + 1}" if self.drop_feedback_valid else "Drop unavailable"
             self.viewport().update()
 
     def _stop_auto_scroll(self):
@@ -1041,6 +1107,9 @@ class TimelineView(QListView):
         self.drag_source_row = -1
         self.drop_insert_row = -1
         self.drop_group_row = -1
+        self.drop_feedback_label = ""
+        self.drop_feedback_kind = ""
+        self.drop_feedback_valid = False
         self._last_drag_pos = None
         self.setDragEnabled(False)
         self.viewport().unsetCursor()
@@ -1129,8 +1198,10 @@ class TimelineView(QListView):
         self._stop_auto_scroll()
         event.acceptProposedAction()
         if source >= 0 and group_target >= 0:
+            self.flash_drop(group_target)
             QTimer.singleShot(0, lambda s=source, g=group_target: self.action_dropped_into_group.emit(s, g))
         elif source >= 0 and target >= 0 and source != target:
+            self.flash_drop(target)
             QTimer.singleShot(0, lambda s=source, t=target: self.action_dragged.emit(s, t))
 
     def wheelEvent(self, event):

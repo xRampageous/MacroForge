@@ -166,7 +166,7 @@ class MainWindow(QMainWindow):
             QApplication.instance().installEventFilter(self)
         except Exception:
             pass
-        QTimer.singleShot(0, self._update_responsive_side_panel)
+        QTimer.singleShot(0, self._update_responsive_panels)
         self._setup_inspector_autosave()
         self._setup_shortcuts()
         self._setup_timeline_connections()
@@ -281,13 +281,19 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._update_responsive_side_panel()
+        self._update_responsive_panels()
         self._autosize_inspector_panel()
+        self._apply_panel_size_locks()
+
+    def _update_responsive_panels(self):
+        """Auto-hide panels for both width and height pressure."""
+        self._update_responsive_side_panel()
+        self._update_responsive_height_panels()
 
     def _update_responsive_side_panel(self):
         """Auto-collapse the side panel at narrow widths and restore it later."""
         setter = getattr(self, "_set_side_panel_collapsed", None)
-        if setter is None:
+        if setter is None or bool(getattr(self, "_side_panel_locked", False)):
             return
         try:
             width = int(self.width())
@@ -301,6 +307,148 @@ class MainWindow(QMainWindow):
                 setter(True, auto=True)
             elif width >= expand_at and auto_collapsed and not user_collapsed:
                 setter(False, auto=True)
+        except Exception:
+            pass
+
+    def _update_responsive_height_panels(self):
+        """Collapse from the bottom upward when vertical space gets tight."""
+        try:
+            height = int(self.height())
+            side_locked = bool(getattr(self, "_side_panel_locked", False))
+            bottom_locked = bool(getattr(self, "_bottom_panel_locked", False))
+            set_panel = getattr(self, "_set_collapsible_panel", None)
+
+            # Bottom playback panel is the lowest visible panel.  It hides first
+            # when height is reduced and returns last after enough room exists.
+            if not bottom_locked and hasattr(self, "playback_panel"):
+                if (
+                    height <= int(getattr(self, "_height_auto_playback_collapse", 820))
+                    and not bool(getattr(self, "_playback_collapsed", False))
+                ):
+                    self._set_playback_collapsed(True, auto=True)
+                elif (
+                    height >= int(getattr(self, "_height_auto_playback_expand", 920))
+                    and bool(getattr(self, "_playback_auto_collapsed", False))
+                    and not bool(getattr(self, "_playback_user_collapsed", False))
+                ):
+                    self._set_playback_collapsed(False, auto=True)
+
+            # Side-panel cards collapse bottom-up: Inspector, Recorder, Add Action.
+            # This respects manual user-collapse state and panel locks.
+            if set_panel is not None and not side_locked and not bool(getattr(self, "_side_panel_collapsed", False)):
+                if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
+                    set_panel("inspector_body", True, auto=True)
+                elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
+                    set_panel("inspector_body", False, auto=True)
+
+                if height <= int(getattr(self, "_height_auto_recorder_collapse", 660)):
+                    set_panel("recorder_body", True, auto=True)
+                elif height >= int(getattr(self, "_height_auto_recorder_expand", 735)):
+                    set_panel("recorder_body", False, auto=True)
+
+                if height <= int(getattr(self, "_height_auto_add_collapse", 560)):
+                    set_panel("add_action_body", True, auto=True)
+                elif height >= int(getattr(self, "_height_auto_add_expand", 635)):
+                    set_panel("add_action_body", False, auto=True)
+        except Exception:
+            pass
+
+    def _toggle_side_panel_lock(self):
+        locked = not bool(getattr(self, "_side_panel_locked", False))
+        self._side_panel_locked = locked
+        if locked:
+            self._side_panel_lock_width = max(int(self.width()), int(self.minimumWidth()))
+            self._side_panel_user_collapsed = bool(getattr(self, "_side_panel_collapsed", False))
+        else:
+            self._side_panel_lock_width = 0
+        btn = getattr(self, "side_panel_lock_btn", None)
+        if btn is not None:
+            btn.setText("🔒" if locked else "🔓")
+            btn.setToolTip("Unlock side panel width" if locked else "Lock side panel width")
+            btn.setProperty("locked", locked)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+        self.status("Side panel width locked" if locked else "Side panel width unlocked")
+        self._apply_panel_size_locks()
+
+    def _toggle_bottom_panel_lock(self):
+        locked = not bool(getattr(self, "_bottom_panel_locked", False))
+        self._bottom_panel_locked = locked
+        if locked:
+            self._bottom_panel_lock_height = max(int(self.height()), self._preferred_panel_lock_height())
+            self._playback_user_collapsed = bool(getattr(self, "_playback_collapsed", False))
+        else:
+            self._bottom_panel_lock_height = 0
+        btn = getattr(self, "bottom_panel_lock_btn", None)
+        if btn is not None:
+            btn.setText("🔒" if locked else "🔓")
+            btn.setToolTip("Unlock bottom panel height" if locked else "Lock bottom panel height")
+            btn.setProperty("locked", locked)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+        self.status("Bottom panel height locked" if locked else "Bottom panel height unlocked")
+        self._apply_panel_size_locks()
+
+    def _preferred_panel_lock_height(self):
+        """Window max-height target while the bottom/height lock is enabled.
+
+        The lock height follows the side panel's natural content height.  This
+        includes the currently selected Inspector pane, so clicking Key/Image/
+        Loop/etc. can legitimately change the locked max-height.
+        """
+        try:
+            # Recompute the Inspector before measuring the side panel because
+            # it has different natural heights for different selected actions.
+            # Guard against recursion: autosize applies locks, and locks measure
+            # the side-panel height.
+            if not bool(getattr(self, "_measuring_panel_lock_height", False)):
+                self._measuring_panel_lock_height = True
+                try:
+                    self._autosize_inspector_panel()
+                finally:
+                    self._measuring_panel_lock_height = False
+            sidebar = getattr(self, "sidebar_frame", None)
+            side_h = 0
+            if sidebar is not None:
+                sidebar.updateGeometry()
+                side_h = max(
+                    sidebar.sizeHint().height(),
+                    sidebar.minimumSizeHint().height(),
+                    sidebar.height() if sidebar.isVisible() else 0,
+                )
+
+            # Keep enough room for the bottom playback panel when visible.  The
+            # side panel is the primary source of truth; this is only a safety
+            # floor so the lock never clamps below usable window chrome/content.
+            playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 188
+            content_floor = max(self.minimumSizeHint().height(), self.minimumHeight(), 560)
+            target = max(side_h + 8, content_floor, playback_h + 360)
+            return max(560, min(1600, int(target)))
+        except Exception:
+            return max(560, int(self.height()))
+
+
+    def _apply_panel_size_locks(self):
+        """Clamp maximum width/height while panel locks are enabled."""
+        try:
+            max_w = 16777215
+            max_h = 16777215
+            min_w = max(640, int(self.minimumWidth()))
+            min_h = max(560, int(self.minimumHeight()))
+
+            if bool(getattr(self, "_side_panel_locked", False)):
+                locked_w = int(getattr(self, "_side_panel_lock_width", 0) or self.width())
+                max_w = max(min_w, locked_w)
+
+            if bool(getattr(self, "_bottom_panel_locked", False)):
+                # Height lock follows the side panel's natural height, which
+                # changes with the selected Inspector action.
+                natural_h = self._preferred_panel_lock_height()
+                self._bottom_panel_lock_height = natural_h
+                max_h = max(min_h, natural_h)
+
+            if self.maximumWidth() != max_w or self.maximumHeight() != max_h:
+                self.setMaximumSize(max_w, max_h)
         except Exception:
             pass
 
@@ -544,6 +692,8 @@ class MainWindow(QMainWindow):
             card.updateGeometry()
             if hasattr(self, "sidebar_frame"):
                 self.sidebar_frame.updateGeometry()
+            if hasattr(self, "_apply_panel_size_locks") and not bool(getattr(self, "_measuring_panel_lock_height", False)):
+                self._apply_panel_size_locks()
         except Exception:
             pass
 
@@ -4171,11 +4321,22 @@ class MainWindow(QMainWindow):
             parts.insert(-1, f"{disabled} disabled")
         self.macro_summary.setText(" · ".join(parts))
 
-    def _set_playback_collapsed(self, collapsed):
+    def _set_playback_collapsed(self, collapsed, auto=False):
         collapsed = bool(collapsed)
+        auto = bool(auto)
+        if auto and bool(getattr(self, "_bottom_panel_locked", False)):
+            return
+        if auto:
+            self._playback_auto_collapsed = collapsed
+        else:
+            self._playback_user_collapsed = collapsed
+            self._playback_auto_collapsed = False
+        self._playback_collapsed = collapsed
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
         self.playback_panel.setFixedHeight(36 if collapsed else 188)
+        if hasattr(self, "_apply_panel_size_locks"):
+            self._apply_panel_size_locks()
 
     @staticmethod
     def _format_hms(seconds: float) -> str:

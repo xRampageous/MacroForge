@@ -68,6 +68,8 @@ def build_main_layout(window):
         )
         return caret
 
+    self._panel_collapse_controls = {}
+
     def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
@@ -109,6 +111,34 @@ def build_main_layout(window):
                 self._autosize_inspector_panel()
         body_widget.updateGeometry()
 
+    def _set_collapsible_panel(body_name, collapsed, auto=False):
+        body_widget, caret = self._panel_collapse_controls.get(body_name, (None, None))
+        if body_widget is None or caret is None:
+            return False
+        collapsed = bool(collapsed)
+        auto = bool(auto)
+        user_collapsed = bool(body_widget.property("user_collapsed"))
+        auto_collapsed = bool(body_widget.property("auto_collapsed"))
+        current = bool(caret.property("collapsed"))
+
+        if auto:
+            # Auto-height recovery must not reopen a panel the user explicitly
+            # collapsed, and auto-collapse should avoid fighting manual locks.
+            if collapsed and user_collapsed:
+                return False
+            if not collapsed and (not auto_collapsed or user_collapsed):
+                return False
+            body_widget.setProperty("auto_collapsed", collapsed)
+        else:
+            body_widget.setProperty("user_collapsed", collapsed)
+            body_widget.setProperty("auto_collapsed", False)
+
+        if current != collapsed:
+            _toggle_collapsible_body(body_widget, caret)
+        return True
+
+    self._set_collapsible_panel = _set_collapsible_panel
+
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -143,7 +173,14 @@ def build_main_layout(window):
 
         if body_widget is not None:
             caret = _caret_button(20)
-            caret.clicked.connect(lambda checked=False, body=body_widget, btn=caret: _toggle_collapsible_body(body, btn))
+            self._panel_collapse_controls[body_widget.objectName()] = (body_widget, caret)
+            caret.clicked.connect(
+                lambda checked=False, body=body_widget: self._set_collapsible_panel(
+                    body.objectName(),
+                    not bool(self._panel_collapse_controls[body.objectName()][1].property("collapsed")),
+                    auto=False,
+                )
+            )
             row.addWidget(caret)
         else:
             caret = QLabel("^")
@@ -247,7 +284,14 @@ def build_main_layout(window):
             f"QPushButton#panel_caret_btn:hover {{ color: {C['text']}; "
             f"background-color: {C['bg_hover']}; border-color: {C['border']}; }}"
         )
-        caret.clicked.connect(lambda checked=False, body=body, btn=caret: _toggle_collapsible_body(body, btn))
+        self._panel_collapse_controls[body.objectName()] = (body, caret)
+        caret.clicked.connect(
+            lambda checked=False, body=body: self._set_collapsible_panel(
+                body.objectName(),
+                not bool(self._panel_collapse_controls[body.objectName()][1].property("collapsed")),
+                auto=False,
+            )
+        )
         head.addWidget(caret)
         lo.addLayout(head)
         lo.addWidget(body)
@@ -313,6 +357,12 @@ def build_main_layout(window):
     brand_box_lo.addWidget(ver)
 
     brand_row.addWidget(brand_box, stretch=1)
+    self.side_panel_lock_btn = _caret_button(22)
+    self.side_panel_lock_btn.setText("🔓")
+    self.side_panel_lock_btn.setToolTip("Lock side panel width")
+    self.side_panel_lock_btn.clicked.connect(self._toggle_side_panel_lock)
+    brand_row.addWidget(self.side_panel_lock_btn)
+
     self.sidebar_collapse_btn = _caret_button(22)
     self.sidebar_collapse_btn.setText("<")
     self.sidebar_collapse_btn.setToolTip("Collapse side panel")
@@ -815,11 +865,25 @@ def build_main_layout(window):
     self._side_panel_collapsed = False
     self._side_panel_auto_collapsed = False
     self._side_panel_user_collapsed = False
+    self._side_panel_locked = False
+    self._side_panel_lock_width = 0
+    self._bottom_panel_locked = False
+    self._bottom_panel_lock_height = 0
     self._side_panel_expanded_width = 270
     self._side_panel_collapsed_width = 22
     self._side_panel_auto_collapse_width = 910
     self._side_panel_auto_expand_width = 1040
+    self._height_auto_playback_collapse = 820
+    self._height_auto_playback_expand = 920
+    self._height_auto_inspector_collapse = 760
+    self._height_auto_inspector_expand = 840
+    self._height_auto_recorder_collapse = 660
+    self._height_auto_recorder_expand = 735
+    self._height_auto_add_collapse = 560
+    self._height_auto_add_expand = 635
     self.sidebar_frame = sidebar
+    self.add_action_body = add_body
+    self.recorder_body = rec_body
     self.insp_card = insp_card
 
     def _set_side_panel_collapsed(collapsed, auto=False):
@@ -838,12 +902,15 @@ def build_main_layout(window):
         margin = 0 if collapsed else 10
         sb_lo.setContentsMargins(margin, 14, margin, 10)
         brand_box.setVisible(not collapsed)
+        self.side_panel_lock_btn.setVisible(not collapsed)
         add_card.setVisible(not collapsed)
         rec_card.setVisible(not collapsed)
         insp_card.setVisible(not collapsed)
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
+        if hasattr(self, "_apply_panel_size_locks"):
+            self._apply_panel_size_locks()
 
     self._set_side_panel_collapsed = _set_side_panel_collapsed
     self.sidebar_collapse_btn.clicked.connect(
