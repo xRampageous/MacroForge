@@ -1,6 +1,6 @@
 {
-  "version": "3.5.4",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.4/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.4/MacroForge-v3.5.4.zip",
-  "notes": "v3.5.4: Apply state only panel locks patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with state only panel locks."
+  "version": "3.5.5",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.5/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.5/MacroForge-v3.5.5.zip",
+  "notes": "v3.5.5: Apply image collapse order minheight patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with image collapse order minheight."
 }
