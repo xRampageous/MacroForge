@@ -310,25 +310,25 @@ class MainWindow(QMainWindow):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setProperty("qt_stacked_add_action", True)
         btn.setStyleSheet(
-            "QPushButton {"
+            f"QPushButton#{obj} {{"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
             f"stop:0 {skin['top']}, stop:0.52 {skin['mid']}, stop:1 {skin['bottom']});"
             f"color: {COLORS['text_inverse']};"
             f"border: 1px solid {skin['border']};"
-            "border-radius: 10px; padding: 0px; text-align: center; font-weight: 800;"
+            "border-radius: 10px; padding: 0px; margin: 0px; text-align: center; font-weight: 800;"
             f"min-width: {btn_w}px; max-width: {btn_w}px; min-height: {btn_h}px; max-height: {btn_h}px;"
             "}"
-            "QPushButton:hover {"
+            f"QPushButton#{obj}:hover {{"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
             f"stop:0 {skin['hover_top']}, stop:0.52 {skin['hover_mid']}, stop:1 {skin['hover_bottom']});"
             f"border: 1px solid {skin['hover_border']};"
             "}"
-            "QPushButton:pressed {"
+            f"QPushButton#{obj}:pressed {{"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
             f"stop:0 {skin['bottom']}, stop:0.55 {skin['mid']}, stop:1 {skin['top']});"
             f"border: 1px solid {skin['hover_border']};"
             "}"
-            "QPushButton:disabled {"
+            f"QPushButton#{obj}:disabled {{"
             f"background: {COLORS['bg_secondary']}; color: {COLORS['text_dark']}; "
             f"border: 1px solid {COLORS['border']};"
             "}"
@@ -3191,8 +3191,9 @@ class MainWindow(QMainWindow):
         rec["presses"].clear()
         rec["modifiers"].clear()
         rec["queue"] = queue.Queue()
-        self.rec_btn.setText(" Stop")
-        self.rec_btn.setStyleSheet(self._rec_record_active_style())
+        self.rec_btn.setText("")
+        self.rec_btn.setIcon(icon("stop", 16, COLORS["error"]))
+        self.rec_btn.setStyleSheet("")
         self.rec_pause_btn.setText(" Pause")
         self.rec_pause_btn.setEnabled(True)
         self.rec_pause_btn.setStyleSheet(self._rec_pause_active_style())
@@ -3401,6 +3402,7 @@ class MainWindow(QMainWindow):
             rec["scroll_thread"].join(timeout=0.2)
         self._show_rec_badge(False)
         self.rec_btn.setText("")
+        self.rec_btn.setIcon(icon("record", 16, COLORS["error"]))
         self._recorder_reset_button_styles()
         self.rec_pause_btn.setText("")
         self.rec_pause_btn.setEnabled(False)

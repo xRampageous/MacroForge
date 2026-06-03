@@ -320,6 +320,15 @@ def build_stylesheet() -> str:
     QPushButton#add_capture:hover {{ background-color: {C['accent_hover']}; }}
     QPushButton#add_capture:pressed {{ background-color: {C['accent_secondary']}; }}
 
+    /* Fixed Add Action sizing guard: keeps app-level ID rules from shrinking the new stacked buttons. */
+    QPushButton#add_key, QPushButton#add_click, QPushButton#add_pause, QPushButton#add_image,
+    QPushButton#add_condition, QPushButton#add_loop, QPushButton#add_group {{
+        min-height: 42px;
+        max-height: 42px;
+        padding: 0px;
+        margin: 0px;
+    }}
+
     /* ── Outlined playback controls ── */
     QPushButton#play_btn {{
         background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{C['success'][1:]}, stop:1 #000000);

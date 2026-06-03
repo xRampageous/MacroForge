@@ -52,7 +52,30 @@ def build_main_layout(window):
         )
         return frame
 
-    def section_header(text, icon_name, color):
+    def _caret_button(size=20):
+        caret = QPushButton("^")
+        caret.setObjectName("panel_caret_btn")
+        caret.setFixedSize(size, size)
+        caret.setCursor(Qt.CursorShape.PointingHandCursor)
+        caret.setProperty("collapsed", False)
+        caret.setToolTip("Collapse panel")
+        caret.setStyleSheet(
+            f"QPushButton#panel_caret_btn {{ color: {C['text_dim']}; background: transparent; "
+            f"border: 1px solid transparent; border-radius: 6px; padding: 0; "
+            "font-size: 12px; font-weight: 900; }}"
+            f"QPushButton#panel_caret_btn:hover {{ color: {C['text']}; "
+            f"background-color: {C['bg_hover']}; border-color: {C['border']}; }}"
+        )
+        return caret
+
+    def _toggle_collapsible_body(body_widget, caret):
+        collapsed = not bool(caret.property("collapsed"))
+        caret.setProperty("collapsed", collapsed)
+        caret.setText("v" if collapsed else "^")
+        caret.setToolTip("Expand panel" if collapsed else "Collapse panel")
+        body_widget.setVisible(not collapsed)
+
+    def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(7)
@@ -68,9 +91,14 @@ def build_main_layout(window):
         )
         row.addWidget(lbl)
         row.addStretch()
-        caret = QLabel("^")
-        caret.setStyleSheet(f"color: {C['text_dim']}; font-size: 12px; background: transparent;")
-        row.addWidget(caret)
+        if body_widget is not None:
+            caret = _caret_button(20)
+            caret.clicked.connect(lambda checked=False, body=body_widget, btn=caret: _toggle_collapsible_body(body, btn))
+            row.addWidget(caret)
+        else:
+            caret = QLabel("^")
+            caret.setStyleSheet(f"color: {C['text_dim']}; font-size: 12px; background: transparent;")
+            row.addWidget(caret)
         return row
 
     def form_label(text):
@@ -119,6 +147,11 @@ def build_main_layout(window):
         lo = QVBoxLayout(card)
         lo.setContentsMargins(8, 8, 8, 8)
         lo.setSpacing(7)
+        body = QWidget(card)
+        body.setObjectName(f"{card.objectName()}_body")
+        body_lo = QVBoxLayout(body)
+        body_lo.setContentsMargins(0, 0, 0, 0)
+        body_lo.setSpacing(7)
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
         head.setSpacing(6)
@@ -136,11 +169,19 @@ def build_main_layout(window):
         info.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
         head.addWidget(info)
         head.addStretch()
-        caret = QLabel("^")
-        caret.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; background: transparent;")
+        caret = _caret_button(18)
+        caret.setStyleSheet(
+            f"QPushButton#panel_caret_btn {{ color: {C['text_dim']}; background: transparent; "
+            f"border: 1px solid transparent; border-radius: 5px; padding: 0; "
+            "font-size: 11px; font-weight: 900; }}"
+            f"QPushButton#panel_caret_btn:hover {{ color: {C['text']}; "
+            f"background-color: {C['bg_hover']}; border-color: {C['border']}; }}"
+        )
+        caret.clicked.connect(lambda checked=False, body=body, btn=caret: _toggle_collapsible_body(body, btn))
         head.addWidget(caret)
         lo.addLayout(head)
-        return card, lo
+        lo.addWidget(body)
+        return card, body_lo
 
     def inspector_value(text="", width=58):
         inp = QLineEdit(text)
@@ -184,13 +225,22 @@ def build_main_layout(window):
         "font-size: 12px; font-weight: 900;"
     )
     brand_row.addWidget(ver)
+    self.sidebar_collapse_btn = _caret_button(22)
+    self.sidebar_collapse_btn.setText("<")
+    self.sidebar_collapse_btn.setToolTip("Collapse side panel")
+    brand_row.addWidget(self.sidebar_collapse_btn)
     sb_lo.addLayout(brand_row)
 
     add_card = panel_frame("add_action_card")
     add_lo = QVBoxLayout(add_card)
     add_lo.setContentsMargins(10, 9, 10, 10)
     add_lo.setSpacing(5)
-    add_lo.addLayout(section_header("ADD ACTION", "bolt", C["accent"]))
+    add_body = QWidget(add_card)
+    add_body.setObjectName("add_action_body")
+    add_body_lo = QVBoxLayout(add_body)
+    add_body_lo.setContentsMargins(0, 0, 0, 0)
+    add_body_lo.setSpacing(0)
+    add_lo.addLayout(section_header("ADD ACTION", "bolt", C["accent"], add_body))
     add_grid = QGridLayout()
     add_grid.setContentsMargins(0, 0, 0, 0)
     add_grid.setHorizontalSpacing(6)
@@ -217,14 +267,20 @@ def build_main_layout(window):
         btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         add_grid.setRowMinimumHeight(row, btn_h)
         add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
-    add_lo.addLayout(add_grid)
+    add_body_lo.addLayout(add_grid)
+    add_lo.addWidget(add_body)
     sb_lo.addWidget(add_card)
 
     rec_card = panel_frame("recorder_card")
     rec_lo = QVBoxLayout(rec_card)
     rec_lo.setContentsMargins(12, 10, 12, 12)
     rec_lo.setSpacing(9)
-    rec_lo.addLayout(section_header("RECORDER", "record", C["accent"]))
+    rec_body = QWidget(rec_card)
+    rec_body.setObjectName("recorder_body")
+    rec_body_lo = QVBoxLayout(rec_body)
+    rec_body_lo.setContentsMargins(0, 0, 0, 0)
+    rec_body_lo.setSpacing(9)
+    rec_lo.addLayout(section_header("RECORDER", "record", C["accent"], rec_body))
     rec_state = QHBoxLayout()
     rec_state.setContentsMargins(0, 0, 0, 0)
     rec_state.setSpacing(7)
@@ -248,14 +304,14 @@ def build_main_layout(window):
         f"border: 1px solid {C['border']}; border-radius: 7px; font-size: 11px;"
     )
     rec_state.addWidget(self.rec_actions)
-    rec_lo.addLayout(rec_state)
+    rec_body_lo.addLayout(rec_state)
     rec_buttons = QHBoxLayout()
     rec_buttons.setSpacing(8)
-    self.rec_btn = QPushButton("Rec")
+    self.rec_btn = QPushButton()
     self.rec_btn.setObjectName("rec_round_btn")
     self.rec_btn.setIcon(icon("record", 16, C["error"]))
     self.rec_btn.setIconSize(QSize(16, 16))
-    self.rec_btn.setFixedHeight(46)
+    self.rec_btn.setFixedSize(42, 42)
     self.rec_btn.setToolTip("Record (F7)")
     self.rec_btn.clicked.connect(self._toggle_record)
     self.rec_pause_btn = QPushButton("Pause")
@@ -268,7 +324,8 @@ def build_main_layout(window):
     self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
     rec_buttons.addWidget(self.rec_btn)
     rec_buttons.addWidget(self.rec_pause_btn)
-    rec_lo.addLayout(rec_buttons)
+    rec_body_lo.addLayout(rec_buttons)
+    rec_lo.addWidget(rec_body)
     sb_lo.addWidget(rec_card)
 
     self._recorder["btn"] = self.rec_btn
@@ -282,7 +339,12 @@ def build_main_layout(window):
     insp_lo = QVBoxLayout(insp_card)
     insp_lo.setContentsMargins(12, 10, 12, 12)
     insp_lo.setSpacing(8)
-    insp_lo.addLayout(section_header("INSPECTOR", "search", C["accent"]))
+    insp_body = QWidget(insp_card)
+    insp_body.setObjectName("inspector_body")
+    insp_body_lo = QVBoxLayout(insp_body)
+    insp_body_lo.setContentsMargins(0, 0, 0, 0)
+    insp_body_lo.setSpacing(8)
+    insp_lo.addLayout(section_header("INSPECTOR", "search", C["accent"], insp_body))
 
     selector_row = QHBoxLayout()
     selector_row.setSpacing(6)
@@ -310,14 +372,14 @@ def build_main_layout(window):
     more_btn.setFixedSize(24, 30)
     more_btn.setIcon(icon("menu", 14, C["text_dim"]))
     selector_row.addWidget(more_btn)
-    insp_lo.addLayout(selector_row)
+    insp_body_lo.addLayout(selector_row)
 
     self.insp_empty = QLabel("Select an action to inspect")
     self.insp_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.insp_empty.setStyleSheet(
         f"color: {C['text_dark']}; font-size: 10px; padding: 6px; background: transparent;"
     )
-    insp_lo.addWidget(self.insp_empty)
+    insp_body_lo.addWidget(self.insp_empty)
 
     self._insp_lo = QVBoxLayout()
     self._insp_lo.setContentsMargins(0, 0, 0, 0)
@@ -626,9 +688,30 @@ def build_main_layout(window):
     ):
         pane.setVisible(False)
         self._insp_lo.addWidget(pane)
-    insp_lo.addLayout(self._insp_lo)
-    insp_lo.addStretch()
+    insp_body_lo.addLayout(self._insp_lo)
+    insp_body_lo.addStretch()
+    insp_lo.addWidget(insp_body)
     sb_lo.addWidget(insp_card, stretch=1)
+
+    self._side_panel_collapsed = False
+
+    def _set_side_panel_collapsed(collapsed):
+        collapsed = bool(collapsed)
+        self._side_panel_collapsed = collapsed
+        sidebar.setFixedWidth(44 if collapsed else 260)
+        margin = 6 if collapsed else 10
+        sb_lo.setContentsMargins(margin, 14, margin, 10)
+        brand.setVisible(not collapsed)
+        ver.setVisible(not collapsed)
+        add_card.setVisible(not collapsed)
+        rec_card.setVisible(not collapsed)
+        insp_card.setVisible(not collapsed)
+        self.sidebar_collapse_btn.setText(">" if collapsed else "<")
+        self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
+
+    self.sidebar_collapse_btn.clicked.connect(
+        lambda checked=False: _set_side_panel_collapsed(not bool(getattr(self, "_side_panel_collapsed", False)))
+    )
     main_lo.addWidget(sidebar)
 
     # Main workspace.
