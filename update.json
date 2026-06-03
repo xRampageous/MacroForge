@@ -1,6 +1,6 @@
 {
-  "version": "3.4.7",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.7/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.7/MacroForge-v3.4.7.zip",
-  "notes": "v3.4.7: Apply inspector autosize collapse patch - updated icons.py, main_window.py, main_window_layout.py, theme.py, theme_compact.py and timeline.py with inspector autosize collapse."
+  "version": "3.4.8",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.8/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.8/MacroForge-v3.4.8.zip",
+  "notes": "v3.4.8: Apply responsive panel heights patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with responsive panel heights."
 }
