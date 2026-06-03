@@ -870,9 +870,7 @@ def build_main_layout(window):
     self._side_panel_auto_collapsed = False
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
-    self._side_panel_lock_width = 0
     self._bottom_panel_locked = False
-    self._bottom_panel_lock_height = 0
     self._side_panel_expanded_width = 270
     self._side_panel_collapsed_width = 22
     self._side_panel_auto_collapse_width = 910

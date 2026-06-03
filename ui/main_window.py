@@ -311,23 +311,32 @@ class MainWindow(QMainWindow):
             pass
 
     def _update_responsive_height_panels(self):
-        """Collapse from the bottom upward when vertical space gets tight."""
+        """Collapse from the bottom upward when vertical space gets tight.
+
+        Panel locks are state-only.  When either panel lock is enabled, resize
+        pressure must not auto-collapse or auto-expand the side/Inspector/Image
+        sub-panel states.
+        """
         try:
             height = int(self.height())
             side_locked = bool(getattr(self, "_side_panel_locked", False))
             bottom_locked = bool(getattr(self, "_bottom_panel_locked", False))
+            any_panel_locked = side_locked or bottom_locked
             set_panel = getattr(self, "_set_collapsible_panel", None)
+
+            if any_panel_locked:
+                return
 
             # Bottom playback panel is the lowest visible panel.  It hides first
             # when height is reduced and returns last after enough room exists.
-            if not bottom_locked and hasattr(self, "playback_panel"):
+            if hasattr(self, "playback_panel"):
                 if (
-                    height <= int(getattr(self, "_height_auto_playback_collapse", 820))
+                    height <= int(getattr(self, "_height_auto_playback_collapse", 860))
                     and not bool(getattr(self, "_playback_collapsed", False))
                 ):
                     self._set_playback_collapsed(True, auto=True)
                 elif (
-                    height >= int(getattr(self, "_height_auto_playback_expand", 920))
+                    height >= int(getattr(self, "_height_auto_playback_expand", 960))
                     and bool(getattr(self, "_playback_auto_collapsed", False))
                     and not bool(getattr(self, "_playback_user_collapsed", False))
                 ):
@@ -336,8 +345,6 @@ class MainWindow(QMainWindow):
             # Side-panel cards collapse bottom-up.  If the selected Inspector
             # page is Image, its internal sub-panels participate in the same
             # auto-hide system before the entire Inspector card collapses.
-            # Side-panel width lock does not block height auto-hide; it only
-            # prevents width auto-collapse.
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
                 image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
                 controls = getattr(self, "_panel_collapse_controls", {})
@@ -378,10 +385,7 @@ class MainWindow(QMainWindow):
         locked = not bool(getattr(self, "_side_panel_locked", False))
         self._side_panel_locked = locked
         if locked:
-            self._side_panel_lock_width = max(int(self.width()), int(self.minimumWidth()))
             self._side_panel_user_collapsed = bool(getattr(self, "_side_panel_collapsed", False))
-        else:
-            self._side_panel_lock_width = 0
         btn = getattr(self, "side_panel_lock_btn", None)
         if btn is not None:
             btn.setText("🔒" if locked else "🔓")
@@ -396,10 +400,7 @@ class MainWindow(QMainWindow):
         locked = not bool(getattr(self, "_bottom_panel_locked", False))
         self._bottom_panel_locked = locked
         if locked:
-            self._bottom_panel_lock_height = max(int(self.height()), self._preferred_panel_lock_height())
             self._playback_user_collapsed = bool(getattr(self, "_playback_collapsed", False))
-        else:
-            self._bottom_panel_lock_height = 0
         btn = getattr(self, "bottom_panel_lock_btn", None)
         if btn is not None:
             btn.setText("🔒" if locked else "🔓")
@@ -450,24 +451,10 @@ class MainWindow(QMainWindow):
 
 
     def _apply_panel_size_locks(self):
-        """Clamp maximum width/height while panel locks are enabled."""
+        """Panel locks preserve panel state only; they never clamp window size."""
         try:
             max_w = 16777215
             max_h = 16777215
-            min_w = max(640, int(self.minimumWidth()))
-            min_h = max(560, int(self.minimumHeight()))
-
-            if bool(getattr(self, "_side_panel_locked", False)):
-                locked_w = int(getattr(self, "_side_panel_lock_width", 0) or self.width())
-                max_w = max(min_w, locked_w)
-
-            if bool(getattr(self, "_bottom_panel_locked", False)):
-                # Height lock follows the side panel's natural height, which
-                # changes with the selected Inspector action.
-                natural_h = self._preferred_panel_lock_height()
-                self._bottom_panel_lock_height = natural_h
-                max_h = max(min_h, natural_h)
-
             if self.maximumWidth() != max_w or self.maximumHeight() != max_h:
                 self.setMaximumSize(max_w, max_h)
         except Exception:
