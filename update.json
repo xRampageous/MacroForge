@@ -1,6 +1,6 @@
 {
-  "version": "3.3.7",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.7/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.7/MacroForge-v3.3.7.zip",
-  "notes": "v3.3.7: Neon button upgrade - add action buttons now use transparent neon PNG backgrounds (blue for key, teal for click, grey for delay, purple for image, gold for condition, blue for loop, wide purple for group) with fallback to gradient styling if images unavailable."
+  "version": "3.3.8",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.8/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.8/MacroForge-v3.3.8.zip",
+  "notes": "v3.3.8: Apply exact dark buttons patch - updated main_window.py and main_window_layout.py with dark button styling improvements."
 }
