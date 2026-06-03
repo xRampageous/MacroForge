@@ -157,7 +157,7 @@ def build_main_layout(window):
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
-    sidebar.setFixedWidth(220)
+    sidebar.setFixedWidth(300)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #020A13, stop:1 #000309); border-right: 1px solid {C['border']}; }}"
@@ -398,6 +398,8 @@ def build_main_layout(window):
     art_icon = QLabel()
     art_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
     art_icon.setPixmap(icon("image", 62, C["image"]).pixmap(62, 62))
+    art_icon.setProperty("has_template", False)
+    self.image_preview_label = art_icon
     art_lo.addWidget(art_icon, stretch=1)
     preview_lo.addWidget(art, stretch=1)
 
@@ -417,12 +419,18 @@ def build_main_layout(window):
     change_btn.clicked.connect(lambda: self._open_active_dialog())
     preview_actions.addWidget(change_btn)
     preview_actions.addStretch()
-    for name, tip in (("search", "Zoom image"), ("move", "Fit preview"), ("target", "Capture region")):
+    for attr, name, tip, slot in (
+        ("ii_zoom_btn", "search", "Zoom image", self._zoom_image_preview),
+        ("ii_fit_btn", "move", "Fit preview", self._fit_image_preview),
+        ("ii_capture_btn", "target", "Capture region", self._capture_active_image_region),
+    ):
         btn = QPushButton()
         btn.setObjectName("icon_btn")
         btn.setIcon(icon(name, 13, C["text_dim"]))
         btn.setToolTip(tip)
         btn.setFixedSize(28, 28)
+        btn.clicked.connect(slot)
+        setattr(self, attr, btn)
         preview_actions.addWidget(btn)
     preview_lo.addLayout(preview_actions)
     ii_lo.addWidget(preview)
@@ -667,7 +675,7 @@ def build_main_layout(window):
 
     self.tl_filter = QComboBox()
     self.tl_filter.addItems(["All", "Images", "Loops", "Conditions", "Groups", "Warnings", "Current group"])
-    self.tl_filter.setFixedSize(52, 32)
+    self.tl_filter.setFixedSize(48, 32)
     self.tl_filter.setToolTip("Quick timeline filter")
     self.tl_filter.currentTextChanged.connect(lambda t: self.timeline.set_quick_filter(t))
     dock_lo.addWidget(self.tl_filter)
@@ -675,8 +683,8 @@ def build_main_layout(window):
     self.tl_search = QLineEdit()
     self.tl_search.setPlaceholderText("Search...")
     self.tl_search.setClearButtonEnabled(True)
-    self.tl_search.setMinimumWidth(70)
-    self.tl_search.setMaximumWidth(100)
+    self.tl_search.setMinimumWidth(52)
+    self.tl_search.setMaximumWidth(80)
     self.tl_search.setFixedHeight(32)
     self.tl_search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.tl_search.addAction(icon("search", 15, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
@@ -689,7 +697,7 @@ def build_main_layout(window):
     self.profile_btn.setIconSize(QSize(15, 15))
     self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     self.profile_btn.setToolTip("Switch profile")
-    self.profile_btn.setFixedSize(112, 32)
+    self.profile_btn.setFixedSize(96, 32)
     self.profile_btn.clicked.connect(self._show_profile_menu)
     dock_lo.addWidget(self.profile_btn)
 
@@ -701,8 +709,8 @@ def build_main_layout(window):
 
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
-    status_pill.setMinimumWidth(120)
-    status_pill.setMaximumWidth(150)
+    status_pill.setMinimumWidth(100)
+    status_pill.setMaximumWidth(130)
     status_pill.setFixedHeight(32)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setStyleSheet(

@@ -1,6 +1,6 @@
 {
-  "version": "3.2.7",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.7/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.7/MacroForge-v3.2.7.zip",
-  "notes": "v3.2.7: Image inspector upgrade - preview frame with gradient/art, change image button + zoom/fit/capture icons, card groups (MATCHING/RETRY/ON FAIL/FAIL TARGET), similarity slider with scale labels, ms units throughout, inspector type badge, selector icon for image actions."
+  "version": "3.2.8",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.8/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.8/MacroForge-v3.2.8.zip",
+  "notes": "v3.2.8: Sidebar width increased to 300px, header controls compacted to fit - profile button 104→96px, search field 58-88→52-80px, status pill 108-140→100-130px."
 }

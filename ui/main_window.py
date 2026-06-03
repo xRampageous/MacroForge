@@ -4,6 +4,7 @@ import sys
 import time
 import json
 import csv
+import base64
 import queue
 import ctypes
 import threading
@@ -15,12 +16,12 @@ from PyQt6.QtWidgets import (
     QGridLayout, QSizePolicy,
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
     QProgressBar, QFrame, QMenu,
-    QSpinBox, QDoubleSpinBox,
+    QSpinBox, QDoubleSpinBox, QSlider,
     QFileDialog, QMessageBox, QInputDialog,
     QDialog, QPlainTextEdit, QListWidget
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon
+from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon, QPixmap
 
 from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager, ActionListModel, HistoryManager
@@ -98,6 +99,12 @@ class MainWindow(QMainWindow):
         self._save_session_timer.setSingleShot(True)
         self._save_session_timer.setInterval(500)
         self._save_session_timer.timeout.connect(self._do_save_session)
+        self._inspector_loading = False
+        self._inspector_autosave_timer = QTimer(self)
+        self._inspector_autosave_timer.setSingleShot(True)
+        self._inspector_autosave_timer.setInterval(350)
+        self._inspector_autosave_timer.timeout.connect(self._autosave_inspector_edits)
+        self._image_preview_pixmap = QPixmap()
         self._update_check_timer = QTimer(self)
         self._update_check_timer.setInterval(60 * 1000)
         self._update_check_timer.timeout.connect(self._check_update_silent)
@@ -140,6 +147,7 @@ class MainWindow(QMainWindow):
         self._profile_menu = None
 
         self._build_ui()
+        self._setup_inspector_autosave()
         self._setup_shortcuts()
         self._setup_timeline_connections()
         # self._setup_hotkeys()  # DISABLED — pynput global hooks interfere with Qt modal dialogs
@@ -276,6 +284,123 @@ class MainWindow(QMainWindow):
             else:
                 self.insp_empty.setText("Use Edit for this block")
                 self.insp_empty.setVisible(True)
+
+    def _decode_action_image_pixmap(self, action) -> QPixmap:
+        pixmap = QPixmap()
+        data = getattr(action, "image_data", "") if action is not None else ""
+        if not data:
+            return pixmap
+        try:
+            raw = base64.b64decode(data)
+            pixmap.loadFromData(raw)
+        except Exception:
+            pixmap = QPixmap()
+        return pixmap
+
+    def _set_image_inspector_preview(self, action=None):
+        label = getattr(self, "image_preview_label", None)
+        if label is None:
+            return
+        pixmap = self._decode_action_image_pixmap(action)
+        self._image_preview_pixmap = pixmap
+        if pixmap.isNull():
+            label.setProperty("has_template", False)
+            label.setPixmap(icon("image", 62, COLORS["image"]).pixmap(62, 62))
+            label.setToolTip("No image template selected")
+            return
+        label.setProperty("has_template", True)
+        label.setToolTip("Current image template")
+        target = label.size()
+        if target.width() < 20 or target.height() < 20:
+            target = QSize(210, 92)
+        label.setPixmap(
+            pixmap.scaled(
+                target,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def _zoom_image_preview(self):
+        pixmap = getattr(self, "_image_preview_pixmap", QPixmap())
+        if pixmap.isNull():
+            self.status("No image template to preview")
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Image template preview")
+        dlg.setStyleSheet(build_stylesheet())
+        lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(14, 14, 14, 14)
+        preview = QLabel()
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setStyleSheet(
+            f"background-color: {COLORS['bg_card']}; border: 1px solid {COLORS['border']}; border-radius: 10px;"
+        )
+        preview.setPixmap(
+            pixmap.scaled(
+                QSize(720, 520),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+        lo.addWidget(preview)
+        dlg.resize(760, 560)
+        dlg.exec()
+
+    def _fit_image_preview(self):
+        if 0 <= self.active_index < self.action_model.rowCount():
+            self._set_image_inspector_preview(self.action_model.get(self.active_index))
+            self.status("Image preview fit to panel")
+        else:
+            self.status("No image action selected")
+
+    def _capture_active_image_region(self):
+        if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
+            self.status("No image action selected")
+            return
+        self._open_image_editor(self.active_index)
+
+    def _setup_inspector_autosave(self):
+        widgets = [
+            getattr(self, name, None)
+            for name in (
+                "ik_key", "ik_dur", "ik_repeat", "ik_label", "ik_hold",
+                "ip_dur", "ip_label",
+                "ic_x", "ic_y", "ic_btn", "ic_rand", "ic_repeat", "ic_label",
+                "ii_sim", "ii_sim_slider", "ii_wait", "ii_retry_count", "ii_retry_delay", "ii_fail_mode", "ii_fail_target",
+                "ig_name", "ig_collapsed", "ig_recovery",
+                "il_label", "il_count", "il_target",
+                "ico_label", "ico_type", "ico_true", "ico_false", "ico_retry_count", "ico_retry_delay", "ico_fail_mode", "ico_fail_target",
+            )
+        ]
+        for widget in widgets:
+            if widget is None:
+                continue
+            try:
+                if isinstance(widget, QLineEdit):
+                    widget.textEdited.connect(self._queue_inspector_autosave)
+                elif isinstance(widget, QComboBox):
+                    widget.currentIndexChanged.connect(self._queue_inspector_autosave)
+                elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                    widget.valueChanged.connect(self._queue_inspector_autosave)
+                elif isinstance(widget, QCheckBox):
+                    widget.toggled.connect(self._queue_inspector_autosave)
+                elif isinstance(widget, QSlider):
+                    widget.valueChanged.connect(self._queue_inspector_autosave)
+            except Exception:
+                pass
+
+    def _queue_inspector_autosave(self, *args):
+        if getattr(self, "_inspector_loading", False):
+            return
+        if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
+            return
+        self._inspector_autosave_timer.start()
+
+    def _autosave_inspector_edits(self):
+        if getattr(self, "_inspector_loading", False):
+            return
+        self._apply_inspector(autosave=True)
 
     # ═══════════════════════════════════════════════════════
     #  KEYBOARD SHORTCUTS
@@ -3548,10 +3673,10 @@ class MainWindow(QMainWindow):
             try:
                 text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
                 icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(120, min(150, text_w + icon_w + 28))
+                target_w = max(108, min(140, text_w + icon_w + 24))
                 if hasattr(self, "status_pill"):
                     self.status_pill.setMinimumWidth(target_w)
-                    self.status_pill.setMaximumWidth(160)
+                    self.status_pill.setMaximumWidth(150)
             except Exception:
                 pass
             # Update status icon based on state
