@@ -72,14 +72,22 @@ def build_main_layout(window):
         collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
         caret.setText("v" if collapsed else "^")
-        caret.setToolTip("Expand panel" if collapsed else "Collapse panel")
-        body_widget.setVisible(not collapsed)
+        caret.setToolTip("Expand down" if collapsed else "Collapse up")
 
-        # True card collapse/expand.  The Inspector card is added with stretch=1,
-        # so a plain body hide can leave a tall empty shell.  Clamp collapsed
-        # cards to their header height, then restore the Inspector to an
-        # expanding policy so it fills the side panel correctly after expanding.
         parent = body_widget.parentWidget()
+        if collapsed:
+            # Collapse upward: keep the header anchored and remove the body from
+            # the vertical layout by clamping it before hiding it.
+            body_widget.setMinimumHeight(0)
+            body_widget.setMaximumHeight(0)
+            body_widget.setVisible(False)
+        else:
+            # Expand downward: reveal the body below the header and release the
+            # height clamp before the parent is allowed to grow again.
+            body_widget.setVisible(True)
+            body_widget.setMinimumHeight(0)
+            body_widget.setMaximumHeight(16777215)
+
         if parent is not None:
             parent_name = parent.objectName() or ""
             if collapsed:
@@ -794,11 +802,28 @@ def build_main_layout(window):
     sb_lo.addWidget(insp_card, stretch=1)
 
     self._side_panel_collapsed = False
+    self._side_panel_auto_collapsed = False
+    self._side_panel_user_collapsed = False
+    self._side_panel_expanded_width = 270
+    self._side_panel_collapsed_width = 22
+    self._side_panel_auto_collapse_width = 910
+    self._side_panel_auto_expand_width = 1040
+    self.sidebar_frame = sidebar
+    self.insp_card = insp_card
 
-    def _set_side_panel_collapsed(collapsed):
+    def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
+        auto = bool(auto)
+        if auto:
+            self._side_panel_auto_collapsed = collapsed
+        else:
+            self._side_panel_user_collapsed = collapsed
+            self._side_panel_auto_collapsed = False
         self._side_panel_collapsed = collapsed
-        sidebar.setFixedWidth(22 if collapsed else 270)
+        target_width = self._side_panel_collapsed_width if collapsed else self._side_panel_expanded_width
+        sidebar.setFixedWidth(target_width)
+        sidebar.setMinimumWidth(target_width)
+        sidebar.setMaximumWidth(target_width)
         margin = 0 if collapsed else 10
         sb_lo.setContentsMargins(margin, 14, margin, 10)
         brand_box.setVisible(not collapsed)
@@ -809,8 +834,12 @@ def build_main_layout(window):
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
 
+    self._set_side_panel_collapsed = _set_side_panel_collapsed
     self.sidebar_collapse_btn.clicked.connect(
-        lambda checked=False: _set_side_panel_collapsed(not bool(getattr(self, "_side_panel_collapsed", False)))
+        lambda checked=False: _set_side_panel_collapsed(
+            not bool(getattr(self, "_side_panel_collapsed", False)),
+            auto=False,
+        )
     )
     main_lo.addWidget(sidebar)
 

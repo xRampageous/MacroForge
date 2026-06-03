@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog,
     QDialog, QPlainTextEdit, QListWidget
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QEvent
 from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon, QPixmap
 
 from engine import ExecutionEngine
@@ -72,7 +72,9 @@ class MainWindow(QMainWindow):
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
         self.setWindowTitle("MacroForge")
-        self.setMinimumSize(985, 1100)
+        # Lower minimum width so the responsive side panel can actually
+        # auto-collapse when the window is narrowed.
+        self.setMinimumSize(760, 760)
         self.resize(985, 1100)
         self.setStyleSheet(build_stylesheet())
 
@@ -160,6 +162,11 @@ class MainWindow(QMainWindow):
         self._profile_menu = None
 
         self._build_ui()
+        try:
+            QApplication.instance().installEventFilter(self)
+        except Exception:
+            pass
+        QTimer.singleShot(0, self._update_responsive_side_panel)
         self._setup_inspector_autosave()
         self._setup_shortcuts()
         self._setup_timeline_connections()
@@ -203,6 +210,98 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         from ui.main_window_layout import build_main_layout
         build_main_layout(self)
+
+    def _deselect_timeline(self, status_text=None):
+        """Clear timeline selection and hide the Inspector selection state."""
+        if getattr(self, "active_index", -1) < 0:
+            try:
+                if hasattr(self, "timeline"):
+                    self.timeline.set_active(-1)
+            except Exception:
+                pass
+            return
+        self.select(-1)
+        if status_text:
+            self.status(status_text)
+
+    def _widget_is_inside(self, widget, parent):
+        while widget is not None:
+            if widget is parent:
+                return True
+            widget = widget.parentWidget() if hasattr(widget, "parentWidget") else None
+        return False
+
+    def _maybe_deselect_from_background_click(self, widget):
+        """Deselect the timeline for non-editor background clicks.
+
+        Interactive controls and the Inspector stay selected so inline edits are
+        not lost.  Empty timeline space is handled directly by TimelineView.
+        """
+        if widget is None or getattr(self, "active_index", -1) < 0:
+            return
+        if not hasattr(widget, "window") or widget.window() is not self:
+            return
+        if hasattr(self, "timeline") and (
+            widget is self.timeline
+            or widget is self.timeline.viewport()
+            or self.timeline.isAncestorOf(widget)
+        ):
+            return
+
+        interactive_types = (
+            QPushButton, QCheckBox, QComboBox, QLineEdit, QSlider,
+            QSpinBox, QDoubleSpinBox, QPlainTextEdit, QListWidget,
+        )
+        if isinstance(widget, interactive_types):
+            return
+
+        inspector = getattr(self, "insp_card", None)
+        if inspector is not None and self._widget_is_inside(widget, inspector):
+            return
+
+        allowed_background_names = {
+            "root", "mf3_content", "header_dock", "toolbar_group",
+            "status_pill", "runtime_log_panel", "add_action_card",
+            "add_action_body", "recorder_card", "recorder_body",
+            "macroforge_brand_box",
+        }
+        name = widget.objectName() if hasattr(widget, "objectName") else ""
+        if name in allowed_background_names or isinstance(widget, QLabel):
+            self._deselect_timeline()
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QEvent.Type.MouseButtonPress:
+                button = event.button() if hasattr(event, "button") else None
+                if button == Qt.MouseButton.LeftButton and hasattr(obj, "parentWidget"):
+                    self._maybe_deselect_from_background_click(obj)
+        except Exception:
+            pass
+        return super().eventFilter(obj, event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_responsive_side_panel()
+
+    def _update_responsive_side_panel(self):
+        """Auto-collapse the side panel at narrow widths and restore it later."""
+        setter = getattr(self, "_set_side_panel_collapsed", None)
+        if setter is None:
+            return
+        try:
+            width = int(self.width())
+            collapse_at = int(getattr(self, "_side_panel_auto_collapse_width", 910))
+            expand_at = int(getattr(self, "_side_panel_auto_expand_width", 1040))
+            collapsed = bool(getattr(self, "_side_panel_collapsed", False))
+            auto_collapsed = bool(getattr(self, "_side_panel_auto_collapsed", False))
+            user_collapsed = bool(getattr(self, "_side_panel_user_collapsed", False))
+
+            if width <= collapse_at and not collapsed:
+                setter(True, auto=True)
+            elif width >= expand_at and auto_collapsed and not user_collapsed:
+                setter(False, auto=True)
+        except Exception:
+            pass
 
     def _make_playback_panel(self):
         from ui.playback_panel import make_playback_panel

@@ -919,6 +919,16 @@ class TimelineView(QListView):
 
         # Left-clicking the far-right kebab on a group row is the only direct
         # collapse/expand gesture. Other clicks select rows only.
+        if event.button() == Qt.MouseButton.LeftButton and not idx.isValid():
+            # Empty timeline space is a deliberate deselect gesture.
+            self.clearSelection()
+            self.setCurrentIndex(QModelIndex())
+            self.selected_indices.clear()
+            self.action_clicked.emit(-1)
+            self.viewport().update()
+            event.accept()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton and idx.isValid():
             if self._row_kind(row) == "group" and self._is_kebab_hit(row, pos):
                 self.group_toggle_requested.emit(row)
