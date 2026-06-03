@@ -1,6 +1,6 @@
 {
-  "version": "3.3.9",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.9/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.9/MacroForge-v3.3.9.zip",
-  "notes": "v3.3.9: Apply import fix patch - updated icons.py, main_window.py and main_window_layout.py with import fixes for dark button styling."
+  "version": "3.4.0",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.0/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.0/MacroForge-v3.4.0.zip",
+  "notes": "v3.4.0: Apply compact add action labels patch - updated icons.py, main_window.py and main_window_layout.py with compact label styling."
 }
