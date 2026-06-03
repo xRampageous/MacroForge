@@ -225,7 +225,7 @@ def build_main_layout(window):
         )
         return combo
 
-    def inspector_group(title, icon_name, color):
+    def inspector_group(title, icon_name, color, show_info=True):
         card = QFrame()
         card.setObjectName(f"inspector_group_{title.lower().replace(' ', '_')}")
         card.setStyleSheet(
@@ -269,10 +269,11 @@ def build_main_layout(window):
         )
         title_lo.addWidget(lbl)
 
-        info = QLabel("ⓘ")
-        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-        title_lo.addWidget(info)
+        if show_info:
+            info = QLabel("ⓘ")
+            info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            info.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+            title_lo.addWidget(info)
         title_lo.addStretch()
         head.addWidget(title_wrap, stretch=1)
 
@@ -618,7 +619,7 @@ def build_main_layout(window):
     ii_lo.setContentsMargins(0, 0, 0, 0)
     ii_lo.setSpacing(7)
 
-    image_card, image_card_lo = inspector_group("IMAGE", "image", C["image"])
+    image_card, image_card_lo = inspector_group("IMAGE", "image", C["image"], show_info=False)
     self.ii_image_card = image_card
 
     preview = QFrame()
@@ -682,11 +683,11 @@ def build_main_layout(window):
     image_card_lo.addWidget(preview)
     ii_lo.addWidget(image_card)
 
-    matching, matching_lo = inspector_group("MATCHING", "target", C["accent"])
+    matching, matching_lo = inspector_group("MATCHING", "target", C["accent"], show_info=False)
     self.ii_matching_card = matching
     sim_row = QHBoxLayout()
     sim_row.setContentsMargins(0, 0, 0, 0)
-    sim_lbl = form_label("Similarity  ⓘ")
+    sim_lbl = form_label("Similarity")
     sim_row.addWidget(sim_lbl)
     sim_row.addStretch()
     self.ii_sim = inspector_value("0.85", 54)
@@ -716,7 +717,7 @@ def build_main_layout(window):
     matching_lo.addLayout(scale_row)
     wait_row = QHBoxLayout()
     wait_row.setContentsMargins(0, 0, 0, 0)
-    wait_row.addWidget(form_label("Wait timeout  ⓘ"))
+    wait_row.addWidget(form_label("Wait timeout"))
     wait_row.addStretch()
     self.ii_wait = inspector_value("1000", 58)
     wait_row.addWidget(self.ii_wait)
@@ -726,7 +727,7 @@ def build_main_layout(window):
     matching_lo.addLayout(wait_row)
     ii_lo.addWidget(matching)
 
-    retry, retry_lo = inspector_group("RETRY", "update", C["accent"])
+    retry, retry_lo = inspector_group("RETRY", "update", C["accent"], show_info=False)
     self.ii_retry_card = retry
     self.ii_retry_count = QSpinBox()
     self.ii_retry_count.setRange(1, 99)
@@ -755,7 +756,7 @@ def build_main_layout(window):
     retry_lo.addLayout(retry_values)
     ii_lo.addWidget(retry)
 
-    on_fail, on_fail_lo = inspector_group("ON FAIL", "condition", C["accent"])
+    on_fail, on_fail_lo = inspector_group("ON FAIL", "condition", C["accent"], show_info=False)
     self.ii_on_fail_card = on_fail
     on_fail_row = QHBoxLayout()
     on_fail_row.setContentsMargins(0, 0, 0, 0)
@@ -767,7 +768,7 @@ def build_main_layout(window):
     on_fail_lo.addLayout(on_fail_row)
     ii_lo.addWidget(on_fail)
 
-    fail_target, fail_target_lo = inspector_group("FAIL TARGET", "target", C["accent"])
+    fail_target, fail_target_lo = inspector_group("FAIL TARGET", "target", C["accent"], show_info=False)
     self.ii_fail_target_card = fail_target
     target_row = QHBoxLayout()
     target_row.setContentsMargins(0, 0, 0, 0)

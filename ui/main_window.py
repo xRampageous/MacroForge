@@ -415,11 +415,11 @@ class MainWindow(QMainWindow):
         btn = getattr(self, "side_panel_lock_btn", None)
         if btn is not None:
             btn.setText("🔒" if locked else "🔓")
-            btn.setToolTip("Unlock side panel width" if locked else "Lock side panel width")
+            btn.setToolTip("Unlock side panel state" if locked else "Lock side panel state")
             btn.setProperty("locked", locked)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
-        self.status("Side panel width locked" if locked else "Side panel width unlocked")
+        self.status("Side panel state locked" if locked else "Side panel state unlocked")
         self._apply_panel_size_locks()
 
     def _toggle_bottom_panel_lock(self):
@@ -430,57 +430,51 @@ class MainWindow(QMainWindow):
         btn = getattr(self, "bottom_panel_lock_btn", None)
         if btn is not None:
             btn.setText("🔒" if locked else "🔓")
-            btn.setToolTip("Unlock bottom panel height" if locked else "Lock bottom panel height")
+            btn.setToolTip("Unlock panel height state" if locked else "Lock panel height state")
             btn.setProperty("locked", locked)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
-        self.status("Bottom panel height locked" if locked else "Bottom panel height unlocked")
+        self.status("Panel height state locked" if locked else "Panel height state unlocked")
         self._apply_panel_size_locks()
 
     def _preferred_panel_lock_height(self):
-        """Window max-height target while the bottom/height lock is enabled.
+        """Max window height while locked, based on the selected action's side panel.
 
-        The lock height follows the side panel's natural content height.  This
-        includes the currently selected Inspector pane, so clicking Key/Image/
-        Loop/etc. can legitimately change the locked max-height.
+        Width is never clamped.  Height is clamped only while a panel lock is
+        active, and it follows the current selected action's Inspector height.
         """
         try:
-            # Recompute the Inspector before measuring the side panel because
-            # it has different natural heights for different selected actions.
-            # Guard against recursion: autosize applies locks, and locks measure
-            # the side-panel height.
             if not bool(getattr(self, "_measuring_panel_lock_height", False)):
                 self._measuring_panel_lock_height = True
                 try:
                     self._autosize_inspector_panel()
                 finally:
                     self._measuring_panel_lock_height = False
+
             sidebar = getattr(self, "sidebar_frame", None)
             side_h = 0
             if sidebar is not None:
                 sidebar.updateGeometry()
                 side_h = max(
-                    sidebar.sizeHint().height(),
-                    sidebar.minimumSizeHint().height(),
-                    sidebar.height() if sidebar.isVisible() else 0,
+                    int(sidebar.sizeHint().height()),
+                    int(sidebar.minimumSizeHint().height()),
                 )
 
-            # Keep enough room for the bottom playback panel when visible.  The
-            # side panel is the primary source of truth; this is only a safety
-            # floor so the lock never clamps below usable window chrome/content.
             playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 188
-            content_floor = max(self.minimumSizeHint().height(), self.minimumHeight(), 560)
-            target = max(side_h + 8, content_floor, playback_h + 360)
-            return max(560, min(1600, int(target)))
+            content_floor = max(int(self.minimumHeight()), 420, playback_h + 220)
+            target = max(side_h + 8, content_floor)
+            return max(int(self.minimumHeight()), min(1600, int(target)))
         except Exception:
-            return max(560, int(self.height()))
-
+            return max(int(self.minimumHeight()), int(self.height()))
 
     def _apply_panel_size_locks(self):
-        """Panel locks preserve panel state only; they never clamp window size."""
+        """Panel locks freeze panel state and clamp height to selected action size."""
         try:
             max_w = 16777215
-            max_h = 16777215
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                max_h = self._preferred_panel_lock_height()
+            else:
+                max_h = 16777215
             if self.maximumWidth() != max_w or self.maximumHeight() != max_h:
                 self.setMaximumSize(max_w, max_h)
         except Exception:
