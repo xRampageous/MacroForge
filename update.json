@@ -1,6 +1,6 @@
 {
-  "version": "3.3.6",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.6/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.6/MacroForge-v3.3.6.zip",
-  "notes": "v3.3.6: Add action button UI refinement - compact stacked layout with icon+text labels, sidebar narrowed to 272px, window width increased to 985px, button sizes standardized (90x45 single, 188x45 group)."
+  "version": "3.3.7",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.7/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.7/MacroForge-v3.3.7.zip",
+  "notes": "v3.3.7: Neon button upgrade - add action buttons now use transparent neon PNG backgrounds (blue for key, teal for click, grey for delay, purple for image, gold for condition, blue for loop, wide purple for group) with fallback to gradient styling if images unavailable."
 }
