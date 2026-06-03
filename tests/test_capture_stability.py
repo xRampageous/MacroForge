@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
 from PyQt6.QtCore import QEvent, QPoint, QTimer
-from PyQt6.QtWidgets import QApplication, QDialog, QMenu
+from PyQt6.QtWidgets import QApplication, QDialog, QMenu, QPushButton
 
 from debugger import DebugLogger
 from models import Action, ActionListModel, ProfileManager
@@ -342,6 +342,40 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertEqual(window.playback_panel.height(), 188)
             self._dispose_window(window)
 
+    def test_autosave_chip_marks_unsaved_then_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_manager = ProfileManager()
+            profile_manager.base_dir = tmpdir
+            profile_manager.profiles_dir = os.path.join(tmpdir, "profiles")
+            profile_manager.settings_file = os.path.join(tmpdir, "settings.json")
+            os.makedirs(profile_manager.profiles_dir, exist_ok=True)
+            patches = (
+                patch.object(MainWindow, "_check_update_silent"),
+                patch.object(MainWindow, "load_last_session"),
+                patch.object(MainWindow, "_restore_window_geometry"),
+                patch.object(MainWindow, "_setup_tray"),
+            )
+            for item in patches:
+                item.start()
+                self.addCleanup(item.stop)
+            window = MainWindow(profile_manager=profile_manager)
+            window.save_session()
+            self.assertEqual(window.autosave_label.text(), "Unsaved")
+            window._save_session_timer.stop()
+            window._do_save_session()
+            self.assertEqual(window.autosave_label.text(), "Saved")
+            self._dispose_window(window)
+
+    def test_playback_status_lives_in_bottom_panel_not_top_status(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.status("Profile 'alpha' loaded")
+            window.playback_feedback("Playing · Row 1 Enter")
+            self.app.processEvents()
+            self.assertEqual(window.status_text.text(), "Profile 'alpha' loaded")
+            self.assertEqual(window.playback_feedback_label.text(), "Playing · Row 1 Enter")
+            self._dispose_window(window)
+
     def test_compact_layout_keeps_header_and_bottom_panel_readable_at_target_size(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
@@ -617,6 +651,41 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertIn("LIBRARY", captured)
             self.assertIn("Profile / macro library     Ctrl+Alt+P", captured)
             self.assertIn("Macro health / pre-flight     Ctrl+Shift+P", captured)
+            self.assertNotIn("Export MacroForge macro…", captured)
+            self.assertNotIn("Import MacroForge macro…", captured)
+            self._dispose_window(window)
+
+    def test_profile_library_smoke_exposes_repair_import_export_controls(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_manager = ProfileManager()
+            profile_manager.base_dir = tmpdir
+            profile_manager.profiles_dir = os.path.join(tmpdir, "profiles")
+            profile_manager.settings_file = os.path.join(tmpdir, "settings.json")
+            os.makedirs(profile_manager.profiles_dir, exist_ok=True)
+            profile_manager.save_profile([Action("a", 0.1)], {}, "alpha")
+            patches = (
+                patch.object(MainWindow, "_check_update_silent"),
+                patch.object(MainWindow, "load_last_session"),
+                patch.object(MainWindow, "_restore_window_geometry"),
+                patch.object(MainWindow, "_setup_tray"),
+            )
+            for item in patches:
+                item.start()
+                self.addCleanup(item.stop)
+            window = MainWindow(profile_manager=profile_manager)
+            captured = {}
+
+            def capture_dialog(dlg):
+                captured["title"] = dlg.windowTitle()
+                captured["buttons"] = [button.text() for button in dlg.findChildren(QPushButton)]
+                return QDialog.DialogCode.Accepted
+
+            with patch.object(QDialog, "exec", capture_dialog):
+                window.open_profile_library()
+
+            self.assertEqual(captured["title"], "Profile / Macro Library")
+            for label in ("Open", "New", "Duplicate", "Rename", "Repair", "Export", "Import", "Delete", "Close"):
+                self.assertIn(label, captured["buttons"])
             self._dispose_window(window)
 
     def test_profile_switch_loads_actions_and_exact_speed_settings(self):

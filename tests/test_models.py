@@ -141,6 +141,29 @@ class TestProfileManager(unittest.TestCase):
             reloaded = [Action.from_dict(raw) for raw in data["actions"]]
             self.assertEqual([action.key for action in reloaded], ["b", "c", "a"])
 
+    def test_profile_validation_repairs_malformed_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pm = ProfileManager()
+            pm.base_dir = tmpdir
+            pm.profiles_dir = os.path.join(tmpdir, "profiles")
+            pm.settings_file = os.path.join(tmpdir, "settings.json")
+            os.makedirs(pm.profiles_dir, exist_ok=True)
+            with open(pm._profile_path("broken"), "w", encoding="utf-8") as f:
+                json.dump({"profile": "", "actions": {"bad": True}, "settings": [], "timestamp": ""}, f)
+
+            ok, repaired, issues = pm.validate_profile("broken")
+            self.assertFalse(ok)
+            self.assertIn("actions was not a list", issues)
+            self.assertEqual(repaired["actions"], [])
+            self.assertEqual(repaired["settings"], {})
+
+            repaired_ok, repair_issues = pm.repair_profile("broken")
+            self.assertTrue(repaired_ok)
+            self.assertTrue(repair_issues)
+            loaded = pm.load_profile("broken")
+            self.assertEqual(loaded["profile"], "broken")
+            self.assertEqual(loaded["actions"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

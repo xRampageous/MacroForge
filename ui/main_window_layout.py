@@ -583,6 +583,15 @@ def build_main_layout(window):
     self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     self.status_text.setWordWrap(False)
     sp_lo.addWidget(self.status_text, stretch=1)
+    self.autosave_label = QLabel("Saved")
+    self.autosave_label.setObjectName("autosave_label")
+    self.autosave_label.setStyleSheet(
+        f"QLabel#autosave_label {{ color: {C['success']}; font-size: 10px; "
+        f"background-color: {C['bg_card']}; border: 1px solid {C['border']}; "
+        "border-radius: 7px; padding: 2px 6px; }}"
+    )
+    self.autosave_label.setToolTip("Profile autosave state")
+    sp_lo.addWidget(self.autosave_label)
     dock_lo.addWidget(status_pill, stretch=0)
 
     # Right cluster: profile selector stays with check-update and menu buttons.

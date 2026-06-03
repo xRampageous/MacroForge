@@ -964,6 +964,9 @@ class MainWindow(QMainWindow):
     def save_session(self):
         if not self.auto_save_enabled:
             return
+        if hasattr(self, "autosave_label"):
+            self.autosave_label.setText("Unsaved")
+            self.autosave_label.setStyleSheet(self.autosave_label.styleSheet().replace(COLORS["success"], COLORS["image"]))
         self._save_session_timer.start()
 
     def _do_save_session(self):
@@ -978,6 +981,9 @@ class MainWindow(QMainWindow):
         self.session_manager.save_profile(self.action_model.actions(), settings)
         self._write_recovery_snapshot(clean_shutdown=False)
         self._save_window_geometry()
+        if hasattr(self, "autosave_label"):
+            self.autosave_label.setText("Saved")
+            self.autosave_label.setStyleSheet(self.autosave_label.styleSheet().replace(COLORS["image"], COLORS["success"]))
 
     def _save_window_geometry(self):
         """Persist window geometry GLOBALLY (independent of profile)."""
@@ -1920,17 +1926,17 @@ class MainWindow(QMainWindow):
         title = QLabel("Profile / Macro Library")
         title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 900;")
         lo.addWidget(title)
-        hint = QLabel("Manage profiles here. The top profile selector stays for quick switching; the menu now points here to avoid duplicate profile controls.")
+        hint = QLabel("Manage, validate, repair, import, and export profiles here. Macro import/export lives in the macro editor to keep the top menu clean.")
         hint.setWordWrap(True); hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
         lo.addWidget(hint)
         items = QListWidget(); lo.addWidget(items, 1)
 
         def profile_summary(name):
-            data = self.session_manager.load_profile(name) or {}
+            ok, data, issues = self.session_manager.validate_profile(name)
             actions = data.get("actions", []) or []
-            settings = data.get("settings", {}) or {}
             ts = data.get("timestamp", "never")
-            return f"{'✓ ' if name == self.session_manager.active else '  '}{name}  ·  {len(actions)} rows  ·  last edited {ts[:19]}"
+            health = "OK" if ok else f"Needs repair: {', '.join(issues[:2])}"
+            return f"{'✓ ' if name == self.session_manager.active else '  '}{name}  ·  {len(actions)} rows  ·  {health}  ·  last edited {ts[:19]}"
 
         def reload_items():
             items.clear()
@@ -1957,6 +1963,49 @@ class MainWindow(QMainWindow):
             self.session_manager.save_profile([Action.from_dict(a) for a in data.get("actions", [])], data.get("settings", {}), name.strip())
             reload_items(); self.status(f"Duplicated profile '{src}'")
 
+        def repair_selected():
+            ok, issues = self.session_manager.repair_profile(selected_name())
+            reload_items()
+            if ok:
+                self.status(f"Repaired profile '{selected_name()}'")
+            else:
+                QMessageBox.warning(dlg, "Repair Profile", "\n".join(issues))
+
+        def export_selected():
+            name = selected_name()
+            data = self.session_manager.load_profile(name)
+            if not data:
+                QMessageBox.warning(dlg, "Export Profile", f"Profile '{name}' could not be loaded.")
+                return
+            default_path = os.path.join(os.path.expanduser("~"), f"{name}.macroforge-profile.json")
+            path, _ = QFileDialog.getSaveFileName(dlg, "Export Profile", default_path, "MacroForge Profile (*.macroforge-profile.json);;JSON (*.json)")
+            if not path:
+                return
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                self.status(f"Exported profile '{name}'")
+            except Exception as exc:
+                QMessageBox.critical(dlg, "Export Profile", str(exc))
+
+        def import_profile():
+            path, _ = QFileDialog.getOpenFileName(dlg, "Import Profile", "", "MacroForge Profile (*.macroforge-profile.json);;JSON (*.json)")
+            if not path:
+                return
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                _ok, data, _issues = self.session_manager.validate_profile_data(raw)
+                name = str(data.get("profile") or os.path.splitext(os.path.basename(path))[0]).strip()
+                name, ok = QInputDialog.getText(dlg, "Import Profile", "Profile name:", text=name)
+                if not ok or not name.strip():
+                    return
+                self.session_manager.save_profile([Action.from_dict(a) for a in data.get("actions", [])], data.get("settings", {}), name.strip())
+                reload_items()
+                self.status(f"Imported profile '{name.strip()}'")
+            except Exception as exc:
+                QMessageBox.critical(dlg, "Import Profile", str(exc))
+
         def rename_selected():
             self.session_manager.switch_profile(selected_name())
             self._rename_profile_dialog(); reload_items(); self._refresh_profile_btn()
@@ -1971,7 +2020,7 @@ class MainWindow(QMainWindow):
 
         reload_items()
         btn_row = QHBoxLayout(); btn_row.setSpacing(6)
-        for text, slot in (("Open", open_selected), ("New", new_profile), ("Duplicate", duplicate_profile), ("Rename", rename_selected), ("Delete", delete_selected)):
+        for text, slot in (("Open", open_selected), ("New", new_profile), ("Duplicate", duplicate_profile), ("Rename", rename_selected), ("Repair", repair_selected), ("Export", export_selected), ("Import", import_profile), ("Delete", delete_selected)):
             b = QPushButton(text); b.clicked.connect(slot); btn_row.addWidget(b)
         btn_row.addStretch()
         close = QPushButton("Close"); close.clicked.connect(dlg.accept); btn_row.addWidget(close)
@@ -2083,7 +2132,6 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText("Playing")
         self.playback_feedback("Running selected block")
         self.engine.infinite_loop = False
         self.engine.loops = 1
@@ -2312,7 +2360,6 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText("Playing")
         self.playback_feedback("Starting macro…")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
@@ -2340,7 +2387,6 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
         self.status_dot.set_color(COLORS["text_dark"])
-        self.status_text.setText("Ready")
         self.playback_feedback("Stopped")
         if self.session_start_time:
             self.session_elapsed_time += time.time() - self.session_start_time
@@ -2351,9 +2397,8 @@ class MainWindow(QMainWindow):
         self._diag(f"[STATUS] {msg}")
         text = str(msg or "")
         lower = text.lower()
-        # Keep noisy row/wait/loop playback feedback out of the top header.
-        # The top capsule now stays as Ready/Playing/Paused/Done/Error while
-        # the playback dock owns timeline-specific messages.
+        # Keep playback feedback out of the top header. The top capsule is
+        # reserved for app/profile/save state and errors.
         if getattr(self.engine, "running", False):
             self._playback_feedback_msg.emit(text)
             if any(word in lower for word in ("error", "failed", "stopped", "not found", "warning")):
@@ -2403,7 +2448,6 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         detail = f"{active_group_label} · Row {display_idx + 1} {action_name}" if active_group_label else f"Row {display_idx + 1} {action_name}"
-        self.status("Playing")
         self.playback_feedback(f"Playing · {detail}")
         group_log = f" in {active_group_label}" if active_group_label else ""
         self._diag(f"[PLAY] Timeline row {display_idx + 1}{group_log} active for ~{adjusted_dur:.2f}s")
@@ -2436,12 +2480,10 @@ class MainWindow(QMainWindow):
                         label = f"Paused · {meta['badge']} {meta['name']}"
             except Exception:
                 pass
-            self.status_text.setText("Paused")
             self.playback_feedback(label)
         else:
             self.pause_btn.setIcon(icon("pause", 14, COLORS["text_inverse"]))
             self.pause_btn.setToolTip("Pause (Esc)")
-            self.status_text.setText("Playing")
             self.playback_feedback("Resumed")
 
     def _complete_cb(self):
@@ -2459,7 +2501,6 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(100)
         self.progress_label.setText("100%")
         self.status_dot.set_color(COLORS["text_dark"])
-        self.status_text.setText("Test done" if was_single_test else "Finished")
         self.playback_feedback("Selected action test complete" if was_single_test else "Macro complete")
         self._diag("[TEST] Selected action test complete" if was_single_test else "[PLAY] Macro complete")
         self._single_test_active = False
@@ -2652,7 +2693,6 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText("Testing")
         self.playback_feedback(f"Testing row {idx + 1}")
 
         self.engine.actions = [action]
@@ -2705,7 +2745,6 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText("Testing")
         self.playback_feedback(f"Testing from row {idx + 1}")
 
         self.engine.infinite_loop = False

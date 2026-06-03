@@ -227,14 +227,14 @@ def make_playback_panel(window):
     controls_row.addWidget(self.collapse_playback_btn, alignment=Qt.AlignmentFlag.AlignTop)
     dlo.addLayout(controls_row)
 
-    self.playback_feedback_label = QLabel("Timeline feedback will appear here")
+    self.playback_feedback_label = QLabel("Playback ready")
     self.playback_feedback_label.setObjectName("playback_feedback")
     self.playback_feedback_label.setFixedHeight(28)
     self.playback_feedback_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.playback_feedback_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-    self.playback_feedback_label.setToolTip("Live playback timeline feedback")
+    self.playback_feedback_label.setToolTip("Playback status")
     self.playback_feedback_label.setStyleSheet(
-        f"QLabel#playback_feedback {{ background-color: {C['bg_tertiary']}; color: {C['text_dim']}; "
+        f"QLabel#playback_feedback {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
         f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 12px; }}"
     )
     dlo.addWidget(self.playback_feedback_label)

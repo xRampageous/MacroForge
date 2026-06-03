@@ -106,11 +106,7 @@ def show_action_menu(window):
     menu.addAction("Save     Ctrl+S", lambda: (self._do_save_session(), self.status(f"Profile '{self.session_manager.active}' saved")))
     menu.addAction("Open macro editor     Ctrl+E", self.open_macro_editor)
     menu.addAction("Macro variables     Ctrl+Alt+V", self.open_variables_dialog)
-    menu.addAction("Export MacroForge macro…", self.export_macroforge)
-    menu.addAction("Import MacroForge macro…", self.import_macroforge)
     menu.addAction("Recovery / version history…", self.open_recovery_history)
-    menu.addAction("Export CSV…", self.export_csv)
-    menu.addAction("Import CSV…", self.import_csv)
     menu.addSeparator()
 
     add_heading("Playback")

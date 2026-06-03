@@ -1,6 +1,6 @@
 {
-  "version": "3.2.3",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.3/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.3/MacroForge-v3.2.3.zip",
-  "notes": "v3.2.3: Fixes profile switching/loading after the Profile / Macro Library refactor by restoring profile menu helper exports, preserving quick profile switching, and loading exact saved speed settings such as 0.75x and 1.25x. Adds regression coverage for real profile switch/load behavior."
+  "version": "3.2.4",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.4/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.4/MacroForge-v3.2.4.zip",
+  "notes": "v3.2.4: Adds Profile Library smoke coverage, profile validation/repair, profile import/export controls, autosave Saved/Unsaved clarity, bottom-panel playback status, top status cleanup, menu import/export dedupe, and removes stale snapshot UI modules."
 }

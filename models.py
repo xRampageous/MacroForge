@@ -362,6 +362,50 @@ class ProfileManager:
         except Exception:
             return [self.DEFAULT_PROFILE]
 
+    def validate_profile_data(self, data: Any) -> tuple[bool, Dict[str, Any], list]:
+        """Return (is_valid, repaired_data, issues) for a profile JSON payload."""
+        issues = []
+        if not isinstance(data, dict):
+            issues.append("profile data is not an object")
+            data = {}
+        repaired = dict(data)
+        if not isinstance(repaired.get("profile", ""), str) or not repaired.get("profile", "").strip():
+            repaired["profile"] = self.DEFAULT_PROFILE
+            issues.append("missing profile name")
+        if not isinstance(repaired.get("actions", []), list):
+            repaired["actions"] = []
+            issues.append("actions was not a list")
+        if not isinstance(repaired.get("settings", {}), dict):
+            repaired["settings"] = {}
+            issues.append("settings was not an object")
+        if not isinstance(repaired.get("timestamp", ""), str) or not repaired.get("timestamp", ""):
+            repaired["timestamp"] = datetime.now().isoformat()
+            issues.append("missing timestamp")
+        return not issues, repaired, issues
+
+    def validate_profile(self, name: str = None) -> tuple[bool, Dict[str, Any], list]:
+        name = name or self._active
+        try:
+            path = self._profile_path(name)
+            if not os.path.exists(path):
+                return False, {"profile": name, "actions": [], "settings": {}, "timestamp": datetime.now().isoformat()}, ["profile file is missing"]
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            return self.validate_profile_data(raw)
+        except Exception as exc:
+            return False, {"profile": name, "actions": [], "settings": {}, "timestamp": datetime.now().isoformat()}, [f"profile could not be read: {exc}"]
+
+    def repair_profile(self, name: str = None) -> tuple[bool, list]:
+        name = name or self._active
+        _ok, repaired, issues = self.validate_profile(name)
+        try:
+            repaired["profile"] = name
+            with open(self._profile_path(name), "w", encoding="utf-8") as f:
+                json.dump(repaired, f, indent=2)
+            return True, issues
+        except Exception as exc:
+            return False, issues + [f"profile could not be repaired: {exc}"]
+
     def save_profile(self, actions, settings, name: str = None):
         name = name or self._active
         try:
@@ -382,7 +426,9 @@ class ProfileManager:
             path = self._profile_path(name)
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    _ok, repaired, _issues = self.validate_profile_data(json.load(f))
+                    repaired["profile"] = name
+                    return repaired
         except Exception:
             pass
         return None
