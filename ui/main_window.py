@@ -282,6 +282,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_responsive_side_panel()
+        self._autosize_inspector_panel()
 
     def _update_responsive_side_panel(self):
         """Auto-collapse the side panel at narrow widths and restore it later."""
@@ -499,6 +500,52 @@ class MainWindow(QMainWindow):
             else:
                 self.insp_empty.setText("Use Edit for this block")
                 self.insp_empty.setVisible(True)
+        self._autosize_inspector_panel()
+
+    def _autosize_inspector_panel(self):
+        """Resize Inspector to the selected action pane instead of stretching.
+
+        The Inspector must stay immediately below the panels above it.  It uses
+        Maximum vertical policy and the bottom spacer consumes leftover height,
+        so collapse is visually upward into the Inspector header and expansion
+        grows downward from that header.
+        """
+        card = getattr(self, "insp_card", None)
+        body = getattr(self, "insp_body", None)
+        if card is None:
+            return
+
+        try:
+            card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+            if body is not None:
+                body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+
+            if body is not None and not body.isVisible():
+                # Collapsed Inspector: clamp to the header-only size.
+                card.setMinimumHeight(0)
+                card.setMaximumHeight(max(32, card.minimumSizeHint().height() + 2))
+            else:
+                # Expanded Inspector: release clamps, compute current selected
+                # pane size, then clamp to that natural size to avoid a tall
+                # empty shell.
+                if body is not None:
+                    body.setMinimumHeight(0)
+                    body.setMaximumHeight(16777215)
+                card.setMinimumHeight(0)
+                card.setMaximumHeight(16777215)
+                card.updateGeometry()
+                if body is not None:
+                    body.updateGeometry()
+                natural_h = max(card.sizeHint().height(), card.minimumSizeHint().height())
+                if natural_h <= 0:
+                    natural_h = 140
+                card.setMaximumHeight(natural_h + 4)
+
+            card.updateGeometry()
+            if hasattr(self, "sidebar_frame"):
+                self.sidebar_frame.updateGeometry()
+        except Exception:
+            pass
 
     def _decode_action_image_pixmap(self, action) -> QPixmap:
         pixmap = QPixmap()
@@ -1474,6 +1521,8 @@ class MainWindow(QMainWindow):
                     self.inspector_label.clear()
                     self.inspector_label.setEnabled(False)
                     self.inspector_label.blockSignals(False)
+                self._autosize_inspector_panel()
+                QTimer.singleShot(0, self._autosize_inspector_panel)
                 self._set_image_inspector_preview(None)
                 self._show_inspector(False)
                 if hasattr(self.timeline, "set_link_targets"):
@@ -1512,6 +1561,7 @@ class MainWindow(QMainWindow):
                 self.inspector_label.setEnabled(True)
                 self.inspector_label.blockSignals(False)
             self._show_inspector(True, action.action_type)
+            QTimer.singleShot(0, self._autosize_inspector_panel)
             if action.action_type == "key":
                 self.ik_key.setText(action.key)
                 self.ik_dur.setText(str(action.duration))

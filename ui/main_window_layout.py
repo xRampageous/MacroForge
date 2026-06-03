@@ -98,10 +98,15 @@ def build_main_layout(window):
                 parent.setMinimumHeight(0)
                 parent.setMaximumHeight(16777215)
                 if parent_name == "inspector_card":
-                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+                    # The Inspector is content-sized.  Never let it stretch to
+                    # the bottom of the side panel; a bottom spacer absorbs
+                    # unused height so the header stays under the panels above.
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
                 else:
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
+            if parent_name == "inspector_card" and hasattr(self, "_autosize_inspector_panel"):
+                self._autosize_inspector_panel()
         body_widget.updateGeometry()
 
     def section_header(text, icon_name, color, body_widget=None):
@@ -428,11 +433,14 @@ def build_main_layout(window):
     self._recorder["actions_lbl"] = self.rec_actions
 
     insp_card = panel_frame("inspector_card")
+    insp_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
     insp_lo = QVBoxLayout(insp_card)
     insp_lo.setContentsMargins(12, 10, 12, 12)
     insp_lo.setSpacing(8)
     insp_body = QWidget(insp_card)
     insp_body.setObjectName("inspector_body")
+    insp_body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+    self.insp_body = insp_body
     insp_body_lo = QVBoxLayout(insp_body)
     insp_body_lo.setContentsMargins(0, 0, 0, 0)
     insp_body_lo.setSpacing(8)
@@ -797,9 +805,12 @@ def build_main_layout(window):
         pane.setVisible(False)
         self._insp_lo.addWidget(pane)
     insp_body_lo.addLayout(self._insp_lo)
-    insp_body_lo.addStretch()
     insp_lo.addWidget(insp_body)
-    sb_lo.addWidget(insp_card, stretch=1)
+    sb_lo.addWidget(insp_card, stretch=0)
+    self._side_panel_bottom_spacer = QWidget()
+    self._side_panel_bottom_spacer.setObjectName("side_panel_bottom_spacer")
+    self._side_panel_bottom_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+    sb_lo.addWidget(self._side_panel_bottom_spacer, stretch=1)
 
     self._side_panel_collapsed = False
     self._side_panel_auto_collapsed = False
