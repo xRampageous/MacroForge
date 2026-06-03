@@ -1,6 +1,6 @@
 {
-  "version": "3.1.7",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.7/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.7/MacroForge-v3.1.7.zip",
-  "notes": "v3.1.7: Group timeline - right-click group/folder context menu, multi-select timeline, create group from contiguous rows, collapsible group headers, G1/G2 badges, group rows skipped during playback, loop targets support group headers, preflight auto-fixes, drag inherits group context, import/export preserves group metadata."
+  "version": "3.1.8",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.8/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.8/MacroForge-v3.1.8.zip",
+  "notes": "v3.1.8: UI refinement - group collapse/expand locked to three-dot hit zone, drag locked to grip zone, fused header row, profile selector moved to right-side header, auto-sizing status capsule, reworked playback panel spacing, longer progress bar, improved Speed/Loops controls readability."
 }

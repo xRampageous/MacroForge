@@ -179,13 +179,13 @@ class MainWindow(QMainWindow):
         return make_playback_panel(self)
 
     def _make_stat_chip(self, icon_name, title, value, color, tooltip):
-        """Static bottom-panel stat chip: clear icon + value only."""
+        """Static bottom-panel stat chip: compact, readable value-only chip."""
         C = COLORS
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 58, "Loops": 58, "Seq": 82, "Time": 98}.get(title, 60))
-        chip.setFixedHeight(36)
+        chip.setFixedWidth({"Played": 50, "Loops": 50, "Seq": 66, "Time": 78}.get(title, 54))
+        chip.setFixedHeight(30)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
@@ -194,19 +194,19 @@ class MainWindow(QMainWindow):
         )
 
         lo = QHBoxLayout(chip)
-        lo.setContentsMargins(5, 3, 5, 3)
-        lo.setSpacing(4)
+        lo.setContentsMargins(4, 2, 4, 2)
+        lo.setSpacing(3)
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(18, 18)
-        ico.setPixmap(icon(icon_name, 17, color).pixmap(17, 17))
+        ico.setFixedSize(15, 15)
+        ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 12px; font-weight: 950; background: transparent;"
+            f"color: {C['text']}; font-size: 13px; background: transparent;"
         )
         lo.addWidget(value_lbl)
         return chip, value_lbl
@@ -296,6 +296,7 @@ class MainWindow(QMainWindow):
         self.timeline.action_double_clicked.connect(self._open_active_dialog)
         self.timeline.action_dragged.connect(self.move_action_to)
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
+        self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
 
     def _selected_rows(self, fallback=None):
         """Return current timeline multi-selection as stable source-model rows."""
@@ -2576,6 +2577,18 @@ class MainWindow(QMainWindow):
         # Thread-safe: always marshal Qt widget access to main thread
         def _update():
             self.status_text.setText(msg)
+            self.status_text.setToolTip(msg)
+            # Keep the centered status capsule readable without letting it
+            # crowd the profile/update/menu cluster on narrow windows.
+            try:
+                text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
+                icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
+                target_w = max(180, min(360, text_w + icon_w + 42))
+                if hasattr(self, "status_pill"):
+                    self.status_pill.setMinimumWidth(target_w)
+                    self.status_pill.setMaximumWidth(380)
+            except Exception:
+                pass
             # Update status icon based on state
             msg_lower = msg.lower()
             C = COLORS

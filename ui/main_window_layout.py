@@ -353,9 +353,9 @@ def build_main_layout(window):
     content_lo.setContentsMargins(0, 0, 0, 0)
     content_lo.setSpacing(0)
 
-    # ── Unified header dock ──
+    # ── Streamlined command/header dock ──
     header_shell = QFrame()
-    header_shell.setFixedHeight(86)
+    header_shell.setFixedHeight(62)
     header_shell.setStyleSheet(f"background-color: {C['bg']}; border: none;")
     shell_lo = QVBoxLayout(header_shell)
     shell_lo.setContentsMargins(8, 6, 8, 0)
@@ -365,200 +365,138 @@ def build_main_layout(window):
     header_dock.setObjectName("header_dock")
     header_dock.setStyleSheet(
         f"QFrame#header_dock {{ background-color: {C['bg_card']}; "
-        f"border: 1px solid {C['border']}; border-radius: 12px; }}"
+        f"border: 1px solid {C['border_light']}; border-radius: 12px; }}"
     )
-    dock_lo = QVBoxLayout(header_dock)
-    dock_lo.setContentsMargins(10, 6, 10, 5)
-    dock_lo.setSpacing(2)
+    dock_lo = QHBoxLayout(header_dock)
+    dock_lo.setContentsMargins(10, 7, 10, 7)
+    dock_lo.setSpacing(8)
 
-    title = QFrame()
-    title.setObjectName("topbar")
-    title.setStyleSheet("QFrame#topbar { background: transparent; border: none; }")
-    self.header_topbar = title
-    tl = QHBoxLayout(title)
-    tl.setContentsMargins(0, 0, 0, 0)
-    tl.setSpacing(0)
-
+    # Left command cluster. The old TIMELINE title/subtitle was removed so the
+    # header is one clean control surface instead of stacked panels.
     left_cluster = QFrame()
     left_cluster.setStyleSheet("background: transparent; border: none;")
-    left_cluster.setFixedWidth(134)
     left_lo = QHBoxLayout(left_cluster)
     left_lo.setContentsMargins(0, 0, 0, 0)
-    left_lo.setSpacing(8)
+    left_lo.setSpacing(6)
 
-    # Profile switcher (left)
-    self.profile_btn = QPushButton("Default")
-    self.profile_btn.setObjectName("profile_switcher")
-    self.profile_btn.setIcon(icon("folder", 18, C["accent"]))
-    self.profile_btn.setIconSize(QSize(16, 16))
-    self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    self.profile_btn.setToolTip("Switch profile")
-    self.profile_btn.setStyleSheet(
-        f"QPushButton#profile_switcher {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 7px 12px; "
-        f"font-size: 13px; font-weight: 500; text-align: left; }} "
-        f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+    def header_icon_button(obj, icon_name, color, tooltip, slot):
+        btn = QPushButton()
+        btn.setObjectName(obj)
+        btn.setIcon(icon(icon_name, 16, color))
+        btn.setIconSize(QSize(16, 16))
+        btn.setToolTip(tooltip)
+        btn.setFixedSize(34, 34)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(
+            f"QPushButton#{obj} {{ background-color: {C['bg_tertiary']}; color: {color}; "
+            f"border: 1px solid {C['border']}; border-radius: 9px; padding: 0; }}"
+            f"QPushButton#{obj}:hover {{ border-color: {color}; background-color: {C['bg_hover']}; }}"
+            f"QPushButton#{obj}:pressed {{ background-color: {C['bg_pressed']}; }}"
+        )
+        btn.clicked.connect(slot)
+        return btn
+
+    self.editor_mode_btn = header_icon_button("editor_mode_btn", "edit", C["accent"], "Open macro editor mode", self.open_macro_editor)
+    left_lo.addWidget(self.editor_mode_btn)
+
+    self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report)
+    left_lo.addWidget(self.preflight_btn)
+
+    self.compact_view_btn = header_icon_button("view_toggle", "menu", C["accent"], "Timeline list view", lambda: None)
+    self.compact_view_btn.setCheckable(True)
+    self.compact_view_btn.setChecked(True)
+    left_lo.addWidget(self.compact_view_btn)
+
+    self.tl_search = QLineEdit()
+    self.tl_search.setPlaceholderText("Search actions…")
+    self.tl_search.setClearButtonEnabled(True)
+    self.tl_search.setMinimumWidth(84)
+    self.tl_search.setMaximumWidth(150)
+    self.tl_search.setFixedHeight(34)
+    self.tl_search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    self.tl_search.addAction(icon("search", 16, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
+    self.tl_search.setStyleSheet(
+        f"QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 4px 10px; font-size: 12px; }} "
+        f"QLineEdit:focus {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
     )
-    self.profile_btn.setFixedSize(118, 36)
-    self.profile_btn.clicked.connect(self._show_profile_menu)
-    left_lo.addWidget(self.profile_btn)
-    left_lo.addStretch()
-    tl.addWidget(left_cluster)
-    tl.addStretch()
+    self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
+    left_lo.addWidget(self.tl_search, stretch=1)
+    dock_lo.addWidget(left_cluster, stretch=1)
 
-    # Status indicator - centered, wider, larger font, with icon indicators
+    # Hidden compatibility label for code/tests that update macro_summary. It is
+    # no longer displayed under a TIMELINE heading.
+    self.macro_summary = QLabel("0 actions · 0 image checks · ~0s")
+    self.macro_summary.setVisible(False)
+
+    # Center status capsule: auto-resizes up to a cap as status text changes.
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
+    status_pill.setMinimumWidth(180)
+    status_pill.setMaximumWidth(360)
+    status_pill.setFixedHeight(40)
+    status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setStyleSheet(
         f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border_light']}; border-radius: 8px; }}"
+        f"border: 1px solid {C['border_light']}; border-radius: 10px; }}"
     )
-    status_pill.setFixedSize(270, 44)
     self.status_pill = status_pill
     sp_lo = QHBoxLayout(status_pill)
-    sp_lo.setContentsMargins(16, 0, 16, 0)
-    sp_lo.setSpacing(10)
+    sp_lo.setContentsMargins(12, 0, 12, 0)
+    sp_lo.setSpacing(8)
     self.status_dot = StatusDot()
     self.status_dot.set_color(C["playing"])
-    self.status_dot.setFixedSize(17, 17)
+    self.status_dot.setFixedSize(16, 16)
     sp_lo.addWidget(self.status_dot)
 
-    # Status icon for different states
     self.status_icon = QLabel()
-    self.status_icon.setPixmap(icon("check", 17, C["success"]).pixmap(17, 17))
-    self.status_icon.setFixedSize(20, 20)
+    self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
+    self.status_icon.setFixedSize(18, 18)
     self.status_icon.setScaledContents(True)
     self.status_icon.setVisible(False)
     sp_lo.addWidget(self.status_icon)
 
     self.status_text = QLabel("Ready")
-    self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 14px; font-weight: 900; background: transparent;")
-    self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+    self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 13px; background: transparent;")
+    self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+    self.status_text.setWordWrap(False)
     sp_lo.addWidget(self.status_text, stretch=1)
-    tl.addWidget(status_pill)
-    tl.addStretch()
+    dock_lo.addWidget(status_pill, stretch=0)
 
+    # Right cluster: profile selector stays with check-update and menu buttons.
     right_cluster = QFrame()
     right_cluster.setStyleSheet("background: transparent; border: none;")
-    right_cluster.setFixedWidth(134)
     right_lo = QHBoxLayout(right_cluster)
     right_lo.setContentsMargins(0, 0, 0, 0)
-    right_lo.setSpacing(8)
-    right_lo.addStretch()
+    right_lo.setSpacing(6)
 
-    # Check update button (top right)
-    up_btn = QPushButton()
-    up_btn.setObjectName("update_top_btn")
-    up_btn.setIcon(icon("update", 18, C["accent"]))
-    up_btn.setIconSize(QSize(18, 18))
-    up_btn.setToolTip("Check for updates")
-    up_btn.setFixedSize(42, 40)
-    self.update_top_btn = up_btn
-    up_btn.setStyleSheet(
-        f"QPushButton#update_top_btn {{ background-color: {C['bg_card']}; color: {C['accent']}; "
-        f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
-        f"QPushButton#update_top_btn:hover {{ border-color: {C['accent']}; background-color: {C['bg_tertiary']}; "
-        f"transform: scale(1.05); }}"
-        f"QPushButton#update_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
+    self.profile_btn = QPushButton("Default")
+    self.profile_btn.setObjectName("profile_switcher")
+    self.profile_btn.setIcon(icon("folder", 16, C["accent"]))
+    self.profile_btn.setIconSize(QSize(15, 15))
+    self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    self.profile_btn.setToolTip("Switch profile")
+    self.profile_btn.setStyleSheet(
+        f"QPushButton#profile_switcher {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 6px 10px; "
+        f"font-size: 12px; text-align: left; }} "
+        f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
     )
-    up_btn.clicked.connect(self._check_update_manual)
+    self.profile_btn.setFixedSize(112, 34)
+    self.profile_btn.clicked.connect(self._show_profile_menu)
+    right_lo.addWidget(self.profile_btn)
+
+    up_btn = header_icon_button("update_top_btn", "update", C["accent"], "Check for updates", self._check_update_manual)
+    up_btn.setIconSize(QSize(17, 17))
+    self.update_top_btn = up_btn
     right_lo.addWidget(up_btn)
 
-    # Menu button (top right)
-    gear = QPushButton()
-    gear.setObjectName("menu_top_btn")
-    gear.setIcon(icon("menu", 18, C["text_dim"]))
-    gear.setIconSize(QSize(18, 18))
-    gear.setToolTip("Menu")
-    gear.setFixedSize(42, 40)
+    gear = header_icon_button("menu_top_btn", "menu", C["text_dim"], "Menu", self._show_action_menu)
+    gear.setIconSize(QSize(17, 17))
     self.menu_top_btn = gear
-    gear.setStyleSheet(
-        f"QPushButton#menu_top_btn {{ background-color: {C['bg_card']}; color: {C['text_dim']}; "
-        f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
-        f"QPushButton#menu_top_btn:hover {{ border-color: {C['accent']}; color: {C['accent']}; "
-        f"background-color: {C['bg_tertiary']}; transform: scale(1.05); }}"
-        f"QPushButton#menu_top_btn:pressed {{ background-color: {C['bg_hover']}; }}"
-    )
-    gear.clicked.connect(self._show_action_menu)
     right_lo.addWidget(gear)
-    tl.addWidget(right_cluster)
-    dock_lo.addWidget(title)
+    dock_lo.addWidget(right_cluster, stretch=0)
 
-    dock_lo.addWidget(self._hsep())
-
-    # Timeline command strip
-    tl_header = QFrame()
-    tl_header.setObjectName("timeline_header")
-    tl_header.setStyleSheet("QFrame#timeline_header { background: transparent; border: none; }")
-    tl_hl = QHBoxLayout(tl_header)
-    tl_hl.setContentsMargins(0, 0, 0, 0)
-    tl_hl.setSpacing(10)
-
-    header_stack = QVBoxLayout()
-    header_stack.setContentsMargins(0, 0, 0, 0)
-    header_stack.setSpacing(0)
-    tl_lbl = QLabel("TIMELINE")
-    tl_lbl.setStyleSheet(f"color: {C['text']}; font-size: 15px; font-weight: 600;")
-    header_stack.addWidget(tl_lbl)
-    hints = QLabel("Drag rows to reorder")
-    hints.setStyleSheet(f"color: {C['text_dark']}; font-size: 9px;")
-    hints.setVisible(False)
-    header_stack.addWidget(hints)
-    self.macro_summary = QLabel("0 actions · 0 image checks · ~0s")
-    self.macro_summary.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 600;")
-    header_stack.addWidget(self.macro_summary)
-    tl_hl.addLayout(header_stack)
-    tl_hl.addStretch()
-
-    self.editor_mode_btn = QPushButton("Editor")
-    self.editor_mode_btn.setObjectName("editor_mode_btn")
-    self.editor_mode_btn.setIcon(icon("edit", 15, C["accent"]))
-    self.editor_mode_btn.setToolTip("Open macro editor mode")
-    self.editor_mode_btn.setFixedHeight(26)
-    self.editor_mode_btn.setStyleSheet(
-        f"QPushButton#editor_mode_btn {{ background-color: {C['bg_card']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 800; }}"
-        f"QPushButton#editor_mode_btn:hover {{ border-color: {C['accent']}; color: {C['accent']}; background-color: {C['bg_tertiary']}; }}"
-    )
-    self.editor_mode_btn.clicked.connect(self.open_macro_editor)
-    tl_hl.addWidget(self.editor_mode_btn)
-
-    self.preflight_btn = QPushButton("Health")
-    self.preflight_btn.setObjectName("preflight_btn")
-    self.preflight_btn.setIcon(icon("check", 15, C["success"]))
-    self.preflight_btn.setToolTip("Run macro health / pre-flight checker")
-    self.preflight_btn.setFixedHeight(26)
-    self.preflight_btn.setStyleSheet(
-        f"QPushButton#preflight_btn {{ background-color: {C['bg_card']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 800; }}"
-        f"QPushButton#preflight_btn:hover {{ border-color: {C['success']}; color: {C['success']}; background-color: {C['bg_tertiary']}; }}"
-    )
-    self.preflight_btn.clicked.connect(self.open_preflight_report)
-    tl_hl.addWidget(self.preflight_btn)
-
-    self.compact_view_btn = QPushButton()
-    self.compact_view_btn.setObjectName("view_toggle")
-    self.compact_view_btn.setIcon(icon("menu", 17, C["accent"]))
-    self.compact_view_btn.setToolTip("Timeline list view")
-    self.compact_view_btn.setCheckable(True)
-    self.compact_view_btn.setChecked(True)
-    self.compact_view_btn.setFixedSize(34, 26)
-    tl_hl.addWidget(self.compact_view_btn)
-
-    self.tl_search = QLineEdit()
-    self.tl_search.setPlaceholderText("Search actions…")
-    self.tl_search.setClearButtonEnabled(True)
-    self.tl_search.setFixedWidth(170)
-    self.tl_search.setFixedHeight(26)
-    self.tl_search.addAction(icon("search", 16, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
-    self.tl_search.setStyleSheet(
-        f"QLineEdit {{ background-color: {C['bg_card']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 11px; }} "
-        f"QLineEdit:focus {{ border-color: {C['accent']}; background-color: {C['bg_tertiary']}; }}"
-    )
-    self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
-    tl_hl.addWidget(self.tl_search)
-    dock_lo.addWidget(tl_header)
     shell_lo.addWidget(header_dock)
     content_lo.addWidget(header_shell)
 

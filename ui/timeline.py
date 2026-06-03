@@ -525,6 +525,7 @@ class TimelineView(QListView):
     action_double_clicked = pyqtSignal(int)
     action_context_menu = pyqtSignal(int, object)
     action_dragged = pyqtSignal(int, int)
+    group_toggle_requested = pyqtSignal(int)
 
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
@@ -538,6 +539,7 @@ class TimelineView(QListView):
         self.image_states = {}
         self._search = ""
         self._drag_start_row = -1
+        self._drag_allowed = False
         self.drag_source_row = -1
         self.drop_insert_row = -1
         self.hover_row = -1
@@ -570,7 +572,7 @@ class TimelineView(QListView):
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.setDragEnabled(True)
+        self.setDragEnabled(False)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
@@ -670,6 +672,47 @@ class TimelineView(QListView):
         remaining = max(0.0, self._playing_duration * (1.0 - self.action_progress(row)))
         return f"{remaining:.1f}s"
 
+    def _row_outer_rect(self, row: int):
+        """Return the painted row card rect used for hit-testing grip/kebab zones."""
+        if row < 0 or self.model() is None or row >= self.model().rowCount():
+            return QRectF()
+        idx = self.model().index(row, 0)
+        rect = self.visualRect(idx)
+        if not rect.isValid():
+            return QRectF()
+        narrow = rect.width() < 700
+        adjusted = rect.adjusted(8, 2, -8, -2) if narrow else rect.adjusted(14, 3, -20, -3)
+        return QRectF(adjusted)
+
+    def _drag_grip_rect(self, row: int):
+        outer = self._row_outer_rect(row)
+        if outer.isNull():
+            return QRectF()
+        compact = outer.width() < 760
+        grip_x = outer.left() + (8 if compact else 12)
+        grip_y = outer.center().y() - 14
+        return QRectF(grip_x - 4, grip_y, 24, 28)
+
+    def _kebab_rect(self, row: int):
+        outer = self._row_outer_rect(row)
+        if outer.isNull():
+            return QRectF()
+        compact = outer.width() < 760
+        dot_x = outer.right() - (16 if compact else 22)
+        return QRectF(dot_x - 10, outer.center().y() - 18, 24, 36)
+
+    def _is_drag_grip_hit(self, row: int, pos) -> bool:
+        return row >= 0 and self._drag_grip_rect(row).contains(QPointF(pos))
+
+    def _is_kebab_hit(self, row: int, pos) -> bool:
+        return row >= 0 and self._kebab_rect(row).contains(QPointF(pos))
+
+    def _row_kind(self, row: int) -> str:
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return ""
+        return getattr(actions[row], "action_type", "") or "key"
+
     def _on_current_changed(self, current, previous):
         self.sync_selection()
         if current.isValid() and self.is_row_collapsed_hidden(current.row()):
@@ -697,13 +740,33 @@ class TimelineView(QListView):
     def mousePressEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
         idx = self.indexAt(pos)
-        self._drag_start_row = idx.row() if idx.isValid() else -1
-        if idx.isValid() and self.is_row_collapsed_hidden(idx.row()):
-            header = self.group_header_for_row(idx.row())
+        row = idx.row() if idx.isValid() else -1
+        self._drag_start_row = -1
+        self._drag_allowed = False
+
+        if idx.isValid() and self.is_row_collapsed_hidden(row):
+            header = self.group_header_for_row(row)
             if header:
-                idx = self.model().index(header[0], 0)
-                self._drag_start_row = header[0]
-        if event.button() == Qt.MouseButton.RightButton and idx.isValid() and idx.row() in self.selected_indices:
+                row = header[0]
+                idx = self.model().index(row, 0)
+
+        # Left-clicking the far-right kebab on a group row is the only direct
+        # collapse/expand gesture. Other clicks select rows only.
+        if event.button() == Qt.MouseButton.LeftButton and idx.isValid():
+            if self._row_kind(row) == "group" and self._is_kebab_hit(row, pos):
+                self.group_toggle_requested.emit(row)
+                event.accept()
+                return
+            if self._is_drag_grip_hit(row, pos) and self.playing_index < 0:
+                self._drag_start_row = row
+                self._drag_allowed = True
+                self.setDragEnabled(True)
+            else:
+                # Dragging is deliberately disabled unless the press began on
+                # the far-left grid dots. This keeps selection/collapse stable.
+                self.setDragEnabled(False)
+
+        if event.button() == Qt.MouseButton.RightButton and idx.isValid() and row in self.selected_indices:
             return
         super().mousePressEvent(event)
         self.sync_selection()
@@ -713,7 +776,13 @@ class TimelineView(QListView):
         index = self.indexAt(pos)
         self.hover_row = index.row() if index.isValid() else -1
         if index.isValid():
-            self.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+            row = index.row()
+            if self._is_drag_grip_hit(row, pos) and self.playing_index < 0:
+                self.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+            elif self._row_kind(row) == "group" and self._is_kebab_hit(row, pos):
+                self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.viewport().unsetCursor()
         else:
             self.viewport().unsetCursor()
         self.viewport().update()
@@ -727,7 +796,7 @@ class TimelineView(QListView):
         super().leaveEvent(event)
 
     def startDrag(self, supported_actions):
-        if self.playing_index >= 0:
+        if self.playing_index >= 0 or not self._drag_allowed or self._drag_start_row < 0:
             return
         self.drag_source_row = self._drag_start_row
         self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -785,9 +854,11 @@ class TimelineView(QListView):
     def _stop_drag_feedback(self):
         self._stop_auto_scroll()
         self._drag_start_row = -1
+        self._drag_allowed = False
         self.drag_source_row = -1
         self.drop_insert_row = -1
         self._last_drag_pos = None
+        self.setDragEnabled(False)
         self.viewport().unsetCursor()
         self.viewport().update()
 
@@ -829,7 +900,7 @@ class TimelineView(QListView):
 
     def dropEvent(self, event):
         source = self._drag_start_row
-        if self.playing_index >= 0:
+        if self.playing_index >= 0 or not self._drag_allowed:
             event.ignore()
             self._stop_drag_feedback()
             return
@@ -903,7 +974,7 @@ class TimelineView(QListView):
         self.next_index = -1
         self.paused = False
         self._frozen_progress = 0.0
-        self.setDragEnabled(True)
+        self.setDragEnabled(False)
         if self._progress_timer.isActive():
             self._progress_timer.stop()
         self.viewport().update()
