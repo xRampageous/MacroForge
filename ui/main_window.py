@@ -316,7 +316,8 @@ class MainWindow(QMainWindow):
             f"color: {COLORS['text_inverse']};"
             f"border: 1px solid {skin['border']};"
             "border-radius: 10px; padding: 0px; margin: 0px; text-align: center; font-weight: 800;"
-            f"min-width: {btn_w}px; max-width: {btn_w}px; min-height: {btn_h}px; max-height: {btn_h}px;"
+            f"min-width: {btn_w}px; max-width: {btn_w}px; width: {btn_w}px;"
+            f"min-height: {btn_h}px; max-height: {btn_h}px; height: {btn_h}px;"
             "}"
             f"QPushButton#{obj}:hover {{"
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
@@ -338,10 +339,12 @@ class MainWindow(QMainWindow):
         # every regular Add Action button the exact same size, lets the label
         # sit 6-7px closer to the glyph, and prevents the Loop button from
         # visually expanding due to layout/style recalculation.
-        icon_size = 16 if action_kind in ("loop", "group") else 17
+        # Match the Loop button's text/icon proportions across every Add Action
+        # button: same glyph size, same vertical offsets, same label box.
+        icon_size = 16
         icon_box = icon_size + 2
-        icon_y = 6 if action_kind != "group" else 7
-        label_y = 20 if action_kind != "group" else 21
+        icon_y = 6
+        label_y = 20
         label_h = 15
 
         icon_lbl = QLabel(btn)

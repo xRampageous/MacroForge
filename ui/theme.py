@@ -325,6 +325,7 @@ def build_stylesheet() -> str:
     QPushButton#add_condition, QPushButton#add_loop, QPushButton#add_group {{
         min-height: 42px;
         max-height: 42px;
+        height: 42px;
         padding: 0px;
         margin: 0px;
     }}
@@ -651,6 +652,12 @@ def build_stylesheet() -> str:
         border: 1px solid #B8202E;
         border-radius: 10px;
         padding: 0px 10px;
+        min-width: 100px;
+        max-width: 100px;
+        width: 100px;
+        min-height: 49px;
+        max-height: 49px;
+        height: 49px;
         font-size: 12px;
         font-weight: 900;
     }}
@@ -670,6 +677,12 @@ def build_stylesheet() -> str:
         border: 1px solid #2A5560;
         border-radius: 10px;
         padding: 0px 10px;
+        min-width: 100px;
+        max-width: 100px;
+        width: 100px;
+        min-height: 49px;
+        max-height: 49px;
+        height: 49px;
         font-size: 12px;
         font-weight: 900;
     }}

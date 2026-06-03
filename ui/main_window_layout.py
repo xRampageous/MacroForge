@@ -75,6 +75,21 @@ def build_main_layout(window):
         caret.setToolTip("Expand panel" if collapsed else "Collapse panel")
         body_widget.setVisible(not collapsed)
 
+        # The Inspector card is added with stretch=1 so simply hiding its body
+        # can leave a large empty shell.  Clamp the parent card while collapsed
+        # and release it again on expand; this also makes all caret panels feel
+        # like true collapse/expand sections.
+        parent = body_widget.parentWidget()
+        if parent is not None:
+            if collapsed:
+                parent.setMaximumHeight(parent.sizeHint().height() + 2)
+                parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+            else:
+                parent.setMaximumHeight(16777215)
+                parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            parent.updateGeometry()
+        body_widget.updateGeometry()
+
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -198,7 +213,7 @@ def build_main_layout(window):
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
-    sidebar.setFixedWidth(260)
+    sidebar.setFixedWidth(270)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #020A13, stop:1 #000309); border-right: 1px solid {C['border']}; }}"
@@ -307,18 +322,25 @@ def build_main_layout(window):
     rec_body_lo.addLayout(rec_state)
     rec_buttons = QHBoxLayout()
     rec_buttons.setSpacing(8)
+    rec_buttons.setContentsMargins(0, 0, 0, 0)
     self.rec_btn = QPushButton()
     self.rec_btn.setObjectName("rec_round_btn")
     self.rec_btn.setIcon(icon("record", 16, C["error"]))
     self.rec_btn.setIconSize(QSize(16, 16))
-    self.rec_btn.setFixedSize(42, 42)
+    # Keep the icon-only recorder button but make it the requested wide
+    # recording-control size.  Colors remain controlled by the existing theme.
+    self.rec_btn.setFixedSize(100, 49)
+    self.rec_btn.setMinimumSize(100, 49)
+    self.rec_btn.setMaximumSize(100, 49)
     self.rec_btn.setToolTip("Record (F7)")
     self.rec_btn.clicked.connect(self._toggle_record)
     self.rec_pause_btn = QPushButton("Pause")
     self.rec_pause_btn.setObjectName("rec_pause_btn")
     self.rec_pause_btn.setIcon(icon("pause", 16, C["text_dim"]))
     self.rec_pause_btn.setIconSize(QSize(16, 16))
-    self.rec_pause_btn.setFixedHeight(46)
+    self.rec_pause_btn.setFixedSize(100, 49)
+    self.rec_pause_btn.setMinimumSize(100, 49)
+    self.rec_pause_btn.setMaximumSize(100, 49)
     self.rec_pause_btn.setToolTip("Pause")
     self.rec_pause_btn.setEnabled(False)
     self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
@@ -698,7 +720,7 @@ def build_main_layout(window):
     def _set_side_panel_collapsed(collapsed):
         collapsed = bool(collapsed)
         self._side_panel_collapsed = collapsed
-        sidebar.setFixedWidth(44 if collapsed else 260)
+        sidebar.setFixedWidth(44 if collapsed else 270)
         margin = 6 if collapsed else 10
         sb_lo.setContentsMargins(margin, 14, margin, 10)
         brand.setVisible(not collapsed)
