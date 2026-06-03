@@ -299,7 +299,12 @@ class MainWindow(QMainWindow):
         btn.setObjectName(obj)
         btn.setText("")
         btn.setIcon(QIcon())
-        btn.setFixedSize(104, 42)
+        btn_w = 216 if action_kind == "group" else 104
+        btn_h = 42
+        btn.setFixedSize(btn_w, btn_h)
+        btn.setMinimumSize(btn_w, btn_h)
+        btn.setMaximumSize(btn_w, btn_h)
+        btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setProperty("qt_stacked_add_action", True)
         btn.setStyleSheet(
@@ -325,29 +330,34 @@ class MainWindow(QMainWindow):
             f"border: 1px solid {COLORS['border']};"
             "}"
         )
-        content_lo = QVBoxLayout(btn)
-        content_lo.setContentsMargins(4, 3, 4, 3)
-        content_lo.setSpacing(1)
-        icon_size = 19 if action_kind != "group" else 18
-        icon_lbl = QLabel()
+
+        # Use fixed child geometry rather than a vertical layout.  This keeps
+        # every regular Add Action button the exact same size, lets the label
+        # sit 6-7px closer to the glyph, and prevents the Loop button from
+        # visually expanding due to layout/style recalculation.
+        icon_size = 16 if action_kind in ("loop", "group") else 17
+        icon_box = icon_size + 2
+        icon_y = 6 if action_kind != "group" else 7
+        label_y = 20 if action_kind != "group" else 21
+        label_h = 15
+
+        icon_lbl = QLabel(btn)
         icon_lbl.setObjectName(f"{obj}_icon")
         icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_color = skin["hover_border"] if action_kind != "pause" else "#C6D0D2"
         icon_lbl.setPixmap(timeline_action_icon(action_kind, icon_size, icon_color).pixmap(icon_size, icon_size))
-        icon_lbl.setFixedSize(icon_size + 2, icon_size + 2)
-        text_lbl = QLabel(text)
+        icon_lbl.setGeometry((btn_w - icon_box) // 2, icon_y, icon_box, icon_box)
+
+        text_lbl = QLabel(text, btn)
         text_lbl.setObjectName(f"{obj}_label")
         text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text_lbl.setGeometry(0, label_y, btn_w, label_h)
         text_lbl.setStyleSheet(
             "QLabel { background: transparent; color: #F4F7FF; "
-            "font-size: 10px; font-weight: 900; }"
+            "font-size: 11px; font-weight: 900; }"
         )
-        content_lo.addStretch(1)
-        content_lo.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
-        content_lo.addWidget(text_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
-        content_lo.addStretch(1)
         btn.clicked.connect(callback)
         if layout is not None:
             layout.addWidget(btn)

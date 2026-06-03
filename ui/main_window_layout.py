@@ -189,12 +189,12 @@ def build_main_layout(window):
     add_card = panel_frame("add_action_card")
     add_lo = QVBoxLayout(add_card)
     add_lo.setContentsMargins(10, 9, 10, 10)
-    add_lo.setSpacing(7)
+    add_lo.setSpacing(5)
     add_lo.addLayout(section_header("ADD ACTION", "bolt", C["accent"]))
     add_grid = QGridLayout()
     add_grid.setContentsMargins(0, 0, 0, 0)
-    add_grid.setHorizontalSpacing(8)
-    add_grid.setVerticalSpacing(9)
+    add_grid.setHorizontalSpacing(6)
+    add_grid.setVerticalSpacing(5)
     action_specs = [
         ("Key", self._open_key_dialog, C["key"], "key", 0, 0, 1, 1),
         ("Click", self._open_click_dialog, C["click"], "click", 0, 1, 1, 1),
@@ -206,7 +206,11 @@ def build_main_layout(window):
     ]
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
-        btn.setFixedSize(216 if colspan > 1 else 104, 42)
+        btn_w = 216 if colspan > 1 else 104
+        btn.setFixedSize(btn_w, 42)
+        btn.setMinimumSize(btn_w, 42)
+        btn.setMaximumSize(btn_w, 42)
+        btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
     add_lo.addLayout(add_grid)
     sb_lo.addWidget(add_card)
