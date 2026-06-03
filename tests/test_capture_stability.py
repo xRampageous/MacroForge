@@ -386,12 +386,12 @@ class TestPlaybackVisibility(QtTestCase):
                 Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1, wait_timeout=10.0),
             ])
             window.refresh()
-            window.resize(760, 1050)
+            window.resize(850, 1100)
             window.show()
             self.app.processEvents()
 
-            self.assertEqual(window.size().width(), 760)
-            self.assertEqual(window.size().height(), 1050)
+            self.assertEqual(window.size().width(), 850)
+            self.assertEqual(window.size().height(), 1100)
 
             def rect_in_window(widget: QWidget):
                 top_left = widget.mapTo(window, widget.rect().topLeft())
@@ -419,14 +419,16 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertLessEqual(window.height() - playback_rect.bottom(), 2)
             self.assertEqual(dock_rect.bottom(), playback_rect.bottom() - 8)
 
+            profile_x = window.profile_btn.mapToGlobal(window.profile_btn.rect().topLeft()).x()
             update_x = window.update_top_btn.mapToGlobal(window.update_top_btn.rect().topLeft()).x()
-            status_right = window.status_pill.mapToGlobal(window.status_pill.rect().topRight()).x()
             menu_x = window.menu_top_btn.mapToGlobal(window.menu_top_btn.rect().topLeft()).x()
-            self.assertGreater(update_x, status_right)
+            status_x = window.status_pill.mapToGlobal(window.status_pill.rect().topLeft()).x()
+            self.assertGreater(update_x, profile_x)
             self.assertGreater(menu_x, update_x)
+            self.assertGreater(status_x, menu_x)
 
-            self.assertGreaterEqual(window.status_pill.width(), 180)
-            self.assertLessEqual(window.status_pill.width(), 360)
+            self.assertGreaterEqual(window.status_pill.width(), 120)
+            self.assertLessEqual(window.status_pill.width(), 160)
             self.assertEqual(window.playback_panel.height(), 188)
             for widget, name in (
                 (window.profile_btn, "profile selector"),
@@ -449,9 +451,9 @@ class TestPlaybackVisibility(QtTestCase):
             ):
                 assert_visible(widget, name)
 
-            self.assertGreaterEqual(window.start_btn.width(), 68)
-            self.assertGreaterEqual(window.speed_combo.width(), 96)
-            self.assertGreaterEqual(window.playback_feedback_label.width(), 280)
+            self.assertGreaterEqual(window.start_btn.width(), 56)
+            self.assertGreaterEqual(window.speed_combo.width(), 100)
+            self.assertGreaterEqual(window.playback_feedback_label.width(), 200)
             self.assertGreaterEqual(window.progress_bar.width(), 200)
             self.assertGreaterEqual(window._stat_time_w.width(), 78)
             self.assertGreater(window.timeline.model().rowCount(), 0)

@@ -9,20 +9,20 @@ quiet blue-grey borders, and restrained neon accents used as outlines.
 # ═══════════════════════════════════════════════════════
 COLORS = {
     # ── Surfaces ──
-    "bg": "#00050B",
-    "bg_secondary": "#02070D",
-    "bg_tertiary": "#050B12",
-    "bg_card": "#01060C",
-    "bg_hover": "#091522",
-    "bg_pressed": "#0E1C2A",
-    "bg_glass": "#02070D",
+    "bg": "#000207",
+    "bg_secondary": "#010711",
+    "bg_tertiary": "#04101A",
+    "bg_card": "#020A13",
+    "bg_hover": "#071A2A",
+    "bg_pressed": "#0B2438",
+    "bg_glass": "#020A13",
 
     # ── Primary accent ──
-    "accent": "#008DFF",
-    "accent_secondary": "#006ED6",
-    "accent_glow": "rgba(0, 141, 255, 0.14)",
-    "accent_hover": "#28A3FF",
-    "accent_dim": "#1E5E91",
+    "accent": "#0096FF",
+    "accent_secondary": "#006FDC",
+    "accent_glow": "rgba(0, 150, 255, 0.18)",
+    "accent_hover": "#32B1FF",
+    "accent_dim": "#1A5B86",
 
     # ── Semantic ──
     "error": "#FF2330",
@@ -36,15 +36,15 @@ COLORS = {
 
     # ── Text ──
     "text": "#F3F6FA",
-    "text_dim": "#AAB6C8",
-    "text_dark": "#687787",
+    "text_dim": "#B0C0D6",
+    "text_dark": "#65788D",
     "text_inverse": "#F3F6FA",
     "btn_text": "#F3F6FA",
 
     # ── Borders ──
-    "border": "#1E2B3A",
-    "border_light": "#334A5D",
-    "border_accent": "#008DFF",
+    "border": "#143047",
+    "border_light": "#25506E",
+    "border_accent": "#0096FF",
 
     # ── Action-type accents (from reference) ──
     "key": "#008DFF",
@@ -59,7 +59,7 @@ COLORS = {
     # ── Playback ──
     "playing": "#00D75A",
     "playing_glow": "rgba(0, 215, 90, 0.14)",
-    "lane": "#27333D",
+    "lane": "#203142",
 
     # ── Neon highlights ──
     "neon_blue": "#008DFF",

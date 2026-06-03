@@ -588,8 +588,8 @@ class TimelineDelegate(QStyledItemDelegate):
             return QSize(100, 0)
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
         action = index.data(ActionListModel.ActionRole)
-        base_height = 52 if getattr(action, "action_type", "") == "group" else (56 if getattr(option.widget, "width", lambda: 999)() < 700 else 64)
-        height = max(42 if getattr(action, "action_type", "") == "group" else 48, int(base_height * zoom))
+        base_height = 58 if getattr(action, "action_type", "") == "group" else (62 if getattr(option.widget, "width", lambda: 999)() < 700 else 70)
+        height = max(50 if getattr(action, "action_type", "") == "group" else 56, int(base_height * zoom))
         return QSize(100, height)
 
 
@@ -604,8 +604,9 @@ class TimelineView(QListView):
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
 
-        # Start slightly compact by default while preserving Ctrl+wheel zoom.
-        self.zoom = 0.90
+        # The v3 shell has enough vertical room for the more legible reference
+        # row scale while preserving Ctrl+wheel zoom.
+        self.zoom = 1.0
         self.selected_indices = set()
         self.playing_index = -1
         self.next_index = -1

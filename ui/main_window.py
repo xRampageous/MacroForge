@@ -58,8 +58,8 @@ class MainWindow(QMainWindow):
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
         self.setWindowTitle("MacroForge")
-        self.setMinimumSize(760, 1050)
-        self.resize(760, 1050)
+        self.setMinimumSize(850, 1100)
+        self.resize(850, 1100)
         self.setStyleSheet(build_stylesheet())
 
         # Window / taskbar icon
@@ -241,7 +241,9 @@ class MainWindow(QMainWindow):
             f"QPushButton:pressed {{ background: #55{tint}; }}"
         )
         btn.clicked.connect(callback)
-        layout.addWidget(btn)
+        if layout is not None:
+            layout.addWidget(btn)
+        return btn
 
     def _label_row(self, text, widget):
         row = QFrame()
@@ -1002,11 +1004,13 @@ class MainWindow(QMainWindow):
                 self.restoreGeometry(bytes.fromhex(geo))
         except Exception:
             pass
-        self.resize(760, 1050)
+        self.resize(850, 1100)
 
     def _refresh_profile_btn(self):
         if hasattr(self, "profile_btn"):
-            self.profile_btn.setText(f"{self.session_manager.active}  \u25be")
+            name = str(self.session_manager.active or "Default")
+            shown = name if len(name) <= 13 else f"{name[:10]}..."
+            self.profile_btn.setText(f"{shown}  \u25be")
 
     def _show_profile_menu(self):
         from ui.main_window_menus import show_profile_menu
@@ -3533,10 +3537,10 @@ class MainWindow(QMainWindow):
             try:
                 text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
                 icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(180, min(360, text_w + icon_w + 42))
+                target_w = max(120, min(150, text_w + icon_w + 28))
                 if hasattr(self, "status_pill"):
                     self.status_pill.setMinimumWidth(target_w)
-                    self.status_pill.setMaximumWidth(380)
+                    self.status_pill.setMaximumWidth(160)
             except Exception:
                 pass
             # Update status icon based on state
