@@ -1,6 +1,6 @@
 {
-  "version": "3.3.8",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.8/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.8/MacroForge-v3.3.8.zip",
-  "notes": "v3.3.8: Apply exact dark buttons patch - updated main_window.py and main_window_layout.py with dark button styling improvements."
+  "version": "3.3.9",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.9/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.9/MacroForge-v3.3.9.zip",
+  "notes": "v3.3.9: Apply import fix patch - updated icons.py, main_window.py and main_window_layout.py with import fixes for dark button styling."
 }
