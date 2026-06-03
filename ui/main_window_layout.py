@@ -171,6 +171,9 @@ def build_main_layout(window):
                 "body": body_widget,
                 "caret": caret,
                 "kind": "side_panel",
+                # Registered in visual top-to-bottom order. Responsive height
+                # logic reverses this list so auto-collapse starts at the bottom.
+                "visual_order": len(self._height_collapse_sections),
             })
             caret.clicked.connect(lambda checked=False, body=body_widget, btn=caret: _toggle_collapsible_body(body, btn))
             row.addWidget(caret)
@@ -281,6 +284,9 @@ def build_main_layout(window):
             "body": body,
             "caret": caret,
             "kind": "inspector_group",
+            # Registered in visual top-to-bottom order. Responsive height
+            # logic reverses this list so auto-collapse starts at the bottom.
+            "visual_order": len(self._height_collapse_sections),
         })
         caret.clicked.connect(lambda checked=False, body=body, btn=caret: _toggle_collapsible_body(body, btn))
         head.addWidget(caret)

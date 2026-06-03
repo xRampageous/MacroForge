@@ -325,23 +325,48 @@ class MainWindow(QMainWindow):
             return
         setter(body, caret, bool(collapsed), auto=True)
 
-    def _apply_auto_height_section(self, body_name, collapse_at, expand_at, height=None):
-        height = int(self.height() if height is None else height)
+    def _height_section_collapsed(self, body_name):
         entry = self._find_height_collapse_section(body_name)
-        if not entry:
-            return
-        caret = entry.get("caret")
+        caret = entry.get("caret") if entry else None
+        return bool(caret.property("collapsed")) if caret is not None else False
+
+    def _height_section_auto_collapsed(self, body_name):
+        entry = self._find_height_collapse_section(body_name)
+        caret = entry.get("caret") if entry else None
         if caret is None:
-            return
+            return False
+        return bool(caret.property("auto_collapsed")) and not bool(caret.property("user_collapsed"))
 
-        collapsed = bool(caret.property("collapsed"))
-        auto_collapsed = bool(caret.property("auto_collapsed"))
-        user_collapsed = bool(caret.property("user_collapsed"))
+    def _collapse_first_available_height_panel(self, panel_names):
+        """Collapse exactly one visible panel from the supplied bottom-up order."""
+        for name in panel_names:
+            if not self._height_section_collapsed(name):
+                self._set_auto_height_section(name, True)
+                return True
+        return False
 
-        if height <= collapse_at and not collapsed:
-            self._set_auto_height_section(body_name, True)
-        elif height >= expand_at and auto_collapsed and not user_collapsed:
-            self._set_auto_height_section(body_name, False)
+    def _expand_first_available_height_panel(self, panel_names):
+        """Expand exactly one auto-collapsed panel from the supplied top-down order."""
+        for name in panel_names:
+            if self._height_section_auto_collapsed(name):
+                self._set_auto_height_section(name, False)
+                return True
+        return False
+
+    def _inspector_group_body_names_bottom_up(self):
+        """Return visible Inspector sub-section body names from bottom to top."""
+        sections = []
+        for entry in getattr(self, "_height_collapse_sections", []):
+            try:
+                name = entry.get("name", "")
+                if name.startswith("inspector_group_") and name.endswith("_body"):
+                    sections.append(entry)
+            except Exception:
+                continue
+        # The registry is created in layout order from top to bottom, so reverse
+        # it for bottom-up collapse. This keeps the header anchored while detail
+        # rows disappear upward, matching the manual collapse behavior.
+        return [entry.get("name") for entry in reversed(sections) if entry.get("name")]
 
     def _apply_auto_playback_height(self, height=None):
         height = int(self.height() if height is None else height)
@@ -357,15 +382,22 @@ class MainWindow(QMainWindow):
             self._set_playback_collapsed(False, auto=True)
 
     def _update_responsive_panel_heights(self):
-        """Auto-collapse vertical panels when the window gets short.
+        """Auto-collapse vertical panels from bottom to top.
 
-        Mirrors the side-panel width behavior:
-        - auto-collapse when below a lower threshold
-        - auto-expand when above a higher threshold
-        - do not auto-expand something the user manually collapsed
+        This intentionally uses staged bottom-up collapse instead of collapsing
+        every threshold-matched panel at once:
+        1. Bottom playback panel collapses first.
+        2. Bottom-most side-panel card/detail sections collapse next.
+        3. Higher panels collapse only as the window gets shorter.
+
+        Auto-expand runs in the opposite direction so the layout grows downward
+        instead of jumping around.
         """
         try:
             height = int(self.height())
+
+            # Bottom panel is physically at the bottom of the window, so it is
+            # always first to auto-collapse and last to stay collapsed.
             self._apply_auto_playback_height(height)
 
             # When the whole side panel is width-collapsed, its card bodies are
@@ -373,16 +405,46 @@ class MainWindow(QMainWindow):
             if bool(getattr(self, "_side_panel_collapsed", False)):
                 return
 
-            self._apply_auto_height_section("inspector_body", 880, 1010, height)
-            self._apply_auto_height_section("recorder_body", 760, 900, height)
-            self._apply_auto_height_section("add_action_body", 660, 780, height)
+            bottom_up_cards = [
+                "inspector_body",
+                "recorder_body",
+                "add_action_body",
+            ]
+            # Use progressively shorter thresholds so height compression moves
+            # upward from the bottom of the side panel rather than collapsing
+            # the top card first.
+            bottom_up_stages = [
+                (930, 1060, ["inspector_body"]),
+                (840, 970, ["inspector_body", "recorder_body"]),
+                (750, 880, ["inspector_body", "recorder_body", "add_action_body"]),
+            ]
 
-            # Inspector sub-tables are optional detail; on short windows collapse
-            # only auto-managed sections and restore them when space returns.
-            for entry in getattr(self, "_height_collapse_sections", []):
-                name = entry.get("name", "")
-                if name.startswith("inspector_group_") and name.endswith("_body"):
-                    self._apply_auto_height_section(name, 800, 930, height)
+            for collapse_at, expand_at, names in bottom_up_stages:
+                if height <= collapse_at:
+                    # Collapse one section per stage from bottom to top.
+                    self._collapse_first_available_height_panel(names)
+                elif height >= expand_at:
+                    # Expand in reverse order: highest collapsed panel first,
+                    # then work downward as more height becomes available.
+                    self._expand_first_available_height_panel(list(reversed(names)))
+
+            inspector_bottom_up = self._inspector_group_body_names_bottom_up()
+            if inspector_bottom_up:
+                if height <= 900:
+                    self._collapse_first_available_height_panel(inspector_bottom_up)
+                if height <= 820:
+                    self._collapse_first_available_height_panel(inspector_bottom_up)
+                if height <= 740:
+                    self._collapse_first_available_height_panel(inspector_bottom_up)
+
+                # Expand sub-tables top-down so each body opens below its header.
+                inspector_top_down = list(reversed(inspector_bottom_up))
+                if height >= 890:
+                    self._expand_first_available_height_panel(inspector_top_down)
+                if height >= 970:
+                    self._expand_first_available_height_panel(inspector_top_down)
+                if height >= 1050:
+                    self._expand_first_available_height_panel(inspector_top_down)
         except Exception:
             pass
 
