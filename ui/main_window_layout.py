@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QSizePolicy,
@@ -467,6 +468,10 @@ def build_main_layout(window):
     self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report)
     left_lo.addWidget(self.preflight_btn)
 
+    self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel)
+    self.runtime_log_btn.setCheckable(True)
+    left_lo.addWidget(self.runtime_log_btn)
+
     self.compact_view_btn = header_icon_button("view_toggle", "menu", C["accent"], "Timeline list view", lambda: None)
     self.compact_view_btn.setCheckable(True)
     self.compact_view_btn.setChecked(True)
@@ -567,6 +572,50 @@ def build_main_layout(window):
 
     self.timeline = TimelineView(model=self.action_model)
     content_lo.addWidget(self.timeline, stretch=1)
+
+    # Live runtime log panel. Hidden by default; opened from the top eye button
+    # or playback diagnostics menu. It mirrors the diagnostic stream without
+    # stealing vertical space during normal editing.
+    self.runtime_log_panel = QFrame()
+    self.runtime_log_panel.setObjectName("runtime_log_panel")
+    self.runtime_log_panel.setFixedHeight(132)
+    self.runtime_log_panel.setVisible(False)
+    self.runtime_log_panel.setStyleSheet(
+        f"QFrame#runtime_log_panel {{ background-color: {C['bg_card']}; "
+        f"border-top: 1px solid {C['border']}; border-bottom: 1px solid {C['border']}; }}"
+    )
+    rlp_lo = QVBoxLayout(self.runtime_log_panel)
+    rlp_lo.setContentsMargins(10, 6, 10, 8)
+    rlp_lo.setSpacing(5)
+    rlp_head = QHBoxLayout()
+    rlp_head.setContentsMargins(0, 0, 0, 0)
+    rlp_title = QLabel("LIVE RUNTIME LOG")
+    rlp_title.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; letter-spacing: 1px; background: transparent;")
+    rlp_head.addWidget(rlp_title)
+    rlp_head.addStretch()
+    clear_log_btn = QPushButton("Clear")
+    clear_log_btn.setFixedSize(54, 24)
+    clear_log_btn.setStyleSheet(
+        f"QPushButton {{ color: {C['text_dim']}; background-color: {C['bg_tertiary']}; border: 1px solid {C['border']}; border-radius: 7px; font-size: 10px; }}"
+        f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+    )
+    clear_log_btn.clicked.connect(self.clear_runtime_log_panel)
+    rlp_head.addWidget(clear_log_btn)
+    hide_log_btn = QPushButton("Hide")
+    hide_log_btn.setFixedSize(50, 24)
+    hide_log_btn.setStyleSheet(clear_log_btn.styleSheet())
+    hide_log_btn.clicked.connect(lambda: self.toggle_runtime_log_panel(False))
+    rlp_head.addWidget(hide_log_btn)
+    rlp_lo.addLayout(rlp_head)
+    self.runtime_log_edit = QPlainTextEdit()
+    self.runtime_log_edit.setReadOnly(True)
+    self.runtime_log_edit.setMaximumBlockCount(600)
+    self.runtime_log_edit.setStyleSheet(
+        f"QPlainTextEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 8px; padding: 6px; font-family: Consolas, monospace; font-size: 10px; }}"
+    )
+    rlp_lo.addWidget(self.runtime_log_edit, stretch=1)
+    content_lo.addWidget(self.runtime_log_panel)
 
     self.playback_panel = self._make_playback_panel()
     content_lo.addWidget(self.playback_panel)

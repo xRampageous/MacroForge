@@ -51,6 +51,22 @@ class SettingsDialog(QDialog):
         self.minimize_tray.setChecked(self.settings_manager.settings.get("minimize_tray", True))
         lo.addWidget(self.minimize_tray)
 
+        hotkeys_title = QLabel("Timeline shortcuts / hotkeys")
+        hotkeys_title.setStyleSheet(f"color: {COLORS['text']}; font-size: 12px; font-weight: 800; margin-top: 8px;")
+        lo.addWidget(hotkeys_title)
+        hotkeys = QLabel(
+            "Ctrl+A Select all rows    Ctrl+D Duplicate    Delete Remove\n"
+            "Ctrl+G Group selected    Ctrl+Shift+G Ungroup    Ctrl+Z/Y Undo/Redo\n"
+            "Space Play/Pause    Esc Stop/deselect    Ctrl+Shift+P Pre-flight"
+        )
+        hotkeys.setWordWrap(True)
+        hotkeys.setStyleSheet(
+            f"color: {COLORS['text_dim']}; font-size: 11px; line-height: 1.35; "
+            f"background-color: {COLORS['bg_card']}; border: 1px solid {COLORS['border']}; "
+            "border-radius: 8px; padding: 8px;"
+        )
+        lo.addWidget(hotkeys)
+
         lo.addStretch()
         lo.addLayout(make_buttons(self, "Save", self._accent, self._save, "save"))
 

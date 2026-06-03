@@ -52,6 +52,7 @@ class MainWindow(QMainWindow):
     _status_msg = pyqtSignal(str)
     _diag_msg = pyqtSignal(str)
     _image_match_state = pyqtSignal(int, str)
+    _trace_row = pyqtSignal(int)
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -114,6 +115,8 @@ class MainWindow(QMainWindow):
         self._run_from_index = 0
         self._run_index_map = []
         self._last_preflight = {"errors": [], "warnings": []}
+        self._runtime_error_dialog_open = False
+        self._last_runtime_error = ""
 
         # Recorder state
         self._recorder = {
@@ -153,6 +156,7 @@ class MainWindow(QMainWindow):
         self._status_msg.connect(self.status)
         self._diag_msg.connect(self._append_diagnostic)
         self._image_match_state.connect(self._do_image_match_state)
+        self._trace_row.connect(self._do_trace_row)
 
         self._check_update_silent()
         self.load_last_session()
@@ -279,7 +283,11 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+D"), self, self._duplicate_inspector)
         QShortcut(QKeySequence("Delete"), self, self._delete_selected)
         QShortcut(QKeySequence("Ctrl+Delete"), self, self._delete_selected)
-        QShortcut(QKeySequence("Escape"), self, self._deselect)
+        QShortcut(QKeySequence("Ctrl+A"), self, self._select_all_actions)
+        QShortcut(QKeySequence("Ctrl+G"), self, lambda: self.create_group_from_rows())
+        QShortcut(QKeySequence("Ctrl+Shift+G"), self, self._ungroup_selected)
+        QShortcut(QKeySequence("Space"), self, self._toggle_play_pause_shortcut)
+        QShortcut(QKeySequence("Escape"), self, self._stop_or_deselect)
         QShortcut(QKeySequence("Ctrl+S"), self, lambda: (self._do_save_session(), self.status("Session saved")))
         QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.timeline.setFocus())
         QShortcut(QKeySequence("Ctrl+Enter"), self, self.test_from_selected_row)
@@ -289,7 +297,42 @@ class MainWindow(QMainWindow):
     def _deselect(self):
         self.select(-1)
         self.timeline.selected_indices.clear()
+        if hasattr(self.timeline, "set_link_targets"):
+            self.timeline.set_link_targets(-1, [])
         self.timeline.refresh()
+
+    def _stop_or_deselect(self):
+        if self.engine.running:
+            self.stop()
+        else:
+            self._deselect()
+
+    def _toggle_play_pause_shortcut(self):
+        focus = QApplication.focusWidget()
+        if isinstance(focus, (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit)):
+            return
+        if self.engine.running:
+            self.engine.toggle_pause()
+        else:
+            self.start()
+
+    def _select_all_actions(self):
+        rows = set(range(self.action_model.rowCount()))
+        self.timeline.selected_indices = rows
+        try:
+            self.timeline.selectAll()
+        except Exception:
+            pass
+        self.status(f"Selected {len(rows)} row(s)")
+
+    def _ungroup_selected(self):
+        rows = self._selected_rows(self.active_index)
+        if len(rows) == 1 and 0 <= rows[0] < self.action_model.rowCount():
+            action = self.action_model.get(rows[0])
+            if getattr(action, "action_type", "") == "group":
+                gid = getattr(action, "group_id", "")
+                rows = [i for i, a in enumerate(self.action_model.actions()) if getattr(a, "group_id", "") == gid and getattr(a, "action_type", "") != "group"]
+        self.remove_rows_from_group(rows)
 
     def _delete_selected(self):
         self.delete_action(self.active_index)
@@ -302,6 +345,8 @@ class MainWindow(QMainWindow):
         self.timeline.action_clicked.connect(self.select)
         self.timeline.action_double_clicked.connect(self._open_active_dialog)
         self.timeline.action_dragged.connect(self.move_action_to)
+        if hasattr(self.timeline, "action_dropped_into_group"):
+            self.timeline.action_dropped_into_group.connect(self.move_action_into_group)
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
         self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
 
@@ -813,6 +858,31 @@ class MainWindow(QMainWindow):
         from ui.main_window_menus import delete_profile_confirm
         delete_profile_confirm(self)
 
+    def _linked_targets_for_action(self, index: int):
+        if index < 0 or index >= self.action_model.rowCount():
+            return []
+        action = self.action_model.get(index)
+        targets = []
+        kind = getattr(action, "action_type", "key") or "key"
+        if kind == "loop":
+            targets.append(int(getattr(action, "loop_target", -1) or -1))
+        elif kind == "condition":
+            targets.append(int(getattr(action, "condition_jump_true", -1) or -1))
+            targets.append(int(getattr(action, "condition_jump_false", -1) or -1))
+        elif kind == "image":
+            targets.append(int(getattr(action, "jump_to_on_found", -1) or -1))
+            targets.append(int(getattr(action, "jump_to_on_not_found", -1) or -1))
+        return [t for t in dict.fromkeys(targets) if 0 <= t < self.action_model.rowCount()]
+
+    def _update_timeline_links(self, index: int):
+        if hasattr(self.timeline, "set_link_targets"):
+            self.timeline.set_link_targets(index, self._linked_targets_for_action(index))
+
+    def _display_index_from_engine_index(self, idx: int) -> int:
+        if self._run_index_map and 0 <= idx < len(self._run_index_map):
+            return self._run_index_map[idx]
+        return self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+
     # ═══════════════════════════════════════════════════════
     #  SELECTION & EDITING
     # ═══════════════════════════════════════════════════════
@@ -825,6 +895,8 @@ class MainWindow(QMainWindow):
             self.inspector_selector.clear()
             self.inspector_selector.addItem("Select an action")
             self._show_inspector(False)
+            if hasattr(self.timeline, "set_link_targets"):
+                self.timeline.set_link_targets(-1, [])
             return
         self.active_index = index
         preserve_multi = index in getattr(self.timeline, "selected_indices", set()) and len(getattr(self.timeline, "selected_indices", set())) > 1
@@ -838,6 +910,7 @@ class MainWindow(QMainWindow):
             self.timeline.selected_indices.clear()
             self.timeline.set_active(index)
         action = self.action_model.get(index)
+        self._update_timeline_links(index)
         self.inspector_selector.clear()
         self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
         self._show_inspector(True, action.action_type)
@@ -1070,6 +1143,81 @@ class MainWindow(QMainWindow):
         self.timeline.flash_drop(new_index)
         self.save_session()
         self.status("Moved action")
+
+    def move_action_into_group(self, index, group_row):
+        """Move a dragged action row into the target group/folder.
+
+        Dropping onto the centre of a group header appends the row to that
+        group, assigns the member badge/colour, and keeps undo/redo + row
+        references stable. Group headers themselves still move as whole groups
+        through the normal drag reorder path.
+        """
+        if self.engine.running or self.timeline.playing_index >= 0:
+            self.status("Stop playback before moving actions into groups")
+            return
+        if index < 0 or index >= self.action_model.rowCount():
+            return
+        if group_row < 0 or group_row >= self.action_model.rowCount():
+            return
+        source_action = self.action_model.get(index)
+        if getattr(source_action, "action_type", "") == "group":
+            self.status("Drag the group header to move the whole folder")
+            return
+        group_meta = self._group_header_for_row(group_row)
+        if not group_meta or getattr(group_meta["action"], "action_type", "") != "group":
+            return
+
+        actions_before = list(self.action_model.actions())
+        header_action = group_meta["action"]
+        if source_action is header_action:
+            return
+
+        scroll_position = self.timeline.scroll_position()
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+
+        # Remove the source first, then locate the group header by object identity
+        # so drops from above the group and from inside the same group are stable.
+        actions = list(actions_before)
+        moved = actions.pop(index)
+        try:
+            header_index = next(i for i, a in enumerate(actions) if a is header_action)
+        except StopIteration:
+            self.status("Target group no longer exists")
+            return
+
+        target_insert = header_index + 1
+        gid = group_meta["gid"]
+        while target_insert < len(actions):
+            candidate = actions[target_insert]
+            if getattr(candidate, "action_type", "") == "group":
+                break
+            if getattr(candidate, "group_id", "") != gid:
+                break
+            target_insert += 1
+
+        moved.group_id = gid
+        moved.group_color = group_meta["color"]
+        moved.block_depth = max(1, int(getattr(moved, "block_depth", 0) or 0))
+        actions.insert(target_insert, moved)
+
+        # Preserve row-based loop/condition/image references after the structural
+        # move, including references to the moved action itself.
+        new_index_by_id = {id(a): i for i, a in enumerate(actions)}
+        row_map = {old_i: new_index_by_id.get(id(a), old_i) for old_i, a in enumerate(actions_before)}
+        self.action_model.set_actions(actions)
+        self._apply_row_reference_map(row_map)
+        self.timeline.remap_after_move(index, target_insert)
+        self._normalize_groups()
+
+        collapsed = bool(getattr(header_action, "group_collapsed", False))
+        self.active_index = header_index if collapsed else target_insert
+        self.refresh()
+        self.timeline.set_active(self.active_index)
+        self.timeline.restore_scroll_position(scroll_position)
+        self.timeline.flash_drop(header_index if collapsed else target_insert)
+        self.update_statistics(immediate=True)
+        self.save_session()
+        self.status(f"Moved row {index + 1} into {group_meta['badge']} {group_meta['name']}")
 
     def move_action_to(self, index, target_index):
         if self.engine.running or self.timeline.playing_index >= 0:
@@ -1570,6 +1718,27 @@ class MainWindow(QMainWindow):
         lo.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
         dlg.exec()
 
+    def toggle_runtime_log_panel(self, show=None):
+        if not hasattr(self, "runtime_log_panel"):
+            self.open_playback_diagnostics()
+            return
+        visible = not self.runtime_log_panel.isVisible() if show is None else bool(show)
+        self.runtime_log_panel.setVisible(visible)
+        if hasattr(self, "runtime_log_btn"):
+            self.runtime_log_btn.setChecked(visible)
+        if visible and hasattr(self, "runtime_log_edit"):
+            self.runtime_log_edit.setPlainText("\n".join(self._diag_lines[-600:]))
+            sb = self.runtime_log_edit.verticalScrollBar()
+            sb.setValue(sb.maximum())
+
+    def clear_runtime_log_panel(self):
+        self._diag_lines.clear()
+        if getattr(self, "_diag_edit", None) is not None:
+            self._diag_edit.clear()
+        if hasattr(self, "runtime_log_edit"):
+            self.runtime_log_edit.clear()
+        self.status("Runtime log cleared")
+
     def run_selected_actions(self, rows):
         if self.engine.running:
             self.status("Stop playback before running selected block")
@@ -1593,6 +1762,8 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
         self.timeline.clear_image_states()
+        if hasattr(self.timeline, "clear_trace"):
+            self.timeline.clear_trace()
         self.start_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
@@ -1774,7 +1945,7 @@ class MainWindow(QMainWindow):
                 self.history.push(self.action_model.actions(), self._timeline_history_state())
                 self._write_recovery_snapshot(clean_shutdown=False)
                 self.action_model.set_actions([Action.from_dict(d) for d in actions_data])
-                self._normalize_groups()
+                fixes, warnings = self._repair_loaded_macro()
                 self.active_index = -1
                 self.refresh()
                 self.update_statistics(immediate=True)
@@ -1815,6 +1986,8 @@ class MainWindow(QMainWindow):
         if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             return
         self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
+        if hasattr(self.timeline, "clear_trace"):
+            self.timeline.clear_trace()
         self.actions_played = 0
         self.session_elapsed_time = 0.0
         self.session_start_time = time.time()
@@ -1863,10 +2036,7 @@ class MainWindow(QMainWindow):
         self._play_action.emit(idx, dur)
 
     def _do_play_cb(self, idx, dur):
-        if self._run_index_map and 0 <= idx < len(self._run_index_map):
-            display_idx = self._run_index_map[idx]
-        else:
-            display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+        display_idx = self._display_index_from_engine_index(idx)
         self.playing_index = display_idx
         # Auto-expand a collapsed group when playback reaches one of its member rows;
         # group headers themselves are skipped by the engine and never become active.
@@ -1884,6 +2054,7 @@ class MainWindow(QMainWindow):
         speed = max(self.engine.speed_multiplier, 0.01)
         adjusted_dur = dur / speed
         self.timeline.set_playing(display_idx, adjusted_dur)
+        self._update_timeline_links(display_idx)
         action_name = ""
         try:
             current = self.action_model.get(display_idx)
@@ -1894,18 +2065,20 @@ class MainWindow(QMainWindow):
             self.status(f"Playing · {active_group_label} · Row {display_idx + 1} {action_name}")
         else:
             self.status(f"Playing · Row {display_idx + 1} {action_name}")
-        self._diag(f"[PLAY] Timeline row {display_idx + 1} active for ~{adjusted_dur:.2f}s")
+        group_log = f" in {active_group_label}" if active_group_label else ""
+        self._diag(f"[PLAY] Timeline row {display_idx + 1}{group_log} active for ~{adjusted_dur:.2f}s")
         self.update_statistics()
 
     def _image_match_cb(self, idx, state):
         self._image_match_state.emit(idx, state)
 
     def _do_image_match_state(self, idx, state):
-        if self._run_index_map and 0 <= idx < len(self._run_index_map):
-            display_idx = self._run_index_map[idx]
-        else:
-            display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+        display_idx = self._display_index_from_engine_index(idx)
         self.timeline.set_image_state(display_idx, state)
+
+    def _do_trace_row(self, row):
+        if hasattr(self.timeline, "mark_trace"):
+            self.timeline.mark_trace(row)
 
     def _pause_cb(self, paused):
         self._pause_state.emit(paused)
@@ -1939,6 +2112,8 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.playing_index = -1
         self.timeline.clear_playing()
+        if hasattr(self.timeline, "set_link_targets"):
+            self.timeline.set_link_targets(-1, [])
         self.progress_bar.setValue(100)
         self.progress_label.setText("100%")
         self.status_dot.set_color(COLORS["text_dark"])
@@ -2020,12 +2195,24 @@ class MainWindow(QMainWindow):
             self._diag_edit.appendPlainText(line)
             sb = self._diag_edit.verticalScrollBar()
             sb.setValue(sb.maximum())
+        try:
+            if hasattr(self, "runtime_log_edit") and self.runtime_log_edit is not None:
+                self.runtime_log_edit.appendPlainText(line)
+                sb = self.runtime_log_edit.verticalScrollBar()
+                sb.setValue(sb.maximum())
+        except Exception:
+            pass
 
     def _before_action_diag(self, action):
         self._diag(f"[ACTION] Preparing {self._action_diag_summary(action)}")
 
     def _after_action_diag(self, action):
         sim = " simulated" if getattr(self.engine, "simulation_mode", False) else " deployed"
+        try:
+            display_idx = self._display_index_from_engine_index(getattr(self.engine, "current_action_index", -1))
+            self._trace_row.emit(display_idx)
+        except Exception:
+            pass
         self._diag(f"[ACTION] {self._action_diag_summary(action)}{sim}")
 
     def open_playback_diagnostics(self):
@@ -2578,6 +2765,48 @@ class MainWindow(QMainWindow):
             "actions": [a.to_dict() for a in self.action_model.actions()],
         }
 
+    def _repair_loaded_macro(self):
+        """Apply safe repairs after importing/loading a macro and report reliability issues."""
+        fixes = []
+        warnings = []
+        total = self.action_model.rowCount()
+        if self._normalize_groups():
+            fixes.append("Normalized group ids, colors, and member badges")
+        for idx, action in enumerate(self.action_model.actions()):
+            kind = getattr(action, "action_type", "key") or "key"
+            if kind == "loop":
+                target = int(getattr(action, "loop_target", -1) or -1)
+                if not (0 <= target < idx):
+                    suggested = self._suggest_loop_target(idx)
+                    if 0 <= suggested < idx:
+                        action.loop_target = suggested
+                        fixes.append(f"Row {idx + 1}: loop target repaired to {self._row_target_text(suggested)}")
+                    else:
+                        warnings.append(f"Row {idx + 1}: loop target still needs attention")
+            elif kind == "condition":
+                for attr, label in (("condition_jump_true", "true"), ("condition_jump_false", "false")):
+                    target = int(getattr(action, attr, -1) or -1)
+                    if target >= total:
+                        setattr(action, attr, -1)
+                        fixes.append(f"Row {idx + 1}: condition {label} target reset to next row")
+            elif kind == "image" and not getattr(action, "image_data", ""):
+                warnings.append(f"Row {idx + 1}: image action has no captured template")
+        return fixes, warnings
+
+    def _show_load_reliability_report(self, fixes, warnings):
+        if not fixes and not warnings:
+            return
+        text = []
+        if fixes:
+            text.append(f"Auto-repaired {len(fixes)} issue(s):")
+            text.extend(f"• {x}" for x in fixes[:8])
+        if warnings:
+            if text:
+                text.append("")
+            text.append(f"Warnings still needing review ({len(warnings)}):")
+            text.extend(f"• {x}" for x in warnings[:8])
+        QMessageBox.information(self, "Macro import reliability check", "\n".join(text))
+
     def save(self):
         path, _ = QFileDialog.getSaveFileName(self, "Export Macro", "", "MacroForge Macro (*.macroforge);;JSON (*.json)")
         if path:
@@ -2607,12 +2836,13 @@ class MainWindow(QMainWindow):
                 self.action_model.clear()
                 for action_data in actions_data:
                     self.action_model.add_action(Action.from_dict(action_data))
-                self._normalize_groups()
+                fixes, warnings = self._repair_loaded_macro()
                 self.active_index = -1
                 self.timeline.refresh()
                 self.refresh()
                 self.update_statistics()
                 self.save_session()
+                self._show_load_reliability_report(fixes, warnings)
                 self.status(f"Imported {len(actions_data)} actions")
             except Exception as e:
                 QMessageBox.critical(self, "Import Error", str(e))
@@ -2856,6 +3086,54 @@ class MainWindow(QMainWindow):
     #  STATISTICS & STATUS
     # ═══════════════════════════════════════════════════════
 
+    def _maybe_show_runtime_error(self, msg):
+        msg = str(msg or "")
+        if not getattr(self.engine, "running", False):
+            return
+        lower = msg.lower()
+        severe = any(token in lower for token in ("engine error", "image search error", "action failed", "failed:", "stopped", "error after"))
+        if not severe or msg == self._last_runtime_error or self._runtime_error_dialog_open:
+            return
+        self._last_runtime_error = msg
+        self._show_runtime_error_dialog(msg)
+
+    def _show_runtime_error_dialog(self, msg):
+        if self._runtime_error_dialog_open:
+            return
+        self._runtime_error_dialog_open = True
+        try:
+            # Expand the current group so the problem row is visible before showing options.
+            try:
+                if 0 <= self.playing_index < self.action_model.rowCount():
+                    meta = self._group_header_for_row(self.playing_index)
+                    if meta and bool(getattr(meta["action"], "group_collapsed", False)):
+                        meta["action"].group_collapsed = False
+                        self.timeline.refresh()
+            except Exception:
+                pass
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("MacroForge runtime issue")
+            box.setText("Playback reported a runtime issue.")
+            box.setInformativeText(str(msg))
+            stop_btn = box.addButton("Stop macro", QMessageBox.ButtonRole.DestructiveRole)
+            inspector_btn = box.addButton("Open Inspector", QMessageBox.ButtonRole.ActionRole)
+            log_btn = box.addButton("Show runtime log", QMessageBox.ButtonRole.ActionRole)
+            ignore_btn = box.addButton("Ignore", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(ignore_btn)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked is stop_btn:
+                self.stop()
+            elif clicked is inspector_btn:
+                if 0 <= self.playing_index < self.action_model.rowCount():
+                    self.select(self.playing_index)
+                    self.timeline.ensure_visible(self.playing_index)
+            elif clicked is log_btn:
+                self.toggle_runtime_log_panel(True)
+        finally:
+            self._runtime_error_dialog_open = False
+
     def status(self, msg):
         # Thread-safe: always marshal Qt widget access to main thread
         def _update():
@@ -2902,6 +3180,7 @@ class MainWindow(QMainWindow):
             else:
                 self.status_icon.setVisible(False)
                 self.status_dot.set_color(C["text_dim"], glow=False)
+            self._maybe_show_runtime_error(msg)
         QTimer.singleShot(0, _update)
         logger.info(msg)
 
@@ -2936,7 +3215,7 @@ class MainWindow(QMainWindow):
         collapsed = bool(collapsed)
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(36 if collapsed else 118)
+        self.playback_panel.setFixedHeight(36 if collapsed else 168)
 
     @staticmethod
     def _format_hms(seconds: float) -> str:

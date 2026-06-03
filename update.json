@@ -1,6 +1,6 @@
 {
-  "version": "3.1.9",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.9/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.9/MacroForge-v3.1.9.zip",
-  "notes": "v3.1.9: Group stability + inspector upgrade - group/loop/condition inspector, group header metadata, group-aware playback with auto-expand, loop targets show group labels, condition builder targets group headers, preflight apply auto-fixes action, recovery/version-history window, clean release builder in menu."
+  "version": "3.2.0",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.0/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.0/MacroForge-v3.2.0.zip",
+  "notes": "v3.2.0: Runtime debug + drag-into-group - live runtime log panel, playback timeline trace, runtime error dialog with Stop/Inspector/Log actions, condition/loop/image target highlighting, group progress on headers, save/load reliability repair, timeline shortcuts in Settings, drag normal row onto group header to move into group."
 }

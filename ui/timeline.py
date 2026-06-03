@@ -177,10 +177,16 @@ class TimelineDelegate(QStyledItemDelegate):
             playing = row == getattr(view, "playing_index", -1)
             queued = row == getattr(view, "next_index", -1)
             dragging = row == getattr(view, "drag_source_row", -1)
+            group_drop_target = row == getattr(view, "drop_group_row", -1)
             flashed = row == getattr(view, "flash_row", -1)
             flash_opacity = float(getattr(view, "flash_opacity", 0.0) or 0.0)
+            traced = row in getattr(view, "trace_rows", set())
+            linked_source = row == getattr(view, "link_source_row", -1)
+            linked_target = row in getattr(view, "link_target_rows", set())
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
+            if kind == "group" and hasattr(view, "group_progress"):
+                progress = _clamp(view.group_progress(row).get("progress", progress))
             group_badge = view.group_badge(row) if hasattr(view, "group_badge") else None
             active_group = bool(
                 kind == "group"
@@ -210,6 +216,14 @@ class TimelineDelegate(QStyledItemDelegate):
             if dragging:
                 bg = _mix(bg, type_color, 0.18)
                 outer.translate(0, -2)
+            if traced and not playing:
+                bg = _mix(bg, COLORS.get("success", type_color), 0.07)
+            if linked_source and not playing:
+                bg = _mix(bg, type_color, 0.10)
+            if linked_target and not playing:
+                bg = _mix(bg, COLORS.get("accent", type_color), 0.13)
+            if group_drop_target and kind == "group" and not playing:
+                bg = _mix(bg, COLORS.get("success", type_color), 0.18)
             if flashed:
                 bg = _mix(bg, type_color, 0.22 * flash_opacity)
 
@@ -218,6 +232,14 @@ class TimelineDelegate(QStyledItemDelegate):
                 border = COLORS["border_light"]
             if queued:
                 border = _mix(COLORS["border"], type_color, 0.35)
+            if traced:
+                border = _mix(COLORS["border"], COLORS.get("success", type_color), 0.34)
+            if linked_source:
+                border = _mix(COLORS["border_light"], type_color, 0.55)
+            if linked_target:
+                border = COLORS.get("accent", type_color)
+            if group_drop_target and kind == "group":
+                border = COLORS.get("success", type_color)
             if dragging or flashed:
                 border = _mix(COLORS["border_light"], type_color, 0.55)
             if playing:
@@ -377,6 +399,12 @@ class TimelineDelegate(QStyledItemDelegate):
                 dur = float(group_badge.get("duration", 0.0) or 0.0)
                 hidden = " hidden" if bool(getattr(action, "group_collapsed", False)) else ""
                 detail = f"{count} action{'s' if count != 1 else ''}{hidden} · ~{dur:.1f}s"
+                if hasattr(view, "group_progress"):
+                    gp = view.group_progress(row)
+                    if gp.get("active") or gp.get("progress", 0) > 0:
+                        cur = gp.get("current", "")
+                        cur_txt = f" · {cur}" if cur else ""
+                        detail = f"{gp.get('done', 0)}/{max(1, gp.get('total', count))} actions · {int(round(gp.get('progress', 0) * 100))}%{cur_txt}"
             if kind == "loop" and hasattr(view, "group_badge"):
                 target = int(getattr(action, "loop_target", -1) or -1)
                 meta = view.group_badge(target) if target >= 0 else None
@@ -433,6 +461,20 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                 painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
 
+            if linked_target and kind != "group":
+                link_rect = QRectF(text_x, outer.center().y() + 7, 46 if compact else 54, 14)
+                self._rounded_rect(painter, link_rect, 4, COLORS["bg"], COLORS.get("accent", type_color), 1)
+                painter.setPen(QColor(COLORS.get("accent", type_color)))
+                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
+                painter.drawText(link_rect, Qt.AlignmentFlag.AlignCenter, "TARGET")
+
+            if traced and not playing and not linked_target:
+                done_rect = QRectF(text_x, outer.center().y() + 7, 42 if compact else 50, 14)
+                self._rounded_rect(painter, done_rect, 4, COLORS["bg"], COLORS.get("success", type_color), 1)
+                painter.setPen(QColor(COLORS.get("success", type_color)))
+                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
+                painter.drawText(done_rect, Qt.AlignmentFlag.AlignCenter, "TRACE")
+
             if not enabled:
                 disabled_rect = QRectF(text_x, outer.center().y() + 7, 54 if compact else 64, 14)
                 self._rounded_rect(painter, disabled_rect, 4, COLORS["bg"], COLORS["text_dark"], 1)
@@ -444,7 +486,10 @@ class TimelineDelegate(QStyledItemDelegate):
             if not enabled:
                 status, status_col = "Disabled", COLORS["text_dark"]
             elif kind == "group":
-                status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
+                if group_drop_target:
+                    status, status_col = "Drop in", COLORS.get("success", type_color)
+                else:
+                    status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
             elif kind == "loop":
                 status, status_col = "Loop", type_color
             elif playing:
@@ -494,7 +539,7 @@ class TimelineDelegate(QStyledItemDelegate):
             for dy in (-7, 0, 7):
                 painter.drawEllipse(QRectF(dot_x, outer.center().y() + dy - 1.5, 3, 3))
 
-            insert_row = getattr(view, "drop_insert_row", -1)
+            insert_row = -1 if getattr(view, "drop_group_row", -1) >= 0 else getattr(view, "drop_insert_row", -1)
             line_y = None
             if insert_row == row:
                 line_y = option.rect.top() + 1
@@ -535,6 +580,7 @@ class TimelineView(QListView):
     action_double_clicked = pyqtSignal(int)
     action_context_menu = pyqtSignal(int, object)
     action_dragged = pyqtSignal(int, int)
+    action_dropped_into_group = pyqtSignal(int, int)
     group_toggle_requested = pyqtSignal(int)
 
     def __init__(self, parent=None, model=None):
@@ -553,9 +599,13 @@ class TimelineView(QListView):
         self._drag_allowed = False
         self.drag_source_row = -1
         self.drop_insert_row = -1
+        self.drop_group_row = -1
         self.hover_row = -1
         self.flash_row = -1
         self.flash_opacity = 0.0
+        self.trace_rows = set()
+        self.link_source_row = -1
+        self.link_target_rows = set()
         self._auto_scroll_direction = 0
         self._last_drag_pos = None
         self._playing_started = 0.0
@@ -685,6 +735,50 @@ class TimelineView(QListView):
                 rows = {i.row() for i in sel.selectedIndexes() if i.isValid()}
         self.selected_indices = {r for r in rows if not self.is_row_collapsed_hidden(r)}
         return self.selected_indices
+
+    def clear_trace(self):
+        self.trace_rows.clear()
+        self.viewport().update()
+
+    def mark_trace(self, row: int):
+        if 0 <= row < self.model().rowCount():
+            self.trace_rows.add(row)
+            # Keep the trail useful but bounded for large macros.
+            if len(self.trace_rows) > 256:
+                self.trace_rows = set(sorted(self.trace_rows)[-256:])
+            self.viewport().update()
+
+    def set_link_targets(self, source: int = -1, targets=None):
+        self.link_source_row = int(source if source is not None else -1)
+        self.link_target_rows = {int(t) for t in (targets or []) if t is not None and int(t) >= 0}
+        self.viewport().update()
+
+    def group_progress(self, row: int):
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return {"active": False, "done": 0, "total": 0, "progress": 0.0, "current": ""}
+        header = actions[row]
+        if getattr(header, "action_type", "") != "group":
+            return {"active": False, "done": 0, "total": 0, "progress": 0.0, "current": ""}
+        gid = getattr(header, "group_id", "")
+        child_rows = [
+            i for i, a in enumerate(actions)
+            if i != row and getattr(a, "group_id", "") == gid and getattr(a, "action_type", "") != "group"
+        ]
+        runnable = [i for i in child_rows if bool(getattr(actions[i], "enabled", True)) and getattr(actions[i], "action_type", "key") != "group"]
+        total = len(runnable)
+        active = self.active_group_id and self.active_group_id == gid
+        done = len([i for i in runnable if i in self.trace_rows])
+        current = ""
+        if self.playing_index in runnable:
+            active = True
+            done = max(done, len([i for i in runnable if i < self.playing_index]))
+            action = actions[self.playing_index]
+            current = getattr(action, "label", "") or getattr(action, "key", "") or getattr(action, "action_type", "Action")
+        progress = (done / total) if total else 0.0
+        if active and self.playing_index in runnable and total:
+            progress = max(progress, min(1.0, (done + self.action_progress(self.playing_index)) / total))
+        return {"active": bool(active), "done": min(done, total), "total": total, "progress": progress, "current": current}
 
     def action_progress(self, row: int) -> float:
         if self.playing_index < 0:
@@ -850,7 +944,13 @@ class TimelineView(QListView):
             pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
             self._last_drag_pos = pos
             self._update_auto_scroll(pos)
-            self.drop_insert_row = self._drop_insert_row(pos)
+            group_row = self._drop_group_row(pos)
+            if group_row >= 0:
+                self.drop_group_row = group_row
+                self.drop_insert_row = -1
+            else:
+                self.drop_group_row = -1
+                self.drop_insert_row = self._drop_insert_row(pos)
             self.viewport().update()
             event.acceptProposedAction()
             return
@@ -890,6 +990,7 @@ class TimelineView(QListView):
         self._drag_allowed = False
         self.drag_source_row = -1
         self.drop_insert_row = -1
+        self.drop_group_row = -1
         self._last_drag_pos = None
         self.setDragEnabled(False)
         self.viewport().unsetCursor()
@@ -909,6 +1010,41 @@ class TimelineView(QListView):
         self._flash_timer.stop()
         self.flash_row = -1
         self.viewport().update()
+
+    def _drop_group_row(self, pos) -> int:
+        """Return a group header row when the cursor is in its central drop zone.
+
+        Top/bottom edges still behave like normal reorder insertion targets, so
+        users can move rows around a group without accidentally adding them to it.
+        """
+        if self.model() is None or self._drag_start_row < 0:
+            return -1
+        if self._row_kind(self._drag_start_row) == "group":
+            return -1
+        idx = self.indexAt(pos)
+        if not idx.isValid():
+            return -1
+        row = idx.row()
+        if row == self._drag_start_row:
+            return -1
+        if self.is_row_collapsed_hidden(row):
+            header = self.group_header_for_row(row)
+            if not header:
+                return -1
+            row = header[0]
+            idx = self.model().index(row, 0)
+        if self._row_kind(row) != "group":
+            return -1
+
+        # Use the centre of the header card as the intentional "drop into" zone.
+        # Dropping near the top/bottom keeps the existing insert-line behavior.
+        rect = self.visualRect(idx)
+        if not rect.isValid() or rect.height() <= 0:
+            return -1
+        rel_y = (pos.y() - rect.top()) / max(1, rect.height())
+        if 0.22 <= rel_y <= 0.78:
+            return row
+        return -1
 
     def _drop_insert_row(self, pos) -> int:
         count = self.model().rowCount() if self.model() is not None else 0
@@ -938,10 +1074,13 @@ class TimelineView(QListView):
             self._stop_drag_feedback()
             return
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
-        target = self._drop_target_row(pos)
+        group_target = self._drop_group_row(pos)
+        target = self._drop_target_row(pos) if group_target < 0 else -1
         self._stop_auto_scroll()
         event.acceptProposedAction()
-        if source >= 0 and target >= 0 and source != target:
+        if source >= 0 and group_target >= 0:
+            QTimer.singleShot(0, lambda s=source, g=group_target: self.action_dropped_into_group.emit(s, g))
+        elif source >= 0 and target >= 0 and source != target:
             QTimer.singleShot(0, lambda s=source, t=target: self.action_dragged.emit(s, t))
 
     def wheelEvent(self, event):
