@@ -1,6 +1,6 @@
 {
-  "version": "3.5.6",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.6/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.6/MacroForge-v3.5.6.zip",
-  "notes": "v3.5.6: Apply image table lock smooth patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with image table lock smooth."
+  "version": "3.5.7",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.7/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.7/MacroForge-v3.5.7.zip",
+  "notes": "v3.5.7: Apply locked inspector height no info patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with locked inspector height no info."
 }
