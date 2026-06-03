@@ -67,6 +67,7 @@ datas = [
     ('MacroForge.ico', '.'),
     ('MacroForge.png', '.'),
     ('version.py', '.'),
+    ('ui/assets/neon_buttons', 'ui/assets/neon_buttons'),
 ]
 
 # ── Analysis ──

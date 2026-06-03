@@ -1,6 +1,6 @@
 {
-  "version": "3.3.2",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.2/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.2/MacroForge-v3.3.2.zip",
-  "notes": "v3.3.2: Sidebar width adjusted to 280px; timeline row clicks hardened against malformed profile data; image inspector preview/autosave smoke coverage added; Qt test cleanup stabilized."
+  "version": "3.3.3",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.3/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.3/MacroForge-v3.3.3.zip",
+  "notes": "v3.3.3: Add Action panel uses scoped neon PNG button assets with centered icon/name content, hover and pressed variants, build packaging support, and regression coverage."
 }

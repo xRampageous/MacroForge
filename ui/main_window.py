@@ -232,22 +232,51 @@ class MainWindow(QMainWindow):
         type_map = {"key": "add_key", "click": "add_click", "delay": "add_pause",
                     "image": "add_image", "condition": "add_condition",
                     "loop": "add_loop", "folder": "add_group"}
+        bg_map = {
+            "key": "add_key.png",
+            "click": "add_click.png",
+            "delay": "add_delay.png",
+            "image": "add_image.png",
+            "condition": "add_condition.png",
+            "loop": "add_loop.png",
+            "folder": "add_group.png",
+        }
         obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(text)
         btn.setObjectName(obj)
         btn.setIcon(icon(icon_name, 16, color))
-        btn.setIconSize(QSize(16, 16))
+        btn.setIconSize(QSize(18, 18))
         btn.setFixedHeight(46)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Black))
         tint = color.lstrip("#")
-        btn.setStyleSheet(
-            f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
-            f"color: {COLORS['text_inverse']}; border: 1px solid #99{tint}; border-radius: 10px; padding: 7px 12px; "
-            f"text-align: center; font-size: 14px; font-weight: 700; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {color}, stop:1 #000000); "
-            f"border-color: {color}; }}"
-            f"QPushButton:pressed {{ background: #55{tint}; }}"
-        )
+        bg_file = bg_map.get(icon_name)
+        bg_path = os.path.join(os.path.dirname(__file__), "assets", "neon_buttons", bg_file or "")
+        if bg_file and os.path.exists(bg_path):
+            bg_url = bg_path.replace("\\", "/")
+            hover_path = os.path.splitext(bg_path)[0] + "_hover.png"
+            pressed_path = os.path.splitext(bg_path)[0] + "_pressed.png"
+            hover_url = hover_path.replace("\\", "/") if os.path.exists(hover_path) else bg_url
+            pressed_url = pressed_path.replace("\\", "/") if os.path.exists(pressed_path) else bg_url
+            btn.setProperty("neon_add_action", True)
+            btn.setProperty("content_centered", True)
+            btn.setStyleSheet(
+                f"QPushButton {{ border-image: url(\"{bg_url}\") 0 0 0 0 stretch stretch; "
+                f"background: transparent; color: {COLORS['text_inverse']}; border: none; "
+                f"padding: 0px 8px; text-align: center; font-size: 14px; font-weight: 900; }}"
+                f"QPushButton:hover {{ border-image: url(\"{hover_url}\") 0 0 0 0 stretch stretch; color: #FFFFFF; }}"
+                f"QPushButton:pressed {{ border-image: url(\"{pressed_url}\") 0 0 0 0 stretch stretch; "
+                f"color: {color}; padding: 1px 8px 0px 8px; }}"
+            )
+        else:
+            btn.setStyleSheet(
+                f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
+                f"color: {COLORS['text_inverse']}; border: 1px solid #99{tint}; border-radius: 10px; padding: 7px 12px; "
+                f"text-align: center; font-size: 14px; font-weight: 700; }}"
+                f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {color}, stop:1 #000000); "
+                f"border-color: {color}; }}"
+                f"QPushButton:pressed {{ background: #55{tint}; }}"
+            )
         btn.clicked.connect(callback)
         if layout is not None:
             layout.addWidget(btn)

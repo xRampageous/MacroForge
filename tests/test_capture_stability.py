@@ -460,6 +460,34 @@ class TestPlaybackVisibility(QtTestCase):
             window.hide()
             self._dispose_window(window)
 
+    def test_neon_png_buttons_are_scoped_to_add_action_panel(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            add_names = {
+                "add_key",
+                "add_click",
+                "add_pause",
+                "add_image",
+                "add_condition",
+                "add_loop",
+                "add_group",
+            }
+            for name in add_names:
+                button = window.findChild(QPushButton, name)
+                self.assertIsNotNone(button, name)
+                self.assertTrue(button.property("neon_add_action"), name)
+                self.assertTrue(button.property("content_centered"), name)
+                self.assertIn("neon_buttons", button.styleSheet(), name)
+                self.assertIn("_hover.png", button.styleSheet(), name)
+                self.assertIn("_pressed.png", button.styleSheet(), name)
+                self.assertIn("text-align: center", button.styleSheet(), name)
+                self.assertEqual(button.iconSize().width(), 20, name)
+
+            for button in (window.start_btn, window.pause_btn, window.stop_btn, window.rec_btn, window.rec_pause_btn):
+                self.assertNotEqual(button.property("neon_add_action"), True)
+                self.assertNotIn("neon_buttons", button.styleSheet())
+            self._dispose_window(window)
+
     def test_timeline_row_clicks_keep_window_alive_and_select_row(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)

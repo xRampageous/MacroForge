@@ -207,7 +207,7 @@ def build_main_layout(window):
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
         btn.setFixedHeight(54)
-        btn.setIconSize(QSize(19, 19))
+        btn.setIconSize(QSize(20, 20))
         add_grid.addWidget(btn, row, col, rowspan, colspan)
     add_lo.addLayout(add_grid)
     sb_lo.addWidget(add_card)
