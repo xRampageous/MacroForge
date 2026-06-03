@@ -875,26 +875,26 @@ def build_main_layout(window):
     self._side_panel_collapsed_width = 22
     self._side_panel_auto_collapse_width = 910
     self._side_panel_auto_expand_width = 1040
-    self._height_auto_playback_collapse = 860
-    self._height_auto_playback_expand = 960
-    # Image Inspector sub-panels auto-hide before the whole Inspector does.
-    # Thresholds intentionally sit above the window minimum height so they are
-    # reachable during normal manual resize. Collapse order is bottom-up inside
-    # the Image pane: Fail Target, On Fail, Retry, Matching.
-    self._height_auto_image_fail_target_collapse = 1040
-    self._height_auto_image_fail_target_expand = 1110
-    self._height_auto_image_on_fail_collapse = 1000
-    self._height_auto_image_on_fail_expand = 1070
-    self._height_auto_image_retry_collapse = 960
-    self._height_auto_image_retry_expand = 1030
-    self._height_auto_image_matching_collapse = 920
-    self._height_auto_image_matching_expand = 990
-    self._height_auto_inspector_collapse = 800
-    self._height_auto_inspector_expand = 885
-    self._height_auto_recorder_collapse = 700
-    self._height_auto_recorder_expand = 770
-    self._height_auto_add_collapse = 610
-    self._height_auto_add_expand = 680
+    self._height_auto_playback_collapse = 1100
+    self._height_auto_playback_expand = 1170
+    # Image Inspector sub-panels auto-hide first while unlocked and resizing
+    # height. Collapse order is top-to-bottom as requested:
+    # Matching, Retry, On Fail, Fail Target.  Main panels collapse only after
+    # all Image sub-panels have had a chance to close.
+    self._height_auto_image_matching_collapse = 1040
+    self._height_auto_image_matching_expand = 1110
+    self._height_auto_image_retry_collapse = 980
+    self._height_auto_image_retry_expand = 1050
+    self._height_auto_image_on_fail_collapse = 920
+    self._height_auto_image_on_fail_expand = 990
+    self._height_auto_image_fail_target_collapse = 860
+    self._height_auto_image_fail_target_expand = 930
+    self._height_auto_inspector_collapse = 760
+    self._height_auto_inspector_expand = 840
+    self._height_auto_recorder_collapse = 650
+    self._height_auto_recorder_expand = 720
+    self._height_auto_add_collapse = 540
+    self._height_auto_add_expand = 610
     self.sidebar_frame = sidebar
     self.add_action_body = add_body
     self.recorder_body = rec_body

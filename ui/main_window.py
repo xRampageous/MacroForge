@@ -72,9 +72,9 @@ class MainWindow(QMainWindow):
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
         self.setWindowTitle("MacroForge")
-        # Lower minimum width so the responsive side panel can actually
-        # auto-collapse when the window is narrowed.
-        self.setMinimumSize(760, 760)
+        # Lower minimum size so responsive side/bottom panel auto-hide can
+        # reach the collapsed-panel/header stack while resizing.
+        self.setMinimumSize(760, 420)
         self.resize(985, 1100)
         self.setStyleSheet(build_stylesheet())
 
@@ -327,24 +327,10 @@ class MainWindow(QMainWindow):
             if any_panel_locked:
                 return
 
-            # Bottom playback panel is the lowest visible panel.  It hides first
-            # when height is reduced and returns last after enough room exists.
-            if hasattr(self, "playback_panel"):
-                if (
-                    height <= int(getattr(self, "_height_auto_playback_collapse", 860))
-                    and not bool(getattr(self, "_playback_collapsed", False))
-                ):
-                    self._set_playback_collapsed(True, auto=True)
-                elif (
-                    height >= int(getattr(self, "_height_auto_playback_expand", 960))
-                    and bool(getattr(self, "_playback_auto_collapsed", False))
-                    and not bool(getattr(self, "_playback_user_collapsed", False))
-                ):
-                    self._set_playback_collapsed(False, auto=True)
-
-            # Side-panel cards collapse bottom-up.  If the selected Inspector
-            # page is Image, its internal sub-panels participate in the same
-            # auto-hide system before the entire Inspector card collapses.
+            # Image Inspector sub-panels collapse first while an Image action is
+            # selected.  Order while shrinking: MATCHING -> RETRY -> ON FAIL ->
+            # FAIL TARGET.  The main panel order starts only after those
+            # sub-panels have had room to close.
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
                 image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
                 controls = getattr(self, "_panel_collapse_controls", {})
@@ -353,10 +339,10 @@ class MainWindow(QMainWindow):
 
                 if image_visible and not inspector_collapsed:
                     image_steps = [
-                        ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
-                        ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
-                        ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
                         ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
+                        ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
+                        ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
+                        ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
                     ]
                     for body_name, collapse_attr, expand_attr in image_steps:
                         if height <= int(getattr(self, collapse_attr, 0)):
@@ -364,19 +350,35 @@ class MainWindow(QMainWindow):
                         elif height >= int(getattr(self, expand_attr, 16777215)):
                             set_panel(body_name, False, auto=True)
 
-                if height <= int(getattr(self, "_height_auto_inspector_collapse", 800)):
+                # Main panel order after Image sub-panels: bottom playback,
+                # Inspector body, Recorder, then Add Action.  This stops at the
+                # collapsed side-panel/header stack due to the lowered min height.
+                if hasattr(self, "playback_panel"):
+                    if (
+                        height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
+                        and not bool(getattr(self, "_playback_collapsed", False))
+                    ):
+                        self._set_playback_collapsed(True, auto=True)
+                    elif (
+                        height >= int(getattr(self, "_height_auto_playback_expand", 1170))
+                        and bool(getattr(self, "_playback_auto_collapsed", False))
+                        and not bool(getattr(self, "_playback_user_collapsed", False))
+                    ):
+                        self._set_playback_collapsed(False, auto=True)
+
+                if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
                     set_panel("inspector_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_inspector_expand", 885)):
+                elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
                     set_panel("inspector_body", False, auto=True)
 
-                if height <= int(getattr(self, "_height_auto_recorder_collapse", 700)):
+                if height <= int(getattr(self, "_height_auto_recorder_collapse", 650)):
                     set_panel("recorder_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_recorder_expand", 770)):
+                elif height >= int(getattr(self, "_height_auto_recorder_expand", 720)):
                     set_panel("recorder_body", False, auto=True)
 
-                if height <= int(getattr(self, "_height_auto_add_collapse", 610)):
+                if height <= int(getattr(self, "_height_auto_add_collapse", 540)):
                     set_panel("add_action_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_add_expand", 680)):
+                elif height >= int(getattr(self, "_height_auto_add_expand", 610)):
                     set_panel("add_action_body", False, auto=True)
         except Exception:
             pass
