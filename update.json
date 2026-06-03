@@ -1,6 +1,6 @@
 {
-  "version": "3.4.3",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.3/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.3/MacroForge-v3.4.3.zip",
-  "notes": "v3.4.3: Apply collapsible panels 42 buttons patch - updated icons.py, main_window.py, main_window_layout.py and theme.py with collapsible panels 42px buttons."
+  "version": "3.4.4",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.4/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.4.4/MacroForge-v3.4.4.zip",
+  "notes": "v3.4.4: Apply side panel recorder inspector polish patch - updated icons.py, main_window.py, main_window_layout.py, theme.py and theme_compact.py with side panel recorder inspector polish."
 }
