@@ -32,7 +32,20 @@ from debugger import logger, DebugViewer
 from ui.theme import build_stylesheet, COLORS
 from ui.status_dot import StatusDot
 from ui.timeline import TimelineView
-from ui.icons import icon, timeline_action_icon
+from ui.icons import icon
+try:
+    from ui.icons import timeline_action_icon
+except ImportError:
+    # Backward-compatible fallback for installs where ui/icons.py was not
+    # overwritten by a small overlay patch. The corrected patch includes
+    # ui/icons.py too, but this keeps MacroForge bootable after partial updates.
+    def timeline_action_icon(kind: str, size: int = 18, color: str = "#F3F6FA"):
+        normalized = (kind or "key").lower()
+        if normalized == "folder":
+            normalized = "group"
+        elif normalized == "delay":
+            normalized = "pause"
+        return icon(normalized, size, color)
 
 
 class MainWindow(QMainWindow):

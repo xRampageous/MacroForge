@@ -31,6 +31,63 @@ def _make_pixmap(size, draw_fn):
     )
 
 
+def timeline_action_icon(kind: str, size: int = 18, color: str = "#F3F6FA") -> QIcon:
+    """Render the exact compact action-type glyphs used by the timeline rows.
+
+    The Add Action buttons use this helper so their icons stay visually synced
+    with ``TimelineDelegate._draw_type_icon`` instead of drifting from the
+    timeline glyph language.
+    """
+    normalized = (kind or "key").lower()
+    if normalized == "delay":
+        normalized = "pause"
+    elif normalized == "folder":
+        normalized = "group"
+
+    c = QColor(color)
+    pen_w = 1.8 if size <= 20 else max(1.8, size * 0.09)
+    pen = QPen(c, pen_w, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+
+    def _draw_timeline_action(p, s):
+        x, y, w, h = 0.0, 0.0, float(s), float(s)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        if normalized == "pause":
+            p.drawEllipse(QRectF(x + w * 0.22, y + h * 0.22, w * 0.56, h * 0.56))
+            p.drawLine(int(x + w * 0.50), int(y + h * 0.34), int(x + w * 0.50), int(y + h * 0.52))
+            p.drawLine(int(x + w * 0.50), int(y + h * 0.52), int(x + w * 0.64), int(y + h * 0.60))
+        elif normalized == "click":
+            p.drawEllipse(QRectF(x + w * 0.28, y + h * 0.20, w * 0.44, h * 0.62))
+            p.drawLine(int(x + w * 0.50), int(y + h * 0.20), int(x + w * 0.50), int(y + h * 0.42))
+            p.drawLine(int(x + w * 0.28), int(y + h * 0.42), int(x + w * 0.72), int(y + h * 0.42))
+        elif normalized == "image":
+            p.drawRoundedRect(QRectF(x + w * 0.20, y + h * 0.25, w * 0.60, h * 0.50), 3, 3)
+            p.drawLine(int(x + w * 0.23), int(y + h * 0.62), int(x + w * 0.42), int(y + h * 0.45))
+            p.drawLine(int(x + w * 0.42), int(y + h * 0.45), int(x + w * 0.58), int(y + h * 0.56))
+            p.drawLine(int(x + w * 0.58), int(y + h * 0.56), int(x + w * 0.76), int(y + h * 0.40))
+        elif normalized == "condition":
+            p.drawPolygon([
+                QPointF(x + w * 0.50, y + h * 0.18), QPointF(x + w * 0.82, y + h * 0.50),
+                QPointF(x + w * 0.50, y + h * 0.82), QPointF(x + w * 0.18, y + h * 0.50),
+            ])
+        elif normalized == "group":
+            p.drawRoundedRect(QRectF(x + w * 0.18, y + h * 0.34, w * 0.64, h * 0.40), 3, 3)
+            p.drawLine(int(x + w * 0.25), int(y + h * 0.34), int(x + w * 0.36), int(y + h * 0.25))
+            p.drawLine(int(x + w * 0.36), int(y + h * 0.25), int(x + w * 0.54), int(y + h * 0.25))
+        elif normalized == "loop":
+            p.drawArc(int(x + w * 0.22), int(y + h * 0.24), int(w * 0.56), int(h * 0.52), 35 * 16, 285 * 16)
+            p.drawLine(int(x + w * 0.70), int(y + h * 0.30), int(x + w * 0.82), int(y + h * 0.30))
+            p.drawLine(int(x + w * 0.82), int(y + h * 0.30), int(x + w * 0.77), int(y + h * 0.42))
+        else:
+            p.drawRoundedRect(QRectF(x + w * 0.18, y + h * 0.28, w * 0.64, h * 0.44), 3, 3)
+            for px in (0.30, 0.46, 0.62):
+                p.drawPoint(QPointF(x + w * px, y + h * 0.42))
+            p.drawLine(int(x + w * 0.34), int(y + h * 0.58), int(x + w * 0.66), int(y + h * 0.58))
+
+    return QIcon(_make_pixmap(size, _draw_timeline_action))
+
+
 def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
     c = QColor(color)
     pen_w = 1.8 if size <= 18 else max(1.8, size * 0.10)
