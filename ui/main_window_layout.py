@@ -157,7 +157,7 @@ def build_main_layout(window):
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
-    sidebar.setFixedWidth(280)
+    sidebar.setFixedWidth(272)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #020A13, stop:1 #000309); border-right: 1px solid {C['border']}; }}"
@@ -188,13 +188,13 @@ def build_main_layout(window):
 
     add_card = panel_frame("add_action_card")
     add_lo = QVBoxLayout(add_card)
-    add_lo.setContentsMargins(12, 10, 12, 12)
-    add_lo.setSpacing(9)
+    add_lo.setContentsMargins(10, 9, 10, 10)
+    add_lo.setSpacing(7)
     add_lo.addLayout(section_header("ADD ACTION", "bolt", C["accent"]))
     add_grid = QGridLayout()
     add_grid.setContentsMargins(0, 0, 0, 0)
-    add_grid.setHorizontalSpacing(8)
-    add_grid.setVerticalSpacing(8)
+    add_grid.setHorizontalSpacing(6)
+    add_grid.setVerticalSpacing(6)
     action_specs = [
         ("Key", self._open_key_dialog, C["key"], "key", 0, 0, 1, 1),
         ("Click", self._open_click_dialog, C["click"], "click", 0, 1, 1, 1),
@@ -202,13 +202,12 @@ def build_main_layout(window):
         ("Image", self._open_image_dialog, C["image"], "image", 1, 1, 1, 1),
         ("Condition", self._open_condition_dialog, C["condition"], "condition", 2, 0, 1, 1),
         ("Loop", self._open_loop_dialog, C["loop"], "loop", 2, 1, 1, 1),
-        ("Group", self._open_group_dialog, C["group"], "folder", 3, 0, 1, 2),
+        ("Folder", self._open_group_dialog, C["group"], "folder", 3, 0, 1, 2),
     ]
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
-        btn.setFixedHeight(54)
-        btn.setIconSize(QSize(19, 19))
-        add_grid.addWidget(btn, row, col, rowspan, colspan)
+        btn.setFixedSize(188 if colspan > 1 else 90, 45)
+        add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
     add_lo.addLayout(add_grid)
     sb_lo.addWidget(add_card)
 

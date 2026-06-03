@@ -59,8 +59,8 @@ class MainWindow(QMainWindow):
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
         self.setWindowTitle("MacroForge")
-        self.setMinimumSize(850, 1100)
-        self.resize(850, 1100)
+        self.setMinimumSize(985, 1100)
+        self.resize(985, 1100)
         self.setStyleSheet(build_stylesheet())
 
         # Window / taskbar icon
@@ -235,19 +235,44 @@ class MainWindow(QMainWindow):
         obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(text)
         btn.setObjectName(obj)
-        btn.setIcon(icon(icon_name, 16, color))
-        btn.setIconSize(QSize(16, 16))
-        btn.setFixedHeight(46)
+        btn.setText("")
+        btn.setIcon(QIcon())
+        btn.setFixedSize(90, 45)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setProperty("qt_stacked_add_action", True)
         tint = color.lstrip("#")
         btn.setStyleSheet(
-            f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
-            f"color: {COLORS['text_inverse']}; border: 1px solid #99{tint}; border-radius: 10px; padding: 7px 12px; "
-            f"text-align: center; font-size: 14px; font-weight: 700; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {color}, stop:1 #000000); "
-            f"border-color: {color}; }}"
-            f"QPushButton:pressed {{ background: #55{tint}; }}"
+            f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
+            f"stop:0 #55101010, stop:0.35 #66{tint}, stop:1 #020309); "
+            f"color: {COLORS['text_inverse']}; border: 2px solid {color}; "
+            f"border-radius: 11px; padding: 0px; text-align: center; }}"
+            f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
+            f"stop:0 #88111111, stop:0.45 #99{tint}, stop:1 #000000); border-color: #FFFFFF; }}"
+            f"QPushButton:pressed {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, "
+            f"stop:0 #33111111, stop:1 #55{tint}); }}"
         )
+        content_lo = QVBoxLayout(btn)
+        content_lo.setContentsMargins(4, 3, 4, 3)
+        content_lo.setSpacing(1)
+        icon_size = 19 if icon_name != "folder" else 18
+        icon_lbl = QLabel()
+        icon_lbl.setObjectName(f"{obj}_icon")
+        icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_lbl.setPixmap(icon(icon_name, icon_size, color).pixmap(icon_size, icon_size))
+        icon_lbl.setFixedSize(icon_size + 2, icon_size + 2)
+        text_lbl = QLabel(text)
+        text_lbl.setObjectName(f"{obj}_label")
+        text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text_lbl.setStyleSheet(
+            "QLabel { background: transparent; color: #F4F7FF; "
+            "font-size: 10px; font-weight: 900; }"
+        )
+        content_lo.addStretch(1)
+        content_lo.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        content_lo.addWidget(text_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        content_lo.addStretch(1)
         btn.clicked.connect(callback)
         if layout is not None:
             layout.addWidget(btn)
@@ -1129,7 +1154,7 @@ class MainWindow(QMainWindow):
                 self.restoreGeometry(bytes.fromhex(geo))
         except Exception:
             pass
-        self.resize(850, 1100)
+        self.resize(985, 1100)
 
     def _refresh_profile_btn(self):
         if hasattr(self, "profile_btn"):

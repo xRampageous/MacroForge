@@ -14,7 +14,7 @@ from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QMenu, QPushButton, QWidget
+from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QMenu, QPushButton, QWidget
 
 from debugger import DebugLogger
 from models import Action, ActionListModel, ProfileManager
@@ -430,14 +430,14 @@ class TestPlaybackVisibility(QtTestCase):
                 retry_delay=0.25,
             )
             window.action_model.set_actions([action])
-            window.resize(850, 1100)
+            window.resize(985, 1100)
             window.select(0)
             window.show()
             self.app.processEvents()
 
             sidebar = window.findChild(QFrame, "mf3_sidebar")
             self.assertIsNotNone(sidebar)
-            self.assertEqual(sidebar.width(), 280)
+            self.assertEqual(sidebar.width(), 272)
             self.assertTrue(window.image_preview_label.property("has_template"))
             self.assertIsNotNone(window.image_preview_label.pixmap())
             self.assertFalse(window.image_preview_label.pixmap().isNull())
@@ -460,28 +460,35 @@ class TestPlaybackVisibility(QtTestCase):
             window.hide()
             self._dispose_window(window)
 
-    def test_add_action_buttons_do_not_use_png_backing_assets(self):
+    def test_add_action_buttons_use_compact_qt_stacked_layout_without_png_assets(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
-            add_names = {
-                "add_key",
-                "add_click",
-                "add_pause",
-                "add_image",
-                "add_condition",
-                "add_loop",
-                "add_group",
+            expected = {
+                "add_key": ("Key", 90),
+                "add_click": ("Click", 90),
+                "add_pause": ("Delay", 90),
+                "add_image": ("Image", 90),
+                "add_condition": ("Condition", 90),
+                "add_loop": ("Loop", 90),
+                "add_group": ("Folder", 188),
             }
-            for name in add_names:
+            for name, (label, width) in expected.items():
                 button = window.findChild(QPushButton, name)
                 self.assertIsNotNone(button, name)
                 self.assertNotEqual(button.property("neon_add_action"), True, name)
                 self.assertNotEqual(button.property("stacked_content"), True, name)
+                self.assertTrue(button.property("qt_stacked_add_action"), name)
                 self.assertNotIn("neon_buttons", button.styleSheet(), name)
                 self.assertNotIn("border-image", button.styleSheet(), name)
                 self.assertIn("qlineargradient", button.styleSheet(), name)
-                self.assertTrue(button.text(), name)
-                self.assertLessEqual(button.iconSize().width(), 20, name)
+                self.assertEqual(button.text(), "", name)
+                self.assertEqual(button.size().width(), width, name)
+                self.assertEqual(button.size().height(), 45, name)
+                icon_label = button.findChild(QLabel, f"{name}_icon")
+                text_label = button.findChild(QLabel, f"{name}_label")
+                self.assertIsNotNone(icon_label, name)
+                self.assertIsNotNone(text_label, name)
+                self.assertEqual(text_label.text(), label, name)
             self._dispose_window(window)
 
     def test_timeline_row_clicks_keep_window_alive_and_select_row(self):
@@ -494,7 +501,7 @@ class TestPlaybackVisibility(QtTestCase):
                 Action("x", 1.0),
             ])
             window.refresh()
-            window.resize(850, 1100)
+            window.resize(985, 1100)
             window.show()
             self.app.processEvents()
 
@@ -532,7 +539,7 @@ class TestPlaybackVisibility(QtTestCase):
             bad_image.jump_to_on_found = "bad-target"
             window.action_model.set_actions([bad_key, bad_image])
             window.refresh()
-            window.resize(850, 1100)
+            window.resize(985, 1100)
             window.show()
             self.app.processEvents()
 
@@ -563,11 +570,11 @@ class TestPlaybackVisibility(QtTestCase):
                 Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1, wait_timeout=10.0),
             ])
             window.refresh()
-            window.resize(850, 1100)
+            window.resize(985, 1100)
             window.show()
             self.app.processEvents()
 
-            self.assertEqual(window.size().width(), 850)
+            self.assertEqual(window.size().width(), 985)
             self.assertEqual(window.size().height(), 1100)
 
             def rect_in_window(widget: QWidget):
