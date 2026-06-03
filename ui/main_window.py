@@ -232,77 +232,22 @@ class MainWindow(QMainWindow):
         type_map = {"key": "add_key", "click": "add_click", "delay": "add_pause",
                     "image": "add_image", "condition": "add_condition",
                     "loop": "add_loop", "folder": "add_group"}
-        bg_map = {
-            "key": "add_key.png",
-            "click": "add_click.png",
-            "delay": "add_delay.png",
-            "image": "add_image.png",
-            "condition": "add_condition.png",
-            "loop": "add_loop.png",
-            "folder": "add_group.png",
-        }
         obj = type_map.get(icon_name, "action_add")
         btn = QPushButton(text)
         btn.setObjectName(obj)
         btn.setIcon(icon(icon_name, 16, color))
-        btn.setIconSize(QSize(18, 18))
+        btn.setIconSize(QSize(16, 16))
         btn.setFixedHeight(46)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Black))
         tint = color.lstrip("#")
-        bg_file = bg_map.get(icon_name)
-        bg_path = os.path.join(os.path.dirname(__file__), "assets", "neon_buttons", bg_file or "")
-        if bg_file and os.path.exists(bg_path):
-            bg_url = bg_path.replace("\\", "/")
-            hover_path = os.path.splitext(bg_path)[0] + "_hover.png"
-            pressed_path = os.path.splitext(bg_path)[0] + "_pressed.png"
-            hover_url = hover_path.replace("\\", "/") if os.path.exists(hover_path) else bg_url
-            pressed_url = pressed_path.replace("\\", "/") if os.path.exists(pressed_path) else bg_url
-            btn.setProperty("neon_add_action", True)
-            btn.setProperty("content_centered", True)
-            btn.setProperty("stacked_content", True)
-            btn.setText("")
-            btn.setIcon(QIcon())
-            btn.setStyleSheet(
-                f"QPushButton {{ border-image: url(\"{bg_url}\") 0 0 0 0 stretch stretch; "
-                f"background: transparent; color: {COLORS['text_inverse']}; border: none; "
-                f"padding: 0px; text-align: center; font-size: 15px; font-weight: 950; }}"
-                f"QPushButton:hover {{ border-image: url(\"{hover_url}\") 0 0 0 0 stretch stretch; color: #FFFFFF; }}"
-                f"QPushButton:pressed {{ border-image: url(\"{pressed_url}\") 0 0 0 0 stretch stretch; "
-                f"color: {color}; padding-top: 1px; }}"
-            )
-            content_lo = QVBoxLayout(btn)
-            content_lo.setContentsMargins(6, 9, 6, 9)
-            content_lo.setSpacing(3)
-            content_lo.addStretch(1)
-            icon_size = 34 if icon_name == "folder" else 32
-            icon_lbl = QLabel()
-            icon_lbl.setObjectName(f"{obj}_icon")
-            icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            icon_lbl.setPixmap(icon(icon_name, icon_size, color).pixmap(icon_size, icon_size))
-            icon_lbl.setFixedSize(icon_size + 4, icon_size + 4)
-            icon_lbl.setScaledContents(False)
-            text_lbl = QLabel(text)
-            text_lbl.setObjectName(f"{obj}_label")
-            text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-            text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            text_lbl.setStyleSheet(
-                "QLabel { background: transparent; color: #F5F7FF; "
-                "font-size: 15px; font-weight: 950; letter-spacing: 0px; }"
-            )
-            content_lo.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
-            content_lo.addWidget(text_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
-            content_lo.addStretch(1)
-        else:
-            btn.setStyleSheet(
-                f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
-                f"color: {COLORS['text_inverse']}; border: 1px solid #99{tint}; border-radius: 10px; padding: 7px 12px; "
-                f"text-align: center; font-size: 14px; font-weight: 700; }}"
-                f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {color}, stop:1 #000000); "
-                f"border-color: {color}; }}"
-                f"QPushButton:pressed {{ background: #55{tint}; }}"
-            )
+        btn.setStyleSheet(
+            f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #99{tint}, stop:1 #000000); "
+            f"color: {COLORS['text_inverse']}; border: 1px solid #99{tint}; border-radius: 10px; padding: 7px 12px; "
+            f"text-align: center; font-size: 14px; font-weight: 700; }}"
+            f"QPushButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {color}, stop:1 #000000); "
+            f"border-color: {color}; }}"
+            f"QPushButton:pressed {{ background: #55{tint}; }}"
+        )
         btn.clicked.connect(callback)
         if layout is not None:
             layout.addWidget(btn)
