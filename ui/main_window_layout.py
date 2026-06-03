@@ -28,7 +28,6 @@ from ui.timeline import TimelineView
 def build_main_layout(window):
     self = window
     C = COLORS
-    self._height_collapse_sections = []
 
     central = QWidget()
     central.setObjectName("root")
@@ -59,9 +58,7 @@ def build_main_layout(window):
         caret.setFixedSize(size, size)
         caret.setCursor(Qt.CursorShape.PointingHandCursor)
         caret.setProperty("collapsed", False)
-        caret.setProperty("auto_collapsed", False)
-        caret.setProperty("user_collapsed", False)
-        caret.setToolTip("Collapse up")
+        caret.setToolTip("Collapse panel")
         caret.setStyleSheet(
             f"QPushButton#panel_caret_btn {{ color: {C['text_dim']}; background: transparent; "
             f"border: 1px solid transparent; border-radius: 6px; padding: 0; "
@@ -71,23 +68,8 @@ def build_main_layout(window):
         )
         return caret
 
-    def _set_collapsible_body_collapsed(body_widget, caret, collapsed, auto=False):
-        collapsed = bool(collapsed)
-        auto = bool(auto)
-
-        if auto:
-            if collapsed:
-                caret.setProperty("auto_collapsed", True)
-            else:
-                if bool(caret.property("user_collapsed")):
-                    return
-                if not bool(caret.property("auto_collapsed")):
-                    return
-                caret.setProperty("auto_collapsed", False)
-        else:
-            caret.setProperty("user_collapsed", collapsed)
-            caret.setProperty("auto_collapsed", False)
-
+    def _toggle_collapsible_body(body_widget, caret):
+        collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
         caret.setText("v" if collapsed else "^")
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
@@ -116,21 +98,16 @@ def build_main_layout(window):
                 parent.setMinimumHeight(0)
                 parent.setMaximumHeight(16777215)
                 if parent_name == "inspector_card":
-                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+                    # The Inspector is content-sized.  Never let it stretch to
+                    # the bottom of the side panel; a bottom spacer absorbs
+                    # unused height so the header stays under the panels above.
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
                 else:
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
+            if parent_name == "inspector_card" and hasattr(self, "_autosize_inspector_panel"):
+                self._autosize_inspector_panel()
         body_widget.updateGeometry()
-
-    def _toggle_collapsible_body(body_widget, caret):
-        _set_collapsible_body_collapsed(
-            body_widget,
-            caret,
-            not bool(caret.property("collapsed")),
-            auto=False,
-        )
-
-    self._set_collapsible_body_collapsed = _set_collapsible_body_collapsed
 
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
@@ -166,15 +143,6 @@ def build_main_layout(window):
 
         if body_widget is not None:
             caret = _caret_button(20)
-            self._height_collapse_sections.append({
-                "name": body_widget.objectName() or text.lower().replace(" ", "_"),
-                "body": body_widget,
-                "caret": caret,
-                "kind": "side_panel",
-                # Registered in visual top-to-bottom order. Responsive height
-                # logic reverses this list so auto-collapse starts at the bottom.
-                "visual_order": len(self._height_collapse_sections),
-            })
             caret.clicked.connect(lambda checked=False, body=body_widget, btn=caret: _toggle_collapsible_body(body, btn))
             row.addWidget(caret)
         else:
@@ -279,15 +247,6 @@ def build_main_layout(window):
             f"QPushButton#panel_caret_btn:hover {{ color: {C['text']}; "
             f"background-color: {C['bg_hover']}; border-color: {C['border']}; }}"
         )
-        self._height_collapse_sections.append({
-            "name": body.objectName() or f"{card.objectName()}_body",
-            "body": body,
-            "caret": caret,
-            "kind": "inspector_group",
-            # Registered in visual top-to-bottom order. Responsive height
-            # logic reverses this list so auto-collapse starts at the bottom.
-            "visual_order": len(self._height_collapse_sections),
-        })
         caret.clicked.connect(lambda checked=False, body=body, btn=caret: _toggle_collapsible_body(body, btn))
         head.addWidget(caret)
         lo.addLayout(head)
@@ -474,11 +433,14 @@ def build_main_layout(window):
     self._recorder["actions_lbl"] = self.rec_actions
 
     insp_card = panel_frame("inspector_card")
+    insp_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
     insp_lo = QVBoxLayout(insp_card)
     insp_lo.setContentsMargins(12, 10, 12, 12)
     insp_lo.setSpacing(8)
     insp_body = QWidget(insp_card)
     insp_body.setObjectName("inspector_body")
+    insp_body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+    self.insp_body = insp_body
     insp_body_lo = QVBoxLayout(insp_body)
     insp_body_lo.setContentsMargins(0, 0, 0, 0)
     insp_body_lo.setSpacing(8)
@@ -843,9 +805,12 @@ def build_main_layout(window):
         pane.setVisible(False)
         self._insp_lo.addWidget(pane)
     insp_body_lo.addLayout(self._insp_lo)
-    insp_body_lo.addStretch()
     insp_lo.addWidget(insp_body)
-    sb_lo.addWidget(insp_card, stretch=1)
+    sb_lo.addWidget(insp_card, stretch=0)
+    self._side_panel_bottom_spacer = QWidget()
+    self._side_panel_bottom_spacer.setObjectName("side_panel_bottom_spacer")
+    self._side_panel_bottom_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+    sb_lo.addWidget(self._side_panel_bottom_spacer, stretch=1)
 
     self._side_panel_collapsed = False
     self._side_panel_auto_collapsed = False
