@@ -333,12 +333,28 @@ class MainWindow(QMainWindow):
                 ):
                     self._set_playback_collapsed(False, auto=True)
 
-            # Side-panel cards collapse bottom-up: Inspector, Recorder, Add Action.
-            # This respects manual user-collapse state and panel locks.
+            # Side-panel cards collapse bottom-up.  If the selected Inspector
+            # page is Image, its internal sub-panels participate in the same
+            # auto-hide system before the entire Inspector card collapses.
             if set_panel is not None and not side_locked and not bool(getattr(self, "_side_panel_collapsed", False)):
-                if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
+                image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
+
+                if image_visible and not bool(getattr(self, "_panel_collapse_controls", {}).get("inspector_body", (None, None))[1].property("collapsed")):
+                    image_steps = [
+                        ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
+                        ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
+                        ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
+                        ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
+                    ]
+                    for body_name, collapse_attr, expand_attr in image_steps:
+                        if height <= int(getattr(self, collapse_attr, 0)):
+                            set_panel(body_name, True, auto=True)
+                        elif height >= int(getattr(self, expand_attr, 16777215)):
+                            set_panel(body_name, False, auto=True)
+
+                if height <= int(getattr(self, "_height_auto_inspector_collapse", 710)):
                     set_panel("inspector_body", True, auto=True)
-                elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
+                elif height >= int(getattr(self, "_height_auto_inspector_expand", 790)):
                     set_panel("inspector_body", False, auto=True)
 
                 if height <= int(getattr(self, "_height_auto_recorder_collapse", 660)):
@@ -417,6 +433,26 @@ class MainWindow(QMainWindow):
                     sidebar.height() if sidebar.isVisible() else 0,
                 )
 
+                # When the Image Inspector is selected, cap the side-panel lock
+                # height at the FAIL TARGET sub-panel.  This prevents the lock
+                # from allowing extra height past that sub-panel while still
+                # tracking the selected image action's auto-sized content.
+                image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
+                fail_card = getattr(self, "ii_fail_target_card", None)
+                if image_visible and fail_card is not None and fail_card.isVisible():
+                    try:
+                        y = 0
+                        widget = fail_card
+                        while widget is not None and widget is not sidebar:
+                            geom = widget.geometry()
+                            y += int(geom.y())
+                            widget = widget.parentWidget()
+                        if widget is sidebar:
+                            fail_bottom = y + max(int(fail_card.height()), int(fail_card.sizeHint().height())) + 18
+                            side_h = min(side_h or fail_bottom, fail_bottom)
+                    except Exception:
+                        pass
+
             # Keep enough room for the bottom playback panel when visible.  The
             # side panel is the primary source of truth; this is only a safety
             # floor so the lock never clamps below usable window chrome/content.
@@ -440,9 +476,11 @@ class MainWindow(QMainWindow):
                 locked_w = int(getattr(self, "_side_panel_lock_width", 0) or self.width())
                 max_w = max(min_w, locked_w)
 
-            if bool(getattr(self, "_bottom_panel_locked", False)):
+            if bool(getattr(self, "_bottom_panel_locked", False)) or bool(getattr(self, "_side_panel_locked", False)):
                 # Height lock follows the side panel's natural height, which
-                # changes with the selected Inspector action.
+                # changes with the selected Inspector action.  Side-panel lock
+                # also uses this cap so it cannot grow past the Image Inspector
+                # FAIL TARGET sub-panel.
                 natural_h = self._preferred_panel_lock_height()
                 self._bottom_panel_lock_height = natural_h
                 max_h = max(min_h, natural_h)

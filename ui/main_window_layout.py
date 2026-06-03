@@ -679,6 +679,7 @@ def build_main_layout(window):
     ii_lo.addWidget(preview)
 
     matching, matching_lo = inspector_group("MATCHING", "target", C["accent"])
+    self.ii_matching_card = matching
     sim_row = QHBoxLayout()
     sim_row.setContentsMargins(0, 0, 0, 0)
     sim_lbl = form_label("Similarity  ⓘ")
@@ -722,6 +723,7 @@ def build_main_layout(window):
     ii_lo.addWidget(matching)
 
     retry, retry_lo = inspector_group("RETRY", "update", C["accent"])
+    self.ii_retry_card = retry
     self.ii_retry_count = QSpinBox()
     self.ii_retry_count.setRange(1, 99)
     self.ii_retry_count.setFixedSize(76, 28)
@@ -750,6 +752,7 @@ def build_main_layout(window):
     ii_lo.addWidget(retry)
 
     on_fail, on_fail_lo = inspector_group("ON FAIL", "condition", C["accent"])
+    self.ii_on_fail_card = on_fail
     on_fail_row = QHBoxLayout()
     on_fail_row.setContentsMargins(0, 0, 0, 0)
     on_fail_row.addWidget(form_label("On fail"))
@@ -761,6 +764,7 @@ def build_main_layout(window):
     ii_lo.addWidget(on_fail)
 
     fail_target, fail_target_lo = inspector_group("FAIL TARGET", "target", C["accent"])
+    self.ii_fail_target_card = fail_target
     target_row = QHBoxLayout()
     target_row.setContentsMargins(0, 0, 0, 0)
     target_row.addWidget(form_label("Fail target"))
@@ -875,8 +879,19 @@ def build_main_layout(window):
     self._side_panel_auto_expand_width = 1040
     self._height_auto_playback_collapse = 820
     self._height_auto_playback_expand = 920
-    self._height_auto_inspector_collapse = 760
-    self._height_auto_inspector_expand = 840
+    # Image Inspector sub-panels auto-hide before the whole Inspector does.
+    # This keeps the panel usable while shrinking height and follows bottom-up
+    # order inside the image action pane: Fail Target, On Fail, Retry, Matching.
+    self._height_auto_image_fail_target_collapse = 800
+    self._height_auto_image_fail_target_expand = 890
+    self._height_auto_image_on_fail_collapse = 780
+    self._height_auto_image_on_fail_expand = 870
+    self._height_auto_image_retry_collapse = 760
+    self._height_auto_image_retry_expand = 850
+    self._height_auto_image_matching_collapse = 740
+    self._height_auto_image_matching_expand = 830
+    self._height_auto_inspector_collapse = 710
+    self._height_auto_inspector_expand = 790
     self._height_auto_recorder_collapse = 660
     self._height_auto_recorder_expand = 735
     self._height_auto_add_collapse = 560
