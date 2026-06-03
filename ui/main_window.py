@@ -74,7 +74,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("MacroForge")
         # Lower minimum size so responsive side/bottom panel auto-hide can
         # reach the collapsed-panel/header stack while resizing.
-        self.setMinimumSize(760, 420)
+        self._base_min_width = 760
+        self._base_min_height = 420
+        self.setMinimumSize(self._base_min_width, self._base_min_height)
         self.resize(985, 1100)
         self.setStyleSheet(build_stylesheet())
 
@@ -407,19 +409,61 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _expand_side_panel_for_lock(self):
+        """Force the side-panel stack open before measuring a locked height."""
+        try:
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                setter = getattr(self, "_set_side_panel_collapsed", None)
+                if setter is not None:
+                    setter(False, auto=True)
+
+            set_panel = getattr(self, "_set_collapsible_panel", None)
+            if set_panel is not None:
+                for body_name in (
+                    "add_action_body",
+                    "recorder_body",
+                    "inspector_body",
+                    "inspector_group_image_body",
+                    "inspector_group_matching_body",
+                    "inspector_group_retry_body",
+                    "inspector_group_on_fail_body",
+                    "inspector_group_fail_target_body",
+                    "inspector_group_key_action_body",
+                    "inspector_group_pause_action_body",
+                    "inspector_group_click_action_body",
+                    "inspector_group_group_body",
+                    "inspector_group_loop_body",
+                    "inspector_group_condition_body",
+                ):
+                    set_panel(body_name, False, auto=True)
+
+            if bool(getattr(self, "_playback_collapsed", False)):
+                self._set_playback_collapsed(False, auto=True)
+        except Exception:
+            pass
+
+    def _set_lock_button_state(self, btn, locked, locked_tip, unlocked_tip):
+        if btn is None:
+            return
+        btn.setText("🔒" if locked else "🔓")
+        btn.setToolTip(locked_tip if locked else unlocked_tip)
+        btn.setProperty("locked", locked)
+        btn.style().unpolish(btn)
+        btn.style().polish(btn)
+
     def _toggle_side_panel_lock(self):
         locked = not bool(getattr(self, "_side_panel_locked", False))
         self._side_panel_locked = locked
         if locked:
             self._side_panel_user_collapsed = bool(getattr(self, "_side_panel_collapsed", False))
-        btn = getattr(self, "side_panel_lock_btn", None)
-        if btn is not None:
-            btn.setText("🔒" if locked else "🔓")
-            btn.setToolTip("Unlock side panel state" if locked else "Lock side panel state")
-            btn.setProperty("locked", locked)
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
-        self.status("Side panel state locked" if locked else "Side panel state unlocked")
+            self._expand_side_panel_for_lock()
+        self._set_lock_button_state(
+            getattr(self, "side_panel_lock_btn", None),
+            locked,
+            "Unlock side panel fixed height",
+            "Lock side panel fixed height",
+        )
+        self.status("Side panel fixed-height lock enabled" if locked else "Side panel lock disabled")
         self._apply_panel_size_locks()
 
     def _toggle_bottom_panel_lock(self):
@@ -427,22 +471,18 @@ class MainWindow(QMainWindow):
         self._bottom_panel_locked = locked
         if locked:
             self._playback_user_collapsed = bool(getattr(self, "_playback_collapsed", False))
-        btn = getattr(self, "bottom_panel_lock_btn", None)
-        if btn is not None:
-            btn.setText("🔒" if locked else "🔓")
-            btn.setToolTip("Unlock panel height state" if locked else "Lock panel height state")
-            btn.setProperty("locked", locked)
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
-        self.status("Panel height state locked" if locked else "Panel height state unlocked")
+            self._expand_side_panel_for_lock()
+        self._set_lock_button_state(
+            getattr(self, "bottom_panel_lock_btn", None),
+            locked,
+            "Unlock fixed window height",
+            "Lock fixed window height",
+        )
+        self.status("Fixed window height enabled" if locked else "Fixed window height disabled")
         self._apply_panel_size_locks()
 
     def _preferred_panel_lock_height(self):
-        """Max window height while locked, based on the selected action's side panel.
-
-        Width is never clamped.  Height is clamped only while a panel lock is
-        active, and it follows the current selected action's Inspector height.
-        """
+        """Fixed window height while locked, based on selected action side-panel size."""
         try:
             if not bool(getattr(self, "_measuring_panel_lock_height", False)):
                 self._measuring_panel_lock_height = True
@@ -458,25 +498,38 @@ class MainWindow(QMainWindow):
                 side_h = max(
                     int(sidebar.sizeHint().height()),
                     int(sidebar.minimumSizeHint().height()),
+                    int(sidebar.height()) if sidebar.isVisible() else 0,
                 )
 
             playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 188
-            content_floor = max(int(self.minimumHeight()), 420, playback_h + 220)
-            target = max(side_h + 8, content_floor)
-            return max(int(self.minimumHeight()), min(1600, int(target)))
+            base_min_h = int(getattr(self, "_base_min_height", 420))
+            # Extra padding covers the central header/runtime margins and keeps
+            # the side-panel stack from squeezing/clipping while locked.
+            target = max(side_h + 18, playback_h + 260, base_min_h)
+            return max(base_min_h, min(1800, int(target)))
         except Exception:
-            return max(int(self.minimumHeight()), int(self.height()))
+            return max(int(getattr(self, "_base_min_height", 420)), int(self.height()))
 
     def _apply_panel_size_locks(self):
-        """Panel locks freeze panel state and clamp height to selected action size."""
+        """When locked, freeze window height to selected action's full side-panel height."""
         try:
             max_w = 16777215
-            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
-                max_h = self._preferred_panel_lock_height()
+            any_locked = bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False))
+            if any_locked:
+                locked_h = self._preferred_panel_lock_height()
+                if self.minimumHeight() != locked_h:
+                    self.setMinimumHeight(locked_h)
+                if self.maximumWidth() != max_w or self.maximumHeight() != locked_h:
+                    self.setMaximumSize(max_w, locked_h)
+                if self.height() != locked_h:
+                    self.resize(self.width(), locked_h)
             else:
-                max_h = 16777215
-            if self.maximumWidth() != max_w or self.maximumHeight() != max_h:
-                self.setMaximumSize(max_w, max_h)
+                base_w = int(getattr(self, "_base_min_width", 760))
+                base_h = int(getattr(self, "_base_min_height", 420))
+                if self.minimumWidth() != base_w or self.minimumHeight() != base_h:
+                    self.setMinimumSize(base_w, base_h)
+                if self.maximumWidth() != max_w or self.maximumHeight() != 16777215:
+                    self.setMaximumSize(max_w, 16777215)
         except Exception:
             pass
 
@@ -1818,6 +1871,8 @@ class MainWindow(QMainWindow):
                 pass
         finally:
             self._inspector_loading = False
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                QTimer.singleShot(0, self._apply_panel_size_locks)
 
     def _apply_inspector(self, autosave=False):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
