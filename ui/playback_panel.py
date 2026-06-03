@@ -215,7 +215,7 @@ def make_playback_panel(window):
 
     bottom = QHBoxLayout()
     bottom.setContentsMargins(0, 0, 0, 0)
-    bottom.setSpacing(7)
+    bottom.setSpacing(4)
 
     progress_wrap = QFrame()
     progress_wrap.setObjectName("progress_wrap")

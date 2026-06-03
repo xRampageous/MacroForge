@@ -1,6 +1,6 @@
 {
-  "version": "3.2.8",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.8/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.8/MacroForge-v3.2.8.zip",
-  "notes": "v3.2.8: Sidebar width increased to 300px, header controls compacted to fit - profile button 104→96px, search field 58-88→52-80px, status pill 108-140→100-130px."
+  "version": "3.3.2",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.2/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.3.2/MacroForge-v3.3.2.zip",
+  "notes": "v3.3.2: Sidebar width adjusted to 280px; timeline row clicks hardened against malformed profile data; image inspector preview/autosave smoke coverage added; Qt test cleanup stabilized."
 }

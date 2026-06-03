@@ -1162,15 +1162,20 @@ class MainWindow(QMainWindow):
             return []
         action = self.action_model.get(index)
         targets = []
+        def safe_target(value):
+            try:
+                return int(value if value not in (None, "") else -1)
+            except (TypeError, ValueError):
+                return -1
         kind = getattr(action, "action_type", "key") or "key"
         if kind == "loop":
-            targets.append(int(getattr(action, "loop_target", -1) or -1))
+            targets.append(safe_target(getattr(action, "loop_target", -1)))
         elif kind == "condition":
-            targets.append(int(getattr(action, "condition_jump_true", -1) or -1))
-            targets.append(int(getattr(action, "condition_jump_false", -1) or -1))
+            targets.append(safe_target(getattr(action, "condition_jump_true", -1)))
+            targets.append(safe_target(getattr(action, "condition_jump_false", -1)))
         elif kind == "image":
-            targets.append(int(getattr(action, "jump_to_on_found", -1) or -1))
-            targets.append(int(getattr(action, "jump_to_on_not_found", -1) or -1))
+            targets.append(safe_target(getattr(action, "jump_to_on_found", -1)))
+            targets.append(safe_target(getattr(action, "jump_to_on_not_found", -1)))
         return [t for t in dict.fromkeys(targets) if 0 <= t < self.action_model.rowCount()]
 
     def _update_timeline_links(self, index: int):
@@ -1187,105 +1192,130 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def select(self, index):
-        if index is None or index < 0 or index >= self.action_model.rowCount():
-            self.active_index = -1
-            self.timeline.set_active(-1)
-            self.timeline.selected_indices.clear()
+        self._inspector_loading = True
+        try:
+            if index is None or index < 0 or index >= self.action_model.rowCount():
+                self.active_index = -1
+                self.timeline.set_active(-1)
+                self.timeline.selected_indices.clear()
+                self.inspector_selector.clear()
+                self.inspector_selector.addItem("Select an action")
+                if hasattr(self, "inspector_type_badge"):
+                    self.inspector_type_badge.setText("ACTION")
+                self._set_image_inspector_preview(None)
+                self._show_inspector(False)
+                if hasattr(self.timeline, "set_link_targets"):
+                    self.timeline.set_link_targets(-1, [])
+                return
+            self.active_index = index
+            preserve_multi = index in getattr(self.timeline, "selected_indices", set()) and len(getattr(self.timeline, "selected_indices", set())) > 1
+            if preserve_multi:
+                try:
+                    self.timeline.sync_selection()
+                except Exception:
+                    pass
+                self.timeline.viewport().update()
+            else:
+                self.timeline.selected_indices.clear()
+                self.timeline.set_active(index)
+            action = self.action_model.get(index)
+            self._update_timeline_links(index)
             self.inspector_selector.clear()
-            self.inspector_selector.addItem("Select an action")
-            self._show_inspector(False)
-            if hasattr(self.timeline, "set_link_targets"):
-                self.timeline.set_link_targets(-1, [])
-            return
-        self.active_index = index
-        preserve_multi = index in getattr(self.timeline, "selected_indices", set()) and len(getattr(self.timeline, "selected_indices", set())) > 1
-        if preserve_multi:
+            if action.action_type == "image":
+                self.inspector_selector.addItem(icon("image", 14, COLORS["image"]), "Image Action")
+            else:
+                self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
+            if hasattr(self, "inspector_type_badge"):
+                self.inspector_type_badge.setText(str(action.action_type or "action").upper())
+            self._show_inspector(True, action.action_type)
+            if action.action_type == "key":
+                self.ik_key.setText(action.key)
+                self.ik_dur.setText(str(action.duration))
+                self.ik_hold.setChecked(action.hold_mode)
+                self.ik_repeat.setText(str(getattr(action, 'repeat_count', 1)))
+                self.ik_label.setText(getattr(action, 'label', ''))
+            elif action.action_type == "pause":
+                self.ip_dur.setText(str(action.duration))
+                self.ip_label.setText(getattr(action, 'label', ''))
+            elif action.action_type == "click":
+                self.ic_x.setText(str(getattr(action, 'click_x', 0)))
+                self.ic_y.setText(str(getattr(action, 'click_y', 0)))
+                self.ic_btn.setCurrentText(getattr(action, 'click_button', 'left'))
+                self.ic_rand.setText(str(getattr(action, 'click_rand_radius', 0)))
+                self.ic_repeat.setText(str(getattr(action, 'repeat_count', 1)))
+                self.ic_label.setText(getattr(action, 'label', ''))
+            elif action.action_type == "image":
+                similarity = float(getattr(action, 'similarity', 0.85) or 0.85)
+                self.ii_sim.setText(f"{similarity:.2f}")
+                if hasattr(self, "ii_sim_slider"):
+                    self.ii_sim_slider.blockSignals(True)
+                    self.ii_sim_slider.setValue(max(0, min(100, int(round(similarity * 100)))))
+                    self.ii_sim_slider.blockSignals(False)
+                self.ii_wait.setText(str(int(round(float(getattr(action, 'wait_timeout', 1.0) or 0.0) * 1000))))
+                if hasattr(self, "ii_retry_count"):
+                    self.ii_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
+                    self.ii_retry_delay.setText(str(int(round(float(getattr(action, "retry_delay", 0.25) or 0.0) * 1000))))
+                    fail_mode = (getattr(action, "on_fail_action", "default") or "default").replace("_", " ").title()
+                    self.ii_fail_mode.setCurrentText(fail_mode)
+                    self._populate_target_combo(self.ii_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
+                self._set_image_inspector_preview(action)
+            elif action.action_type == "group":
+                self.ig_name.setText(getattr(action, "group_name", "") or getattr(action, "label", ""))
+                self.ig_collapsed.setChecked(bool(getattr(action, "group_collapsed", False)))
+                if hasattr(self, "ig_recovery"):
+                    self.ig_recovery.setChecked(getattr(action, "group_role", "normal") == "recovery")
+                gid = getattr(action, "group_id", "")
+                count, duration = self._group_stats_for_id(gid)
+                role = " · Recovery" if getattr(action, "group_role", "normal") == "recovery" else ""
+                self.ig_meta.setText(f"{self._group_display_label(index)} · {count} action{'s' if count != 1 else ''} · ~{duration:.1f}s{role}")
+            elif action.action_type == "loop":
+                self.il_label.setText(getattr(action, "label", ""))
+                self.il_count.setValue(max(2, int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)))
+                self._populate_target_combo(self.il_target, int(getattr(action, "loop_target", -1) or -1), include_next=False, max_row=index)
+            elif action.action_type == "condition":
+                self.ico_label.setText(getattr(action, "label", ""))
+                self.ico_type.setCurrentText(getattr(action, "condition_type", "none") or "none")
+                self._populate_target_combo(self.ico_true, int(getattr(action, "condition_jump_true", -1) or -1), include_next=True)
+                self._populate_target_combo(self.ico_false, int(getattr(action, "condition_jump_false", -1) or -1), include_next=True)
+                if hasattr(self, "ico_retry_count"):
+                    self.ico_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
+                    self.ico_retry_delay.setText(str(getattr(action, "retry_delay", 0.25)))
+                    self.ico_fail_mode.setCurrentText(getattr(action, "on_fail_action", "default") or "default")
+                    self._populate_target_combo(self.ico_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
+                ctype = getattr(action, "condition_type", "none") or "none"
+                if ctype == "pixel_color":
+                    self.ico_rule.setText(f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}")
+                elif ctype == "variable":
+                    self.ico_rule.setText(f"{getattr(action, 'condition_var_name', '') or 'variable'} = {getattr(action, 'condition_var_value', '') or 'value'}")
+                else:
+                    self.ico_rule.setText("No rule selected")
+            if action.action_type != "image":
+                self._set_image_inspector_preview(None)
+        except Exception as exc:
+            logger.exception("Failed to select timeline row %s", index)
             try:
-                self.timeline.sync_selection()
+                row_label = int(index) + 1
+            except Exception:
+                row_label = "?"
+            try:
+                self._show_inspector(False)
+                self.insp_empty.setText(f"Could not inspect row {row_label}. Try profile repair or edit this action.")
+                self.insp_empty.setVisible(True)
+                self.status(f"Could not inspect row {row_label}")
             except Exception:
                 pass
-            self.timeline.viewport().update()
-        else:
-            self.timeline.selected_indices.clear()
-            self.timeline.set_active(index)
-        action = self.action_model.get(index)
-        self._update_timeline_links(index)
-        self.inspector_selector.clear()
-        if action.action_type == "image":
-            self.inspector_selector.addItem(icon("image", 14, COLORS["image"]), "Image Action")
-        else:
-            self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
-        if hasattr(self, "inspector_type_badge"):
-            self.inspector_type_badge.setText(str(action.action_type or "action").upper())
-        self._show_inspector(True, action.action_type)
-        if action.action_type == "key":
-            self.ik_key.setText(action.key)
-            self.ik_dur.setText(str(action.duration))
-            self.ik_hold.setChecked(action.hold_mode)
-            self.ik_repeat.setText(str(getattr(action, 'repeat_count', 1)))
-            self.ik_label.setText(getattr(action, 'label', ''))
-        elif action.action_type == "pause":
-            self.ip_dur.setText(str(action.duration))
-            self.ip_label.setText(getattr(action, 'label', ''))
-        elif action.action_type == "click":
-            self.ic_x.setText(str(getattr(action, 'click_x', 0)))
-            self.ic_y.setText(str(getattr(action, 'click_y', 0)))
-            self.ic_btn.setCurrentText(getattr(action, 'click_button', 'left'))
-            self.ic_rand.setText(str(getattr(action, 'click_rand_radius', 0)))
-            self.ic_repeat.setText(str(getattr(action, 'repeat_count', 1)))
-            self.ic_label.setText(getattr(action, 'label', ''))
-        elif action.action_type == "image":
-            similarity = float(getattr(action, 'similarity', 0.85) or 0.85)
-            self.ii_sim.setText(f"{similarity:.2f}")
-            if hasattr(self, "ii_sim_slider"):
-                self.ii_sim_slider.blockSignals(True)
-                self.ii_sim_slider.setValue(max(0, min(100, int(round(similarity * 100)))))
-                self.ii_sim_slider.blockSignals(False)
-            self.ii_wait.setText(str(int(round(float(getattr(action, 'wait_timeout', 1.0) or 0.0) * 1000))))
-            if hasattr(self, "ii_retry_count"):
-                self.ii_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
-                self.ii_retry_delay.setText(str(int(round(float(getattr(action, "retry_delay", 0.25) or 0.0) * 1000))))
-                fail_mode = (getattr(action, "on_fail_action", "default") or "default").replace("_", " ").title()
-                self.ii_fail_mode.setCurrentText(fail_mode)
-                self._populate_target_combo(self.ii_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
-        elif action.action_type == "group":
-            self.ig_name.setText(getattr(action, "group_name", "") or getattr(action, "label", ""))
-            self.ig_collapsed.setChecked(bool(getattr(action, "group_collapsed", False)))
-            if hasattr(self, "ig_recovery"):
-                self.ig_recovery.setChecked(getattr(action, "group_role", "normal") == "recovery")
-            gid = getattr(action, "group_id", "")
-            count, duration = self._group_stats_for_id(gid)
-            role = " · Recovery" if getattr(action, "group_role", "normal") == "recovery" else ""
-            self.ig_meta.setText(f"{self._group_display_label(index)} · {count} action{'s' if count != 1 else ''} · ~{duration:.1f}s{role}")
-        elif action.action_type == "loop":
-            self.il_label.setText(getattr(action, "label", ""))
-            self.il_count.setValue(max(2, int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)))
-            self._populate_target_combo(self.il_target, int(getattr(action, "loop_target", -1) or -1), include_next=False, max_row=index)
-        elif action.action_type == "condition":
-            self.ico_label.setText(getattr(action, "label", ""))
-            self.ico_type.setCurrentText(getattr(action, "condition_type", "none") or "none")
-            self._populate_target_combo(self.ico_true, int(getattr(action, "condition_jump_true", -1) or -1), include_next=True)
-            self._populate_target_combo(self.ico_false, int(getattr(action, "condition_jump_false", -1) or -1), include_next=True)
-            if hasattr(self, "ico_retry_count"):
-                self.ico_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
-                self.ico_retry_delay.setText(str(getattr(action, "retry_delay", 0.25)))
-                self.ico_fail_mode.setCurrentText(getattr(action, "on_fail_action", "default") or "default")
-                self._populate_target_combo(self.ico_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
-            ctype = getattr(action, "condition_type", "none") or "none"
-            if ctype == "pixel_color":
-                self.ico_rule.setText(f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}")
-            elif ctype == "variable":
-                self.ico_rule.setText(f"{getattr(action, 'condition_var_name', '') or 'variable'} = {getattr(action, 'condition_var_value', '') or 'value'}")
-            else:
-                self.ico_rule.setText("No rule selected")
+        finally:
+            self._inspector_loading = False
 
-    def _apply_inspector(self):
+    def _apply_inspector(self, autosave=False):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
-            QMessageBox.warning(self, "No Selection", "Please select an action first")
+            if not autosave:
+                QMessageBox.warning(self, "No Selection", "Please select an action first")
             return
         try:
             action = self.action_model.get(self.active_index)
-            self.history.push(self.action_model.actions())
+            if not autosave:
+                self.history.push(self.action_model.actions())
             if action.action_type == "key":
                 action.key = self.ik_key.text().strip()
                 action.duration = float(self.ik_dur.text())
@@ -1332,12 +1362,21 @@ class MainWindow(QMainWindow):
                     action.retry_delay = float(self.ico_retry_delay.text() or 0)
                     action.on_fail_action = self.ico_fail_mode.currentText()
                     action.on_fail_target = int(self.ico_fail_target.currentData() if self.ico_fail_target.currentData() is not None else -1)
+            if autosave:
+                idx = self.action_model.index(self.active_index, 0)
+                self.action_model.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DisplayRole, self.action_model.ActionRole])
+                self.engine.actions = self.action_model.actions()
+                self._invalidate_seq_dur()
+                self.update_statistics()
+                self.save_session()
+                return
             self.refresh()
             self.update_statistics()
             self.save_session()
             self.status("Applied changes")
         except ValueError as e:
-            QMessageBox.critical(self, "Invalid Input", f"Invalid value: {e}")
+            if not autosave:
+                QMessageBox.critical(self, "Invalid Input", f"Invalid value: {e}")
 
     def _cancel_inspector(self):
         if self.active_index >= 0:
@@ -3984,6 +4023,8 @@ class MainWindow(QMainWindow):
                 self.history.push(self.action_model.actions())
                 self.action_model.replace_action(index, act)
                 self.refresh()
+                if index == self.active_index:
+                    self._set_image_inspector_preview(act)
                 self.save_session()
                 self.status("Image action updated")
 

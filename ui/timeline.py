@@ -14,8 +14,26 @@ from ui.theme import COLORS, TYPE_COLORS
 from models import ActionListModel
 
 
+def _safe_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value, default=0):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _clamp(value, lo=0.0, hi=1.0):
-    return max(lo, min(hi, float(value)))
+    return max(lo, min(hi, _safe_float(value, lo)))
 
 
 def _mix(hex_a: str, hex_b: str, t: float) -> str:
@@ -41,11 +59,11 @@ def _duration_text(action) -> str:
     if not action:
         return ""
     kind = _action_kind(action)
-    dur = float(getattr(action, "duration", 0.0) or 0.0)
+    dur = _safe_float(getattr(action, "duration", 0.0), 0.0)
     if kind == "pause":
         return f"{dur:.2f}s"
     if kind == "image":
-        timeout = float(getattr(action, "wait_timeout", 0.0) or 0.0)
+        timeout = _safe_float(getattr(action, "wait_timeout", 0.0), 0.0)
         return f"≤ {timeout:.1f}s" if timeout > 0 else "~250ms"
     if kind == "click":
         return f"{dur:.2f}s" if dur >= 0.05 else "< 50ms"
@@ -59,7 +77,7 @@ def _action_text(action):
     kind = _action_kind(action)
     label = (getattr(action, "label", "") or "").strip()
     key = (getattr(action, "key", "") or "").strip()
-    repeat = int(getattr(action, "repeat_count", 1) or 1)
+    repeat = _safe_int(getattr(action, "repeat_count", 1), 1)
     repeat_txt = f" · x{repeat}" if repeat > 1 else ""
 
     if kind == "pause":
@@ -70,13 +88,13 @@ def _action_text(action):
         button = (getattr(action, "click_button", "left") or "left").title()
         mode = getattr(action, "click_coord_mode", "absolute") or "absolute"
         x, y = getattr(action, "click_x", 0), getattr(action, "click_y", 0)
-        rand = int(getattr(action, "click_rand_radius", 0) or 0)
+        rand = _safe_int(getattr(action, "click_rand_radius", 0), 0)
         rand_txt = f" · ±{rand}px" if rand > 0 else ""
         return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
 
     if kind == "image":
-        conf = float(getattr(action, "similarity", 0.95) or 0.95) * 100
-        timeout = float(getattr(action, "wait_timeout", 0.0) or 0.0)
+        conf = _safe_float(getattr(action, "similarity", 0.95), 0.95) * 100
+        timeout = _safe_float(getattr(action, "wait_timeout", 0.0), 0.0)
         detail = f"Template.png · confidence ≥ {conf:.0f}%"
         if timeout > 0:
             detail += f" · wait {timeout:.1f}s"
@@ -88,8 +106,8 @@ def _action_text(action):
         return name, collapsed
 
     if kind == "loop":
-        count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)
-        target = int(getattr(action, "loop_target", -1) or -1)
+        count = _safe_int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)), 2)
+        target = _safe_int(getattr(action, "loop_target", -1), -1)
         detail = f"Repeat x{count}"
         if target >= 0:
             detail += f" · back to row {target + 1}"
@@ -397,8 +415,8 @@ class TimelineDelegate(QStyledItemDelegate):
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
             if kind == "group" and group_badge:
-                count = int(group_badge.get("count", 0) or 0)
-                dur = float(group_badge.get("duration", 0.0) or 0.0)
+                count = _safe_int(group_badge.get("count", 0), 0)
+                dur = _safe_float(group_badge.get("duration", 0.0), 0.0)
                 hidden = " hidden" if bool(getattr(action, "group_collapsed", False)) else ""
                 role = "Recovery · " if getattr(action, "group_role", "normal") == "recovery" else ""
                 detail = f"{role}{count} action{'s' if count != 1 else ''}{hidden} · ~{dur:.1f}s"
@@ -409,12 +427,12 @@ class TimelineDelegate(QStyledItemDelegate):
                         cur_txt = f" · {cur}" if cur else ""
                         detail = f"{gp.get('done', 0)}/{max(1, gp.get('total', count))} actions · {int(round(gp.get('progress', 0) * 100))}%{cur_txt}"
             if kind == "loop" and hasattr(view, "group_badge"):
-                target = int(getattr(action, "loop_target", -1) or -1)
+                target = _safe_int(getattr(action, "loop_target", -1), -1)
                 meta = view.group_badge(target) if target >= 0 else None
-                count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)
+                count = _safe_int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)), 2)
                 if meta:
                     detail = f"Repeat x{count} · back to {meta.get('badge', 'G')} {meta.get('name', 'Group')}"
-            depth = max(0, int(getattr(action, "block_depth", 0) or 0))
+            depth = max(0, _safe_int(getattr(action, "block_depth", 0), 0))
             text_x = icon_rect.right() + 14 + min(depth, 4) * 12
             text_right = max(text_x + 72, status_x - 14)
             text_w = max(72, text_right - text_x)
@@ -457,7 +475,7 @@ class TimelineDelegate(QStyledItemDelegate):
 
                 # Confidence threshold preview for image actions. This is static
                 # metadata, while the match-state badge above reflects runtime.
-                conf = int(round(float(getattr(action, "similarity", 0.95) or 0.95) * 100))
+                conf = int(round(_safe_float(getattr(action, "similarity", 0.95), 0.95) * 100))
                 conf_rect = QRectF(max(text_x, text_right - (48 if compact else 58)), outer.center().y() + 7, 48 if compact else 58, 14)
                 self._rounded_rect(painter, conf_rect, 4, COLORS["bg"], type_color, 1)
                 painter.setPen(QColor(type_color))
@@ -586,7 +604,7 @@ class TimelineDelegate(QStyledItemDelegate):
             return QSize(100, 0)
         if hasattr(view, "is_row_filtered_hidden") and view.is_row_filtered_hidden(index.row()):
             return QSize(100, 0)
-        zoom = float(getattr(view, "zoom", 1.0) or 1.0)
+        zoom = _safe_float(getattr(view, "zoom", 1.0), 1.0)
         action = index.data(ActionListModel.ActionRole)
         base_height = 58 if getattr(action, "action_type", "") == "group" else (62 if getattr(option.widget, "width", lambda: 999)() < 700 else 70)
         height = max(50 if getattr(action, "action_type", "") == "group" else 56, int(base_height * zoom))
@@ -696,10 +714,10 @@ class TimelineView(QListView):
                     kind = getattr(child, "action_type", "key") or "key"
                     if kind in {"loop", "condition"}:
                         continue
-                    if kind == "image" and float(getattr(child, "wait_timeout", 0.0) or 0.0) > 0:
-                        duration += float(getattr(child, "wait_timeout", 0.0) or 0.0)
+                    if kind == "image" and _safe_float(getattr(child, "wait_timeout", 0.0), 0.0) > 0:
+                        duration += _safe_float(getattr(child, "wait_timeout", 0.0), 0.0)
                     else:
-                        duration += float(getattr(child, "duration", 0.0) or 0.0)
+                        duration += _safe_float(getattr(child, "duration", 0.0), 0.0)
                 headers.append({
                     "row": row, "action": action, "gid": gid, "color": color,
                     "name": name, "badge": f"G{len(headers) + 1}",
@@ -769,8 +787,10 @@ class TimelineView(QListView):
             self.viewport().update()
 
     def set_link_targets(self, source: int = -1, targets=None):
-        self.link_source_row = int(source if source is not None else -1)
-        self.link_target_rows = {int(t) for t in (targets or []) if t is not None and int(t) >= 0}
+        self.link_source_row = _safe_int(source, -1)
+        self.link_target_rows = {
+            parsed for parsed in (_safe_int(t, -1) for t in (targets or [])) if parsed >= 0
+        }
         self.viewport().update()
 
     def group_progress(self, row: int):
@@ -1157,7 +1177,7 @@ class TimelineView(QListView):
         except Exception:
             self.active_group_id = ""
         self.paused = False
-        self._playing_duration = max(0.0, float(duration or 0.0))
+        self._playing_duration = max(0.0, _safe_float(duration, 0.0))
         self._playing_started = time.monotonic()
         self._frozen_progress = 0.0
         self.setDragEnabled(False)

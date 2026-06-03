@@ -11,8 +11,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
-from PyQt6.QtCore import QEvent, QPoint, QTimer
-from PyQt6.QtWidgets import QApplication, QDialog, QMenu, QPushButton, QWidget
+from PyQt6 import sip
+from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QMenu, QPushButton, QWidget
 
 from debugger import DebugLogger
 from models import Action, ActionListModel, ProfileManager
@@ -321,7 +323,11 @@ class TestPlaybackVisibility(QtTestCase):
         window.timeline._progress_timer.stop()
         window.timeline._auto_scroll_timer.stop()
         window.timeline._flash_timer.stop()
-        window.deleteLater()
+        if hasattr(window.timeline, "_drop_flash_timer"):
+            window.timeline._drop_flash_timer.stop()
+        self.app.processEvents()
+        window.hide()
+        sip.delete(window)
 
     def test_summary_and_bottom_panel_collapse(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -411,6 +417,118 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertEqual(window.action_model.get(0).on_fail_action, "continue")
             self._dispose_window(window)
 
+    def test_image_inspector_visual_smoke_uses_captured_preview(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action(
+                "[IMAGE]",
+                0.05,
+                action_type="image",
+                image_data=PNG_1X1,
+                similarity=0.85,
+                wait_timeout=1.0,
+                retry_delay=0.25,
+            )
+            window.action_model.set_actions([action])
+            window.resize(850, 1100)
+            window.select(0)
+            window.show()
+            self.app.processEvents()
+
+            sidebar = window.findChild(QFrame, "mf3_sidebar")
+            self.assertIsNotNone(sidebar)
+            self.assertEqual(sidebar.width(), 280)
+            self.assertTrue(window.image_preview_label.property("has_template"))
+            self.assertIsNotNone(window.image_preview_label.pixmap())
+            self.assertFalse(window.image_preview_label.pixmap().isNull())
+            for object_name in (
+                "image_inspector_preview",
+                "inspector_group_matching",
+                "inspector_group_retry",
+                "inspector_group_on_fail",
+                "inspector_group_fail_target",
+            ):
+                self.assertIsNotNone(window.insp_image.findChild(QFrame, object_name), object_name)
+            for button in (window.ii_zoom_btn, window.ii_fit_btn, window.ii_capture_btn):
+                self.assertFalse(button.isHidden())
+                self.assertGreater(button.width(), 0)
+
+            grab = window.insp_image.grab()
+            self.assertFalse(grab.isNull())
+            self.assertGreater(grab.width(), 0)
+            self.assertGreater(grab.height(), 0)
+            window.hide()
+            self._dispose_window(window)
+
+    def test_timeline_row_clicks_keep_window_alive_and_select_row(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window.action_model.set_actions([
+                Action("enter", 1.0),
+                Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1, wait_timeout=1.0),
+                Action("[DELAY]", 4.0, action_type="pause"),
+                Action("x", 1.0),
+            ])
+            window.refresh()
+            window.resize(850, 1100)
+            window.show()
+            self.app.processEvents()
+
+            for row in (0, 1, 2, 3, 1, 0):
+                idx = window.timeline.model().index(row, 0)
+                rect = window.timeline.visualRect(idx)
+                self.assertTrue(rect.isValid(), f"row {row} should be visible")
+                QTest.mouseClick(
+                    window.timeline.viewport(),
+                    Qt.MouseButton.LeftButton,
+                    Qt.KeyboardModifier.NoModifier,
+                    rect.center(),
+                )
+                self.app.processEvents()
+                self.assertFalse(window.isHidden(), f"window closed after row {row} click")
+                self.assertEqual(window.active_index, row)
+                self.assertEqual(window.timeline.currentIndex().row(), row)
+
+            window.hide()
+            self._dispose_window(window)
+
+    def test_timeline_click_tolerates_malformed_saved_action_data(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            bad_key = Action("enter", "bad-duration")
+            bad_key.key = None
+            bad_image = Action(
+                "[IMAGE]",
+                0.05,
+                action_type="image",
+                image_data=PNG_1X1,
+                similarity="not-a-number",
+                wait_timeout="",
+            )
+            bad_image.jump_to_on_found = "bad-target"
+            window.action_model.set_actions([bad_key, bad_image])
+            window.refresh()
+            window.resize(850, 1100)
+            window.show()
+            self.app.processEvents()
+
+            for row in (0, 1):
+                idx = window.timeline.model().index(row, 0)
+                rect = window.timeline.visualRect(idx)
+                self.assertTrue(rect.isValid(), f"row {row} should be visible")
+                QTest.mouseClick(
+                    window.timeline.viewport(),
+                    Qt.MouseButton.LeftButton,
+                    Qt.KeyboardModifier.NoModifier,
+                    rect.center(),
+                )
+                self.app.processEvents()
+                self.assertFalse(window.isHidden(), f"window closed after malformed row {row}")
+                self.assertEqual(window.active_index, row)
+
+            window.hide()
+            self._dispose_window(window)
+
     def test_compact_layout_keeps_header_and_bottom_panel_readable_at_target_size(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
@@ -462,8 +580,8 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertGreater(menu_x, update_x)
             self.assertGreater(status_x, menu_x)
 
-            self.assertGreaterEqual(window.status_pill.width(), 120)
-            self.assertLessEqual(window.status_pill.width(), 160)
+            self.assertGreaterEqual(window.status_pill.width(), 108)
+            self.assertLessEqual(window.status_pill.width(), 150)
             self.assertEqual(window.playback_panel.height(), 188)
             for widget, name in (
                 (window.profile_btn, "profile selector"),
