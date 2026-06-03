@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
     QProgressBar, QFrame, QMenu,
     QSpinBox, QDoubleSpinBox,
-    QFileDialog, QMessageBox,
+    QFileDialog, QMessageBox, QInputDialog,
     QDialog, QPlainTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
@@ -297,10 +297,296 @@ class MainWindow(QMainWindow):
         self.timeline.action_dragged.connect(self.move_action_to)
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
 
+    def _selected_rows(self, fallback=None):
+        """Return current timeline multi-selection as stable source-model rows."""
+        try:
+            if hasattr(self.timeline, "sync_selection"):
+                self.timeline.sync_selection()
+        except Exception:
+            pass
+        rows = sorted({r for r in getattr(self.timeline, "selected_indices", set()) if 0 <= r < self.action_model.rowCount()})
+        if not rows and fallback is not None and 0 <= fallback < self.action_model.rowCount():
+            rows = [fallback]
+        return rows
+
+    def _group_palette(self):
+        C = COLORS
+        return [
+            C.get("accent", "#1aa7ff"), C.get("neon_purple", "#b45cff"),
+            C.get("image", C.get("neon_gold", "#ffd21a")), C.get("success", "#16e085"),
+            C.get("click", "#ff3b45"), C.get("pause_cyan", "#45e5ff"),
+            "#ff8a3d", "#6ee7ff", "#f472b6", "#a3e635",
+        ]
+
+    def _new_group_id(self):
+        return f"grp_{int(time.time() * 1000)}_{self.action_model.rowCount()}"
+
+    def _group_color_for_number(self, number: int) -> str:
+        palette = self._group_palette()
+        return palette[max(0, number) % len(palette)]
+
+    def _normalize_groups(self):
+        """Ensure group headers/members have stable ids, colors, and badges."""
+        actions = self.action_model.actions()
+        headers = []
+        active_gid = ""
+        active_color = ""
+        changed = False
+        for i, action in enumerate(actions):
+            kind = getattr(action, "action_type", "key") or "key"
+            if kind == "group":
+                if not getattr(action, "group_id", ""):
+                    action.group_id = self._new_group_id() + f"_{i}"
+                    changed = True
+                if not getattr(action, "group_color", ""):
+                    action.group_color = self._group_color_for_number(len(headers))
+                    changed = True
+                name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}"
+                if getattr(action, "group_name", "") != name:
+                    action.group_name = name
+                    changed = True
+                if getattr(action, "label", "") != name:
+                    action.label = name
+                    changed = True
+                if getattr(action, "block_depth", 0) != 0:
+                    action.block_depth = 0
+                    changed = True
+                active_gid = action.group_id
+                active_color = action.group_color
+                headers.append((i, action))
+            else:
+                # Legacy support: rows indented under a header before group_id existed
+                # are adopted by the nearest previous group.
+                if getattr(action, "block_depth", 0) > 0 and not getattr(action, "group_id", "") and active_gid:
+                    action.group_id = active_gid
+                    action.group_color = active_color
+                    changed = True
+                if getattr(action, "group_id", ""):
+                    if getattr(action, "block_depth", 0) < 1:
+                        action.block_depth = 1
+                        changed = True
+                    if not getattr(action, "group_color", ""):
+                        # Mirror the owning group's accent when possible.
+                        owner = next((g for _, g in headers if getattr(g, "group_id", "") == action.group_id), None)
+                        action.group_color = getattr(owner, "group_color", "") or active_color or self._group_color_for_number(0)
+                        changed = True
+        valid = {getattr(g, "group_id", "") for _, g in headers}
+        for action in actions:
+            if getattr(action, "action_type", "") != "group" and getattr(action, "group_id", "") and action.group_id not in valid:
+                action.group_id = ""
+                action.group_color = ""
+                action.block_depth = 0
+                changed = True
+        return changed
+
+    def _group_headers(self):
+        self._normalize_groups()
+        headers = []
+        for row, action in enumerate(self.action_model.actions()):
+            if getattr(action, "action_type", "") == "group":
+                headers.append({
+                    "row": row,
+                    "action": action,
+                    "gid": getattr(action, "group_id", "") or f"row-{row}",
+                    "name": getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}",
+                    "color": getattr(action, "group_color", "") or self._group_color_for_number(len(headers)),
+                    "badge": f"G{len(headers) + 1}",
+                })
+        return headers
+
+    def _group_header_for_id(self, group_id: str):
+        for meta in self._group_headers():
+            if meta["gid"] == group_id:
+                return meta
+        return None
+
+    def _group_header_for_row(self, row: int):
+        if row < 0 or row >= self.action_model.rowCount():
+            return None
+        action = self.action_model.get(row)
+        if getattr(action, "action_type", "") == "group":
+            gid = getattr(action, "group_id", "")
+        else:
+            gid = getattr(action, "group_id", "")
+        if not gid:
+            return None
+        return self._group_header_for_id(gid)
+
+    def _contiguous_group_block(self, header_row: int):
+        if header_row < 0 or header_row >= self.action_model.rowCount():
+            return []
+        header = self.action_model.get(header_row)
+        if getattr(header, "action_type", "") != "group":
+            return []
+        gid = getattr(header, "group_id", "")
+        rows = [header_row]
+        for r in range(header_row + 1, self.action_model.rowCount()):
+            a = self.action_model.get(r)
+            if getattr(a, "action_type", "") == "group":
+                break
+            if getattr(a, "group_id", "") == gid:
+                rows.append(r)
+                continue
+            if getattr(a, "group_id", ""):
+                break
+            break
+        return rows
+
+    def _apply_row_reference_map(self, row_map):
+        """Remap loop/jump references after structural row edits."""
+        def remap(value):
+            try:
+                value = int(value)
+            except Exception:
+                return value
+            if value < 0:
+                return value
+            return row_map.get(value, value)
+        for action in self.action_model.actions():
+            if hasattr(action, "loop_target"):
+                action.loop_target = remap(getattr(action, "loop_target", -1))
+            for attr in ("jump_to_on_found", "jump_to_on_not_found", "condition_jump_true", "condition_jump_false"):
+                if hasattr(action, attr):
+                    setattr(action, attr, remap(getattr(action, attr, -1)))
+
+    def _make_group_action(self, name: str):
+        gid = self._new_group_id()
+        color = self._group_color_for_number(len(self._group_headers()))
+        group = Action("[GROUP]", 0.0, action_type="group", label=name)
+        group.group_name = name
+        group.group_id = gid
+        group.group_color = color
+        group.group_collapsed = False
+        group.block_depth = 0
+        return group
+
+    def create_group_from_rows(self, rows=None):
+        rows = self._selected_rows(self.active_index if rows is None else None) if rows is None else sorted(set(rows))
+        actions = self.action_model.actions()
+        rows = [r for r in rows if 0 <= r < len(actions) and getattr(actions[r], "action_type", "") != "group"]
+        if not rows:
+            self.status("Select one or more action rows to group")
+            return
+        first, last = rows[0], rows[-1]
+        if rows != list(range(first, last + 1)):
+            QMessageBox.information(self, "Create Group", "Select a contiguous block of rows to create a folder group.")
+            return
+        name, ok = QInputDialog.getText(self, "Create Group", "Group name:")
+        if not ok:
+            return
+        name = name.strip() or f"Group {len(self._group_headers()) + 1}"
+        scroll_position = self.timeline.scroll_position()
+        self.history.push(actions, self._timeline_history_state())
+        group = self._make_group_action(name)
+        self.action_model.insert_action(first, group)
+        # Existing rows from first..last shifted down by one.
+        for r in range(first + 1, last + 2):
+            action = self.action_model.get(r)
+            action.group_id = group.group_id
+            action.group_color = group.group_color
+            action.block_depth = max(1, int(getattr(action, "block_depth", 0) or 0))
+        self._apply_row_reference_map({i: (i + 1 if i >= first else i) for i in range(self.action_model.rowCount())})
+        self.active_index = first
+        self.timeline.selected_indices = set(range(first, last + 2))
+        self.refresh()
+        self.timeline.set_active(first)
+        self.timeline.restore_scroll_position(scroll_position)
+        self.save_session()
+        self.status(f"Created {name} from {len(rows)} action(s)")
+
+    def add_rows_to_group(self, rows, group_id: str):
+        rows = [r for r in sorted(set(rows or [])) if 0 <= r < self.action_model.rowCount()]
+        meta = self._group_header_for_id(group_id)
+        if not rows or not meta:
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        for r in rows:
+            action = self.action_model.get(r)
+            if getattr(action, "action_type", "") == "group":
+                continue
+            action.group_id = meta["gid"]
+            action.group_color = meta["color"]
+            action.block_depth = max(1, int(getattr(action, "block_depth", 0) or 0))
+        self.refresh()
+        self.save_session()
+        self.status(f"Added {len(rows)} row(s) to {meta['badge']} {meta['name']}")
+
+    def remove_rows_from_group(self, rows=None):
+        rows = self._selected_rows(self.active_index if rows is None else None) if rows is None else sorted(set(rows))
+        rows = [r for r in rows if 0 <= r < self.action_model.rowCount()]
+        if not rows:
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        changed = 0
+        for r in rows:
+            action = self.action_model.get(r)
+            if getattr(action, "action_type", "") == "group":
+                continue
+            if getattr(action, "group_id", ""):
+                action.group_id = ""
+                action.group_color = ""
+                action.block_depth = 0
+                changed += 1
+        self.refresh()
+        self.save_session()
+        self.status(f"Removed {changed} row(s) from group")
+
+    def toggle_group_collapsed(self, row=None, collapsed=None):
+        row = self.active_index if row is None else row
+        meta = self._group_header_for_row(row)
+        if not meta:
+            self.status("Select a group header or grouped action")
+            return
+        header = meta["action"]
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        header.group_collapsed = (not bool(getattr(header, "group_collapsed", False))) if collapsed is None else bool(collapsed)
+        # Keep active selection on the visible header when collapsing a child.
+        self.active_index = meta["row"]
+        self.refresh()
+        self.timeline.set_active(meta["row"])
+        self.save_session()
+        self.status(("Collapsed" if header.group_collapsed else "Expanded") + f" {meta['badge']} {meta['name']}")
+
+    def _assign_group_from_position(self, row: int):
+        if row < 0 or row >= self.action_model.rowCount():
+            return
+        action = self.action_model.get(row)
+        if getattr(action, "action_type", "") == "group":
+            return
+        target_meta = None
+        # If the previous visible row is a group header/member, treat the drop as into that folder.
+        if row > 0:
+            prev = self.action_model.get(row - 1)
+            if getattr(prev, "action_type", "") == "group":
+                target_meta = self._group_header_for_row(row - 1)
+            elif getattr(prev, "group_id", ""):
+                target_meta = self._group_header_for_id(getattr(prev, "group_id", ""))
+        if target_meta:
+            action.group_id = target_meta["gid"]
+            action.group_color = target_meta["color"]
+            action.block_depth = max(1, int(getattr(action, "block_depth", 0) or 0))
+        elif getattr(action, "group_id", ""):
+            action.group_id = ""
+            action.group_color = ""
+            action.block_depth = 0
+
+    def _suggest_loop_target(self, loop_row_zero_based: int):
+        # Prefer the nearest earlier group header, otherwise row 0.
+        for r in range(loop_row_zero_based - 1, -1, -1):
+            if getattr(self.action_model.get(r), "action_type", "") == "group":
+                return r
+        return 0 if loop_row_zero_based > 0 else -1
+
     def _timeline_context_menu(self, index, pos):
         if index < 0 or index >= self.action_model.rowCount():
             return
-        self.select(index)
+        if index not in getattr(self.timeline, "selected_indices", set()):
+            self.select(index)
+        else:
+            self.active_index = index
+        rows = self._selected_rows(index)
+        action = self.action_model.get(index)
+        group_meta = self._group_header_for_row(index)
         m = QMenu(self)
         C = COLORS
         m.setStyleSheet(f"""
@@ -308,20 +594,41 @@ class MainWindow(QMainWindow):
             QMenu::item {{ padding: 6px 18px; border-radius: 6px; }}
             QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}
         """)
-        m.addAction("Edit", lambda: self._open_active_dialog(index))
-        m.addAction("Duplicate", lambda: self.duplicate_action(index))
+        selection_label = f" ({len(rows)} selected)" if len(rows) > 1 else ""
+        m.addAction(f"Edit{selection_label if len(rows) == 1 else ''}", lambda: self._open_active_dialog(index)).setEnabled(len(rows) == 1)
+        m.addAction(f"Duplicate{selection_label}", lambda: self.duplicate_action(index))
         m.addAction("Enable/Disable", lambda: self.toggle_action_enabled(index))
         m.addSeparator()
-        m.addAction("Run from this row", self.test_from_selected_row)
-        m.addAction("Preview image confidence", lambda: self.open_image_confidence_preview(index))
+
+        group_menu = m.addMenu("Group / folder")
+        group_menu.addAction("Create group from selection", lambda r=rows: self.create_group_from_rows(r))
+        existing = group_menu.addMenu("Add selected to existing group")
+        headers = self._group_headers()
+        if headers:
+            for meta in headers:
+                existing.addAction(f"{meta['badge']}  {meta['name']}", lambda gid=meta['gid'], r=rows: self.add_rows_to_group(r, gid))
+        else:
+            a = existing.addAction("No groups yet")
+            a.setEnabled(False)
+        group_menu.addAction("Remove selected from group", lambda r=rows: self.remove_rows_from_group(r))
+        if group_meta:
+            group_menu.addSeparator()
+            header = group_meta["action"]
+            group_menu.addAction(("Expand" if getattr(header, "group_collapsed", False) else "Collapse") + f" {group_meta['badge']}", lambda row=index: self.toggle_group_collapsed(row))
+            group_menu.addAction("Rename / edit group", lambda row=group_meta['row']: self._open_group_editor(row))
+        m.addSeparator()
+
+        # Kept for debug workflows, but image preview only enables for image rows.
+        preview = m.addAction("Preview image confidence", lambda: self.open_image_confidence_preview(index))
+        preview.setEnabled(getattr(action, "action_type", "") == "image")
         m.addSeparator()
         sorting_locked = self.engine.running or self.timeline.playing_index >= 0
         move_up = m.addAction("Move Up", lambda: self.move_action(index, -1))
         move_down = m.addAction("Move Down", lambda: self.move_action(index, 1))
-        move_up.setEnabled(not sorting_locked and index > 0)
-        move_down.setEnabled(not sorting_locked and index < self.action_model.rowCount() - 1)
+        move_up.setEnabled(not sorting_locked and index > 0 and len(rows) == 1)
+        move_down.setEnabled(not sorting_locked and index < self.action_model.rowCount() - 1 and len(rows) == 1)
         m.addSeparator()
-        m.addAction("Delete", lambda: self.delete_action(index))
+        m.addAction(f"Delete{selection_label}", lambda: self.delete_action(index))
         m.exec(pos)
 
     # ═══════════════════════════════════════════════════════
@@ -335,6 +642,7 @@ class MainWindow(QMainWindow):
                 self.action_model.clear()
                 for action_data in session.get("actions", []):
                     self.action_model.add_action(Action.from_dict(action_data))
+                self._normalize_groups()
                 settings = session.get("settings", {})
                 self.loops_spin.setValue(int(settings.get("loops", 1)))
                 self.speed_combo.setCurrentText(f"{float(settings.get('speed', 1.0)):.1f}x")
@@ -444,8 +752,16 @@ class MainWindow(QMainWindow):
             self._show_inspector(False)
             return
         self.active_index = index
-        self.timeline.selected_indices.clear()
-        self.timeline.set_active(index)
+        preserve_multi = index in getattr(self.timeline, "selected_indices", set()) and len(getattr(self.timeline, "selected_indices", set())) > 1
+        if preserve_multi:
+            try:
+                self.timeline.sync_selection()
+            except Exception:
+                pass
+            self.timeline.viewport().update()
+        else:
+            self.timeline.selected_indices.clear()
+            self.timeline.set_active(index)
         action = self.action_model.get(index)
         self.inspector_selector.clear()
         self.inspector_selector.addItem(getattr(action, "label", "") or getattr(action, "key", "") or f"Action {index + 1}")
@@ -536,64 +852,96 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def delete_action(self, index):
-        selected = self.timeline.selected_indices
-        if selected:
-            indices = sorted(selected, reverse=True)
-            if not indices or indices[0] >= self.action_model.rowCount():
-                self.timeline.selected_indices.clear()
-                return
-            self.history.push(self.action_model.actions())
-            for idx in indices:
+        rows = self._selected_rows(index)
+        if not rows:
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        actions = self.action_model.actions()
+        # Deleting only a group header keeps the actions and simply ungroups them.
+        header_only = len(rows) == 1 and getattr(actions[rows[0]], "action_type", "") == "group"
+        if header_only:
+            header = actions[rows[0]]
+            gid = getattr(header, "group_id", "")
+            self.action_model.remove_action(rows[0])
+            for action in self.action_model.actions():
+                if getattr(action, "group_id", "") == gid:
+                    action.group_id = ""
+                    action.group_color = ""
+                    action.block_depth = 0
+            msg = "Removed group header and kept its actions"
+        else:
+            for idx in sorted(rows, reverse=True):
                 if 0 <= idx < self.action_model.rowCount():
                     self.action_model.remove_action(idx)
-            self.active_index = -1
-            self.timeline.selected_indices.clear()
-            self.refresh()
-            self.update_statistics()
-            self.save_session()
-            self.status(f"Deleted {len(indices)} actions")
-            return
-        if index < 0 or index >= self.action_model.rowCount():
-            return
-        self.history.push(self.action_model.actions())
-        self.action_model.remove_action(index)
+            msg = f"Deleted {len(rows)} row(s)"
         self.active_index = -1
         self.timeline.selected_indices.clear()
         self.refresh()
         self.update_statistics()
         self.save_session()
-        self.status("Deleted action")
+        self.status(msg)
 
     def duplicate_action(self, index):
-        if index < 0 or index >= self.action_model.rowCount():
+        rows = self._selected_rows(index)
+        if not rows:
             self.status("No action selected to duplicate")
             return
-        self.history.push(self.action_model.actions())
-        action = deepcopy(self.action_model.get(index))
-        insert_at = index + 1
-        self.action_model.insert_action(insert_at, action)
-        self.active_index = index + 1
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        actions = self.action_model.actions()
+        insert_at = rows[-1] + 1
+        copies = [deepcopy(actions[r]) for r in rows if 0 <= r < len(actions)]
+        # If the copied block contains a group header, give the duplicate a new group id
+        # and remap copied member rows to that id so import/export remains clean.
+        copied_group_ids = {}
+        for c in copies:
+            if getattr(c, "action_type", "") == "group":
+                old = getattr(c, "group_id", "")
+                new = self._new_group_id()
+                copied_group_ids[old] = new
+                c.group_id = new
+                c.group_color = self._group_color_for_number(len(self._group_headers()) + len(copied_group_ids))
+        for c in copies:
+            gid = getattr(c, "group_id", "")
+            if gid in copied_group_ids and getattr(c, "action_type", "") != "group":
+                c.group_id = copied_group_ids[gid]
+        for offset, action in enumerate(copies):
+            self.action_model.insert_action(insert_at + offset, action)
+        self.active_index = insert_at
+        self.timeline.selected_indices = set(range(insert_at, insert_at + len(copies)))
         self.refresh()
+        self.timeline.set_active(insert_at)
         self.update_statistics()
         self.save_session()
-        self.status("Duplicated action")
+        self.status(f"Duplicated {len(copies)} row(s)")
 
     def toggle_action_enabled(self, index):
-        if index < 0 or index >= self.action_model.rowCount():
+        rows = self._selected_rows(index)
+        if not rows:
             return
         self.history.push(self.action_model.actions(), self._timeline_history_state())
-        action = self.action_model.get(index)
-        action.enabled = not bool(getattr(action, "enabled", True))
+        actions = self.action_model.actions()
+        new_state = not all(bool(getattr(actions[r], "enabled", True)) for r in rows if 0 <= r < len(actions))
+        for r in rows:
+            if 0 <= r < len(actions):
+                actions[r].enabled = new_state
         self.refresh()
         self.update_statistics()
         self.save_session()
-        self.status("Enabled action" if action.enabled else "Disabled action")
+        self.status("Enabled selected row(s)" if new_state else "Disabled selected row(s)")
 
     def move_action(self, index, direction):
         if self.engine.running or self.timeline.playing_index >= 0:
             self.status("Stop playback before reordering actions")
             return
         if index < 0 or index >= self.action_model.rowCount():
+            return
+        # Group headers move with their contiguous visible members.
+        if getattr(self.action_model.get(index), "action_type", "") == "group":
+            block = self._contiguous_group_block(index)
+            if not block:
+                return
+            target = index - 1 if direction < 0 else block[-1] + 1
+            self.move_action_to(index, target)
             return
         new_index = index + direction
         if new_index < 0 or new_index >= self.action_model.rowCount():
@@ -602,6 +950,7 @@ class MainWindow(QMainWindow):
         self.history.push(self.action_model.actions(), self._timeline_history_state())
         self.action_model.move_action(index, new_index)
         self.timeline.remap_after_move(index, new_index)
+        self._assign_group_from_position(new_index)
         self.active_index = new_index
         self.refresh()
         self.timeline.set_active(new_index)
@@ -616,20 +965,43 @@ class MainWindow(QMainWindow):
             return
         if index < 0 or index >= self.action_model.rowCount():
             return
-        if target_index < 0 or target_index >= self.action_model.rowCount():
-            return
+        if target_index < 0:
+            target_index = 0
+        target_index = min(target_index, max(0, self.action_model.rowCount() - 1))
         scroll_position = self.timeline.scroll_position()
         self.history.push(self.action_model.actions(), self._timeline_history_state())
-        self.action_model.move_action(index, target_index)
-        self.timeline.remap_after_move(index, target_index)
-        self.active_index = target_index
+        actions = self.action_model.actions()
+
+        if getattr(actions[index], "action_type", "") == "group":
+            block_rows = self._contiguous_group_block(index)
+            if target_index in block_rows:
+                self.status("Group is already there")
+                return
+            block = [actions[r] for r in block_rows]
+            remaining = [a for i, a in enumerate(actions) if i not in set(block_rows)]
+            removed_before_target = sum(1 for r in block_rows if r < target_index)
+            insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
+            new_actions = remaining[:insert_at] + block + remaining[insert_at:]
+            self.action_model.set_actions(new_actions)
+            new_index = insert_at
+            self.active_index = new_index
+            self.timeline.selected_indices = set(range(new_index, new_index + len(block)))
+            msg = "Moved group"
+        else:
+            self.action_model.move_action(index, target_index)
+            self.timeline.remap_after_move(index, target_index)
+            self._assign_group_from_position(target_index)
+            self.active_index = target_index
+            new_index = target_index
+            msg = "Moved action"
+
         self.refresh()
-        self.timeline.set_active(target_index)
+        self.timeline.set_active(new_index)
         self.timeline.restore_scroll_position(scroll_position)
-        self.timeline.flash_drop(target_index)
+        self.timeline.flash_drop(new_index)
         self.update_statistics(immediate=True)
         self.save_session()
-        self.status("Moved action")
+        self.status(msg)
 
     def copy_action(self):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
@@ -728,9 +1100,18 @@ class MainWindow(QMainWindow):
         errors = []
         warnings = []
         total = len(actions)
+        autofix_started = False
+
+        def begin_autofix():
+            nonlocal autofix_started
+            if not autofix_started:
+                self.history.push(self.action_model.actions(), self._timeline_history_state())
+                autofix_started = True
 
         if total <= 0:
             errors.append("Timeline is empty.")
+        elif not any(bool(getattr(a, "enabled", True)) and getattr(a, "action_type", "key") not in {"group", "loop"} for a in actions):
+            errors.append("Timeline has no enabled runnable actions. Group/folder and loop controller rows are skipped during playback.")
 
         for idx, action in enumerate(actions, start=1):
             prefix = f"Row {idx}"
@@ -767,9 +1148,24 @@ class MainWindow(QMainWindow):
                 target = int(getattr(action, "loop_target", -1) or -1)
                 count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 1)) or 1)
                 if count < 2:
-                    errors.append(f"{prefix}: loop count must be 2 or higher.")
+                    begin_autofix()
+                    action.loop_count = 2
+                    action.repeat_count = 2
+                    warnings.append(f"{prefix}: loop count was auto-fixed to x2.")
+                    count = 2
                 if not (0 <= target < idx - 1):
-                    errors.append(f"{prefix}: loop target must be an earlier row.")
+                    suggested = self._suggest_loop_target(idx - 1)
+                    if 0 <= suggested < idx - 1:
+                        begin_autofix()
+                        action.loop_target = suggested
+                        target_action = actions[suggested]
+                        if getattr(target_action, "action_type", "") == "group":
+                            group_name = getattr(target_action, "group_name", "") or getattr(target_action, "label", "") or f"row {suggested + 1}"
+                            warnings.append(f"{prefix}: loop target auto-fixed to group '{group_name}' on row {suggested + 1}.")
+                        else:
+                            warnings.append(f"{prefix}: loop target auto-fixed to row {suggested + 1}.")
+                    else:
+                        errors.append(f"{prefix}: loop target must be an earlier row or group header.")
                 continue
 
             if action.is_pause():
@@ -848,6 +1244,10 @@ class MainWindow(QMainWindow):
                     errors.append(f"{prefix}: {reason}.")
             else:
                 warnings.append(f"{prefix}: unknown action type '{kind}' — engine may skip or treat it as a key.")
+
+        if autofix_started:
+            self.refresh()
+            self.save_session()
 
         if self.sim_check.isChecked():
             warnings.append("Simulation mode is enabled; actions will animate/log but not deploy to Windows.")
@@ -1205,6 +1605,15 @@ class MainWindow(QMainWindow):
         else:
             display_idx = self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
         self.playing_index = display_idx
+        # Auto-expand a collapsed group when playback reaches one of its member rows;
+        # group headers themselves are skipped by the engine and never become active.
+        try:
+            meta = self._group_header_for_row(display_idx)
+            if meta and bool(getattr(meta["action"], "group_collapsed", False)):
+                meta["action"].group_collapsed = False
+                self.timeline.refresh()
+        except Exception:
+            pass
         self.actions_played += 1
         speed = max(self.engine.speed_multiplier, 0.01)
         adjusted_dur = dur / speed
@@ -1878,6 +2287,10 @@ class MainWindow(QMainWindow):
             "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "screen": {"width": sw, "height": sh},
             "profile": self.session_manager.active,
+            "groups": [
+                {"row": meta["row"], "id": meta["gid"], "badge": meta["badge"], "name": meta["name"], "color": meta["color"], "collapsed": bool(getattr(meta["action"], "group_collapsed", False))}
+                for meta in self._group_headers()
+            ],
             "actions": [a.to_dict() for a in self.action_model.actions()],
         }
 
@@ -1910,6 +2323,7 @@ class MainWindow(QMainWindow):
                 self.action_model.clear()
                 for action_data in actions_data:
                     self.action_model.add_action(Action.from_dict(action_data))
+                self._normalize_groups()
                 self.active_index = -1
                 self.timeline.refresh()
                 self.refresh()
@@ -2291,6 +2705,7 @@ class MainWindow(QMainWindow):
             # Keep one authoritative backing list. The timeline view already uses
             # self.action_model; resetting it from engine.actions can resurrect a
             # stale list after dialog edits/captures and make new image actions vanish.
+            self._normalize_groups()
             self.engine.actions = self.action_model.actions()
             self._invalidate_seq_dur()
             self.timeline.refresh()

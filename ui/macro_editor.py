@@ -249,19 +249,9 @@ class MacroEditorDialog(QDialog):
         rows = self._selected_rows()
         if not rows:
             return
-        name, ok = QInputDialog.getText(self, "Group Selected", "Group name:")
-        if not ok:
-            return
-        name = name.strip() or "Group"
-        self.window.history.push(self.window.action_model.actions(), self.window._timeline_history_state())
-        group = Action("[GROUP]", 0.0, action_type="group", label=name)
-        group.group_name = name
-        insert_at = rows[0]
-        self.window.action_model.insert_action(insert_at, group)
-        # Visually indent selected rows under the new group header.
-        for r in range(insert_at + 1, min(insert_at + 1 + len(rows), self.window.action_model.rowCount())):
-            self.window.action_model.get(r).block_depth = max(1, int(getattr(self.window.action_model.get(r), "block_depth", 0) or 0))
-        self._commit("Grouped selected action(s)")
+        self.window.timeline.selected_indices = set(rows)
+        self.window.create_group_from_rows(rows)
+        self.refresh_table()
 
     def bulk_delay(self):
         rows = self._selected_rows()

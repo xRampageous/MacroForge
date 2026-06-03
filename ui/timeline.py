@@ -7,7 +7,7 @@ It intentionally avoids widgets-per-row so large macros remain fast.
 
 import time
 from PyQt6.QtWidgets import QStyledItemDelegate, QListView, QAbstractItemView, QStyle
-from PyQt6.QtCore import Qt, pyqtSignal, QModelIndex, QSize, QTimer, QRectF, QPointF
+from PyQt6.QtCore import Qt, pyqtSignal, QModelIndex, QSize, QTimer, QRectF, QPointF, QItemSelectionModel
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPainterPath, QLinearGradient
 
 from ui.theme import COLORS, TYPE_COLORS
@@ -166,10 +166,12 @@ class TimelineDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option, index):
         painter.save()
         try:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            action = index.data(ActionListModel.ActionRole)
             view = option.widget
             row = index.row()
+            if hasattr(view, "is_row_collapsed_hidden") and view.is_row_collapsed_hidden(row):
+                return
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            action = index.data(ActionListModel.ActionRole)
             selected = bool(option.state & QStyle.StateFlag.State_Selected)
             hovered = row == getattr(view, "hover_row", -1)
             playing = row == getattr(view, "playing_index", -1)
@@ -179,7 +181,10 @@ class TimelineDelegate(QStyledItemDelegate):
             flash_opacity = float(getattr(view, "flash_opacity", 0.0) or 0.0)
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
+            group_badge = view.group_badge(row) if hasattr(view, "group_badge") else None
             type_color = TYPE_COLORS.get(kind, COLORS.get("accent", "#45c8ff"))
+            if group_badge and group_badge.get("color") and kind != "group":
+                type_color = group_badge.get("color")
             enabled = bool(getattr(action, "enabled", True))
             if not enabled:
                 type_color = _mix(type_color, COLORS["text_dark"], 0.62)
@@ -292,6 +297,14 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(type_color))
             painter.drawRoundedRect(stripe, 1.5, 1.5)
+
+            if group_badge and kind != "group":
+                rail = QRectF(outer.left() + 5, outer.top() + 5, 2.0, outer.height() - 10)
+                rail_col = QColor(group_badge.get("color") or type_color)
+                rail_col.setAlpha(150)
+                painter.setBrush(rail_col)
+                painter.drawRoundedRect(rail, 1, 1)
+
             if playing:
                 painter.setBrush(QColor(type_color))
                 tri_x = outer.left() + (10 if compact else 14)
@@ -318,6 +331,17 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 9 if compact else 10, QFont.Weight.DemiBold))
             painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, str(row + 1))
 
+            if group_badge and kind != "group":
+                gb_rect = QRectF(num_rect.left() - 2, outer.center().y() + 9, num_rect.width() + 4, 14)
+                gb_col = QColor(group_badge.get("color") or type_color)
+                gb_bg = QColor(COLORS["bg"])
+                painter.setPen(QPen(gb_col, 1))
+                painter.setBrush(QBrush(gb_bg))
+                painter.drawRoundedRect(gb_rect, 4, 4)
+                painter.setPen(gb_col)
+                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.Black))
+                painter.drawText(gb_rect, Qt.AlignmentFlag.AlignCenter, group_badge.get("badge", "G"))
+
             # Icon tile.
             icon_size = 28 if compact else 34
             icon_left = outer.left() + (54 if compact else 82)
@@ -343,6 +367,12 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
+            if kind == "loop" and hasattr(view, "group_badge"):
+                target = int(getattr(action, "loop_target", -1) or -1)
+                meta = view.group_badge(target) if target >= 0 else None
+                count = int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)
+                if meta:
+                    detail = f"Repeat x{count} · back to {meta.get('badge', 'G')} {meta.get('name', 'Group')}"
             depth = max(0, int(getattr(action, "block_depth", 0) or 0))
             text_x = icon_rect.right() + 14 + min(depth, 4) * 12
             text_right = max(text_x + 72, status_x - 14)
@@ -358,6 +388,16 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 7 if compact else 8))
             fm = painter.fontMetrics()
             painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
+
+            if kind == "group":
+                tri = "▶" if bool(getattr(action, "group_collapsed", False)) else "▼"
+                badge = group_badge.get("badge", "G") if group_badge else "G"
+                gcol = QColor(group_badge.get("color") if group_badge else type_color)
+                chip_rect = QRectF(text_x, outer.center().y() + 8, 56 if compact else 66, 16)
+                self._rounded_rect(painter, chip_rect, 4, COLORS["bg"], gcol.name(), 1)
+                painter.setPen(gcol)
+                painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.Black))
+                painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, f"{tri} {badge}")
 
             if kind == "image":
                 match_state = getattr(view, "image_states", {}).get(row, "")
@@ -471,9 +511,12 @@ class TimelineDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option, index):
         view = option.widget
+        if hasattr(view, "is_row_collapsed_hidden") and view.is_row_collapsed_hidden(index.row()):
+            return QSize(100, 0)
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
-        base_height = 56 if getattr(option.widget, "width", lambda: 999)() < 700 else 64
-        height = max(48, int(base_height * zoom))
+        action = index.data(ActionListModel.ActionRole)
+        base_height = 52 if getattr(action, "action_type", "") == "group" else (56 if getattr(option.widget, "width", lambda: 999)() < 700 else 64)
+        height = max(42 if getattr(action, "action_type", "") == "group" else 48, int(base_height * zoom))
         return QSize(100, height)
 
 
@@ -518,12 +561,12 @@ class TimelineView(QListView):
 
         self.setModel(model or ActionListModel())
         self.setItemDelegate(TimelineDelegate(self))
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setFrameShape(QListView.Shape.NoFrame)
         self.setMouseTracking(True)
         self.setAlternatingRowColors(False)
-        self.setUniformItemSizes(True)
+        self.setUniformItemSizes(False)
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -545,6 +588,69 @@ class TimelineView(QListView):
         if sel is not None:
             sel.currentChanged.connect(self._on_current_changed)
 
+    def _actions(self):
+        model = self.model()
+        return model.actions() if isinstance(model, ActionListModel) and hasattr(model, "actions") else []
+
+    def _group_headers(self):
+        headers = []
+        for row, action in enumerate(self._actions()):
+            if getattr(action, "action_type", "") == "group":
+                gid = getattr(action, "group_id", "") or f"row-{row}"
+                color = getattr(action, "group_color", "") or COLORS.get("group", COLORS.get("accent", "#45c8ff"))
+                name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}"
+                headers.append({"row": row, "action": action, "gid": gid, "color": color, "name": name, "badge": f"G{len(headers) + 1}"})
+        return headers
+
+    def group_badge(self, row: int):
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return None
+        action = actions[row]
+        gid = getattr(action, "group_id", "")
+        if not gid and getattr(action, "action_type", "") != "group":
+            return None
+        for header in self._group_headers():
+            if getattr(action, "action_type", "") == "group" and header["row"] == row:
+                return header
+            if gid and header["gid"] == gid:
+                return header
+        return None
+
+    def group_header_for_row(self, row: int):
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return None
+        action = actions[row]
+        gid = getattr(action, "group_id", "")
+        if not gid:
+            return None
+        for i in range(row, -1, -1):
+            candidate = actions[i]
+            if getattr(candidate, "action_type", "") == "group" and getattr(candidate, "group_id", "") == gid:
+                return i, candidate
+        return None
+
+    def is_row_collapsed_hidden(self, row: int) -> bool:
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return False
+        action = actions[row]
+        if getattr(action, "action_type", "") == "group":
+            return False
+        header = self.group_header_for_row(row)
+        return bool(header and getattr(header[1], "group_collapsed", False))
+
+    def sync_selection(self):
+        rows = set()
+        sel = self.selectionModel()
+        if sel is not None:
+            rows = {i.row() for i in sel.selectedRows() if i.isValid()}
+            if not rows:
+                rows = {i.row() for i in sel.selectedIndexes() if i.isValid()}
+        self.selected_indices = {r for r in rows if not self.is_row_collapsed_hidden(r)}
+        return self.selected_indices
+
     def action_progress(self, row: int) -> float:
         if self.playing_index < 0:
             return 0.0
@@ -565,15 +671,18 @@ class TimelineView(QListView):
         return f"{remaining:.1f}s"
 
     def _on_current_changed(self, current, previous):
-        if current.isValid():
-            self.selected_indices = {current.row()}
-        else:
-            self.selected_indices.clear()
+        self.sync_selection()
+        if current.isValid() and self.is_row_collapsed_hidden(current.row()):
+            header = self.group_header_for_row(current.row())
+            if header:
+                self.setCurrentIndex(self.model().index(header[0], 0))
         self.viewport().update()
 
     def _on_clicked(self, index):
         if index.isValid():
-            self.selected_indices = {index.row()}
+            self.sync_selection()
+            if not self.selected_indices:
+                self.selected_indices = {index.row()}
             self.action_clicked.emit(index.row())
 
     def _on_double_clicked(self, index):
@@ -586,9 +695,18 @@ class TimelineView(QListView):
         self.action_context_menu.emit(row, self.viewport().mapToGlobal(pos))
 
     def mousePressEvent(self, event):
-        idx = self.indexAt(event.position().toPoint()) if hasattr(event, "position") else self.indexAt(event.pos())
+        pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        idx = self.indexAt(pos)
         self._drag_start_row = idx.row() if idx.isValid() else -1
+        if idx.isValid() and self.is_row_collapsed_hidden(idx.row()):
+            header = self.group_header_for_row(idx.row())
+            if header:
+                idx = self.model().index(header[0], 0)
+                self._drag_start_row = header[0]
+        if event.button() == Qt.MouseButton.RightButton and idx.isValid() and idx.row() in self.selected_indices:
+            return
         super().mousePressEvent(event)
+        self.sync_selection()
 
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
@@ -730,7 +848,7 @@ class TimelineView(QListView):
             if self.zoom != old:
                 self.setUniformItemSizes(False)
                 self.doItemsLayout()
-                self.setUniformItemSizes(True)
+                self.setUniformItemSizes(False)
                 self.viewport().update()
             event.accept()
             return
@@ -753,7 +871,11 @@ class TimelineView(QListView):
     def set_active(self, index):
         if index is not None and 0 <= index < self.model().rowCount():
             idx = self.model().index(index, 0)
+            self.clearSelection()
             self.setCurrentIndex(idx)
+            sel = self.selectionModel()
+            if sel is not None:
+                sel.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
             self.selected_indices = {index}
         else:
             self.clearSelection()

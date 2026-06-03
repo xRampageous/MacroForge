@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QFrame
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QFrame, QComboBox
 
 from models import Action
 from ui.theme import COLORS
@@ -40,12 +40,27 @@ class LoopDialog(QDialog):
         self.count_spin.setValue(int(getattr(existing, "loop_count", getattr(existing, "repeat_count", 2)) if existing else 2))
         body_lo.addWidget(label("Repeat count")); body_lo.addWidget(self.count_spin)
 
-        self.target_spin = QSpinBox(); self.target_spin.setRange(1, max(1, self._row_count))
+        self.target_combo = QComboBox()
         default_target = int(getattr(existing, "loop_target", -1) if existing else max(0, self._current_index - 1))
-        self.target_spin.setValue(default_target + 1 if default_target >= 0 else 1)
-        body_lo.addWidget(label("Jump back to row")); body_lo.addWidget(self.target_spin)
+        group_meta = {}
+        try:
+            if parent is not None and hasattr(parent, "_group_headers"):
+                group_meta = {m["row"]: m for m in parent._group_headers()}
+        except Exception:
+            group_meta = {}
+        max_target = max(1, self._row_count)
+        for row in range(max_target):
+            meta = group_meta.get(row)
+            if meta:
+                text = f"{meta['badge']} {meta['name']}  · row {row + 1}"
+            else:
+                text = f"Row {row + 1}"
+            self.target_combo.addItem(text, row)
+        pick = default_target if 0 <= default_target < max_target else 0
+        self.target_combo.setCurrentIndex(max(0, min(pick, self.target_combo.count() - 1)))
+        body_lo.addWidget(label("Jump back to row or group")); body_lo.addWidget(self.target_combo)
 
-        hint = QLabel("Tip: place this after the section you want to repeat, then point it back to that section's first row.")
+        hint = QLabel("Tip: point loops to a group header to repeat the whole folder, or to a normal row to repeat from there.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; background: transparent;")
         body_lo.addWidget(hint)
@@ -61,5 +76,6 @@ class LoopDialog(QDialog):
         a.label = self.label_edit.text().strip() or f"Loop x{self.count_spin.value()}"
         a.loop_count = self.count_spin.value()
         a.repeat_count = self.count_spin.value()
-        a.loop_target = self.target_spin.value() - 1
+        data = self.target_combo.currentData()
+        a.loop_target = int(data if data is not None else 0)
         return a

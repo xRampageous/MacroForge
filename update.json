@@ -1,6 +1,6 @@
 {
-  "version": "3.1.6",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.6/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.6/MacroForge-v3.1.6.zip",
-  "notes": "v3.1.6: Feature upgrade - macro editor mode, group/loop/condition block rows, image confidence preview dialog, macro health pre-flight report, crash recovery snapshots, undo/redo safety improvements, .macroforge import/export envelope, screen-size metadata and coordinate scaling helper."
+  "version": "3.1.7",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.7/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.1.7/MacroForge-v3.1.7.zip",
+  "notes": "v3.1.7: Group timeline - right-click group/folder context menu, multi-select timeline, create group from contiguous rows, collapsible group headers, G1/G2 badges, group rows skipped during playback, loop targets support group headers, preflight auto-fixes, drag inherits group context, import/export preserves group metadata."
 }

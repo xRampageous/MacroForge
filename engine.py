@@ -352,7 +352,10 @@ class ExecutionEngine:
         self.running = True
         self.paused = False
         self.time_cursor = 0.0
-        self.total_actions = len(self.actions)
+        self.total_actions = max(1, sum(
+            1 for a in self.actions
+            if bool(getattr(a, "enabled", True)) and getattr(a, "action_type", "key") not in {"group", "loop"}
+        ))
         loop_actions_executed = 0
         self.loops_completed_count = 0
         _completed_naturally = False
@@ -386,17 +389,13 @@ class ExecutionEngine:
                     # do not deploy input. Disabled rows are skipped the same way.
                     if not bool(getattr(action, "enabled", True)):
                         self.status(f"Skipped disabled row {i + 1}")
-                        loop_actions_executed += 1
-                        if self.total_actions > 0:
-                            self.progress_cb((loop_actions_executed / self.total_actions) * 100)
                         i += 1
                         continue
 
                     if getattr(action, "action_type", "key") == "group":
+                        # Group/folder rows are timeline organisation only. They must
+                        # never become an active playback row or affect runtime progress.
                         self.status(getattr(action, "group_name", "") or getattr(action, "label", "Group"))
-                        loop_actions_executed += 1
-                        if self.total_actions > 0:
-                            self.progress_cb((loop_actions_executed / self.total_actions) * 100)
                         i += 1
                         continue
 
@@ -413,9 +412,8 @@ class ExecutionEngine:
                             self._loop_counters.pop(i, None)
                         else:
                             self.status(f"Loop row {i + 1}: no valid earlier target")
-                        loop_actions_executed += 1
-                        if self.total_actions > 0:
-                            self.progress_cb((loop_actions_executed / self.total_actions) * 100)
+                        # Loop controller rows are also skipped on the timeline; the
+                        # jump itself changes the next executable action.
                         i += 1
                         continue
 

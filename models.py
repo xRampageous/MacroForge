@@ -56,7 +56,9 @@ class Action:
     # Editor / premium timeline fields
     enabled: bool = True              # disabled actions remain in the timeline but are skipped at runtime
     group_name: str = ""             # folder/group header display name
-    group_collapsed: bool = False     # reserved for future collapsed rendering
+    group_collapsed: bool = False     # collapsed group headers visually hide their member rows
+    group_id: str = ""               # stable folder/group identifier shared by header + member rows
+    group_color: str = ""            # optional accent color for group badges/header
     loop_count: int = 2               # loop block repeat count
     loop_target: int = -1             # row index to jump back to when this loop block runs
     block_depth: int = 0              # visual indent level for groups/blocks
@@ -122,6 +124,8 @@ class Action:
             d.get("enabled", True),
             d.get("group_name", ""),
             d.get("group_collapsed", False),
+            d.get("group_id", ""),
+            d.get("group_color", ""),
             d.get("loop_count", 2),
             d.get("loop_target", -1),
             d.get("block_depth", 0),
