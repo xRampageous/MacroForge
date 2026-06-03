@@ -1,6 +1,6 @@
 {
-  "version": "3.5.2",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.2/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.2/MacroForge-v3.5.2.zip",
-  "notes": "v3.5.2: Apply image inspector subpanel autohide patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with image inspector subpanel autohide."
+  "version": "3.5.3",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.3/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.3/MacroForge-v3.5.3.zip",
+  "notes": "v3.5.3: Apply image subpanel autohide fix patch - updated icons.py, main_window.py, main_window_layout.py, playback_panel.py, theme.py, theme_compact.py and timeline.py with image subpanel autohide fix."
 }
