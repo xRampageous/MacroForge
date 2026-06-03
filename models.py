@@ -65,6 +65,12 @@ class Action:
     screen_width: int = 0             # source screen width when coordinate action was recorded/created
     screen_height: int = 0            # source screen height when coordinate action was recorded/created
     anchor_mode: str = "absolute"    # "absolute" | "scaled" reserved for screen adaptation
+    # Power editor polish fields
+    group_role: str = "normal"        # "normal" | "recovery"
+    retry_attempts: int = 1            # smart retry attempts for image/condition actions
+    retry_delay: float = 0.25          # delay between smart retries
+    on_fail_action: str = "default"   # "default" | "continue" | "stop" | "jump" | "recovery_group"
+    on_fail_target: int = -1           # group/header/row target for jump/recovery
 
     def is_condition(self):
         return self.action_type == "condition"
@@ -132,6 +138,11 @@ class Action:
             d.get("screen_width", 0),
             d.get("screen_height", 0),
             d.get("anchor_mode", "absolute"),
+            d.get("group_role", "normal"),
+            d.get("retry_attempts", 1),
+            d.get("retry_delay", 0.25),
+            d.get("on_fail_action", "default"),
+            d.get("on_fail_target", -1),
         )
 
     def is_pause(self) -> bool:
@@ -445,6 +456,26 @@ class SettingsManager:
             "record": "f7",
             "toggle": "f9",
             "esc": "esc",
+            "undo": "Ctrl+Z",
+            "redo": "Ctrl+Y",
+            "copy": "Ctrl+C",
+            "paste": "Ctrl+V",
+            "duplicate": "Ctrl+D",
+            "delete": "Delete",
+            "delete_alt": "Ctrl+Delete",
+            "select_all": "Ctrl+A",
+            "group": "Ctrl+G",
+            "ungroup": "Ctrl+Shift+G",
+            "play_pause": "Space",
+            "stop_deselect": "Escape",
+            "save": "Ctrl+S",
+            "search": "Ctrl+F",
+            "run_from_selected": "Ctrl+Enter",
+            "macro_editor": "Ctrl+E",
+            "preflight": "Ctrl+Shift+P",
+            "toggle_runtime_log": "Ctrl+Shift+L",
+            "variables": "Ctrl+Alt+V",
+            "profile_library": "Ctrl+Alt+P",
         },
         "start_minimized": False,
         "auto_save": True,

@@ -1,6 +1,6 @@
 {
-  "version": "3.2.0",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.0/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.0/MacroForge-v3.2.0.zip",
-  "notes": "v3.2.0: Runtime debug + drag-into-group - live runtime log panel, playback timeline trace, runtime error dialog with Stop/Inspector/Log actions, condition/loop/image target highlighting, group progress on headers, save/load reliability repair, timeline shortcuts in Settings, drag normal row onto group header to move into group."
+  "version": "3.2.1",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.1/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.2.1/MacroForge-v3.2.1.zip",
+  "notes": "v3.2.1: Power editor polish - playback timeline feedback indicator, group context menu polish (rename/duplicate/ungroup/delete/color), drag-into-group visual feedback, timeline search/filter with query tokens, smart retry fields, recovery group type, macro variables manager, full hotkey editor in Settings, profile/macro library screen, bottom panel layout polish."
 }

@@ -332,10 +332,28 @@ def build_main_layout(window):
     self.ii_sim.setText("0.8")
     self.ii_wait = form_input()
     self.ii_wait.setText("10.0")
+    self.ii_retry_count = QSpinBox()
+    self.ii_retry_count.setRange(1, 99)
+    self.ii_retry_count.setStyleSheet(f"QSpinBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }}")
+    self.ii_retry_delay = form_input()
+    self.ii_retry_delay.setText("0.25")
+    self.ii_fail_mode = QComboBox()
+    self.ii_fail_mode.addItems(["default", "continue", "stop", "jump", "recovery_group"])
+    self.ii_fail_target = QComboBox()
+    for combo in (self.ii_fail_mode, self.ii_fail_target):
+        combo.setStyleSheet(f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }} QComboBox::drop-down {{ border: none; }}")
     ii_lo.addWidget(form_label("Similarity"))
     ii_lo.addWidget(self.ii_sim)
     ii_lo.addWidget(form_label("Wait timeout"))
     ii_lo.addWidget(self.ii_wait)
+    ii_lo.addWidget(form_label("Retry attempts / delay"))
+    ii_retry_row = QHBoxLayout(); ii_retry_row.setSpacing(5)
+    ii_retry_row.addWidget(self.ii_retry_count); ii_retry_row.addWidget(self.ii_retry_delay)
+    ii_lo.addLayout(ii_retry_row)
+    ii_lo.addWidget(form_label("On fail"))
+    ii_lo.addWidget(self.ii_fail_mode)
+    ii_lo.addWidget(form_label("Fail target"))
+    ii_lo.addWidget(self.ii_fail_target)
 
     # Group inspector
     self.insp_group = QWidget()
@@ -346,11 +364,14 @@ def build_main_layout(window):
     self.ig_name.setPlaceholderText("group name")
     self.ig_collapsed = QCheckBox("Collapsed")
     self.ig_collapsed.setStyleSheet(f"color: {C['text']}; font-size: 10px; background: transparent;")
+    self.ig_recovery = QCheckBox("Recovery group")
+    self.ig_recovery.setStyleSheet(f"color: {C['text']}; font-size: 10px; background: transparent;")
     self.ig_meta = QLabel("0 actions · ~0.0s")
     self.ig_meta.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
     ig_lo.addWidget(form_label("Group name"))
     ig_lo.addWidget(self.ig_name)
     ig_lo.addWidget(self.ig_collapsed)
+    ig_lo.addWidget(self.ig_recovery)
     ig_lo.addWidget(self.ig_meta)
 
     # Loop inspector
@@ -386,6 +407,16 @@ def build_main_layout(window):
     self.ico_false = QComboBox()
     for combo in (self.ico_true, self.ico_false):
         combo.setStyleSheet(f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }} QComboBox::drop-down {{ border: none; }}")
+    self.ico_retry_count = QSpinBox()
+    self.ico_retry_count.setRange(1, 99)
+    self.ico_retry_count.setStyleSheet(f"QSpinBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }}")
+    self.ico_retry_delay = form_input()
+    self.ico_retry_delay.setText("0.25")
+    self.ico_fail_mode = QComboBox()
+    self.ico_fail_mode.addItems(["default", "continue", "stop", "jump", "recovery_group"])
+    self.ico_fail_target = QComboBox()
+    for combo in (self.ico_fail_mode, self.ico_fail_target):
+        combo.setStyleSheet(f"QComboBox {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 5px 8px; font-size: 10px; }} QComboBox::drop-down {{ border: none; }}")
     self.ico_rule = QLabel("Edit for pixel/variable values")
     self.ico_rule.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
     ico_lo.addWidget(form_label("Label"))
@@ -396,6 +427,14 @@ def build_main_layout(window):
     ico_lo.addWidget(self.ico_true)
     ico_lo.addWidget(form_label("False target"))
     ico_lo.addWidget(self.ico_false)
+    ico_lo.addWidget(form_label("Retry attempts / delay"))
+    ico_retry_row = QHBoxLayout(); ico_retry_row.setSpacing(5)
+    ico_retry_row.addWidget(self.ico_retry_count); ico_retry_row.addWidget(self.ico_retry_delay)
+    ico_lo.addLayout(ico_retry_row)
+    ico_lo.addWidget(form_label("On false/fail"))
+    ico_lo.addWidget(self.ico_fail_mode)
+    ico_lo.addWidget(form_label("Fail target"))
+    ico_lo.addWidget(self.ico_fail_target)
     ico_lo.addWidget(self.ico_rule)
 
     self._insp_lo.addWidget(self.insp_key)
@@ -492,6 +531,19 @@ def build_main_layout(window):
     )
     self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
     left_lo.addWidget(self.tl_search, stretch=1)
+
+    self.tl_filter = QComboBox()
+    self.tl_filter.addItems(["All", "Images", "Loops", "Conditions", "Groups", "Warnings", "Current group"])
+    self.tl_filter.setFixedSize(116, 34)
+    self.tl_filter.setToolTip("Quick timeline filter")
+    self.tl_filter.setStyleSheet(
+        f"QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 4px 8px; font-size: 11px; }}"
+        f"QComboBox:hover {{ border-color: {C['accent']}; }}"
+        f"QComboBox::drop-down {{ border: none; width: 18px; }}"
+    )
+    self.tl_filter.currentTextChanged.connect(lambda t: self.timeline.set_quick_filter(t))
+    left_lo.addWidget(self.tl_filter)
     dock_lo.addWidget(left_cluster, stretch=1)
 
     # Hidden compatibility label for code/tests that update macro_summary. It is

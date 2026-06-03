@@ -32,7 +32,11 @@ class GroupDialog(QDialog):
         self.collapsed = QCheckBox("Start collapsed")
         self.collapsed.setChecked(bool(getattr(existing, "group_collapsed", False) if existing else False))
         self.collapsed.setStyleSheet(f"color: {C['text']}; background: transparent;")
-        body_lo.addWidget(lbl); body_lo.addWidget(self.name_edit); body_lo.addWidget(self.collapsed)
+        self.recovery = QCheckBox("Recovery group")
+        self.recovery.setToolTip("Recovery groups can be targeted by smart retry/on-fail rules")
+        self.recovery.setChecked(getattr(existing, "group_role", "normal") == "recovery" if existing else False)
+        self.recovery.setStyleSheet(f"color: {C['text']}; background: transparent;")
+        body_lo.addWidget(lbl); body_lo.addWidget(self.name_edit); body_lo.addWidget(self.collapsed); body_lo.addWidget(self.recovery)
         lo.addWidget(body)
         lo.addLayout(make_buttons(self, "Save Group", accent, self.accept, "folder"))
 
@@ -45,4 +49,5 @@ class GroupDialog(QDialog):
         a.label = name
         a.group_name = name
         a.group_collapsed = self.collapsed.isChecked()
+        a.group_role = "recovery" if self.recovery.isChecked() else "normal"
         return a

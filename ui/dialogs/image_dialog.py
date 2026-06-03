@@ -355,6 +355,39 @@ class ImageDialog(QDialog):
         wait_row.addStretch()
         lo.addLayout(wait_row)
 
+        # -- Smart retry / failure handling --
+        retry_row = QHBoxLayout()
+        retry_row.setSpacing(8)
+        retry_lbl = QLabel("Smart retry:")
+        retry_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        retry_row.addWidget(retry_lbl)
+        self.retry_attempts = QSpinBox()
+        self.retry_attempts.setRange(1, 99)
+        self.retry_attempts.setValue(max(1, int(getattr(existing, 'retry_attempts', 1))) if existing else 1)
+        self.retry_attempts.setFixedWidth(58)
+        retry_row.addWidget(self.retry_attempts)
+        retry_row.addWidget(QLabel("attempts"))
+        self.retry_delay = QLineEdit(str(getattr(existing, 'retry_delay', 0.25)) if existing else "0.25")
+        self.retry_delay.setFixedWidth(58)
+        self.retry_delay.setStyleSheet(f"QLineEdit {{ background-color: {C['bg_secondary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 4px; padding: 3px 6px; font-size: 11px; }}")
+        retry_row.addWidget(QLabel("delay"))
+        retry_row.addWidget(self.retry_delay)
+        retry_row.addWidget(QLabel("s"))
+        self.fail_mode = QComboBox()
+        self.fail_mode.addItems(["default", "continue", "stop", "jump", "recovery_group"])
+        self.fail_mode.setCurrentText(getattr(existing, 'on_fail_action', 'default') if existing else 'default')
+        retry_row.addWidget(QLabel("On fail"))
+        retry_row.addWidget(self.fail_mode)
+        self.fail_target = QSpinBox()
+        self.fail_target.setRange(-1, 999)
+        self.fail_target.setSpecialValueText("None")
+        self.fail_target.setValue(getattr(existing, 'on_fail_target', -1) if existing else -1)
+        self.fail_target.setFixedWidth(70)
+        retry_row.addWidget(QLabel("target"))
+        retry_row.addWidget(self.fail_target)
+        retry_row.addStretch()
+        lo.addLayout(retry_row)
+
         # -- Click offset --
         off_row = QHBoxLayout()
         off_row.setSpacing(8)
@@ -696,6 +729,7 @@ class ImageDialog(QDialog):
             off_x = int(self.off_x.text() or "0")
             off_y = int(self.off_y.text() or "0")
             repeat = int(self.repeat.text() or "1")
+            retry_delay = max(0.0, float(self.retry_delay.text() or "0"))
         except ValueError:
             logger.debug("image_dialog.get_action: ValueError -> None")
             return None
@@ -710,7 +744,7 @@ class ImageDialog(QDialog):
         else:
             region = ""
         logger.debug(f"image_dialog.get_action: building Action sim={sim} wait={wait} region={region}")
-        return Action(
+        action = Action(
             key="[IMAGE]",
             duration=0.05,
             action_type="image",
@@ -732,3 +766,8 @@ class ImageDialog(QDialog):
             repeat_count=repeat,
             label=self.lbl.text().strip()
         )
+        action.retry_attempts = int(self.retry_attempts.value())
+        action.retry_delay = retry_delay
+        action.on_fail_action = self.fail_mode.currentText()
+        action.on_fail_target = int(self.fail_target.value())
+        return action

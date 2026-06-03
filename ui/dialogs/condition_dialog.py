@@ -121,7 +121,19 @@ class ConditionDialog(QDialog):
         jump_row.addWidget(QLabel("True →")); jump_row.addWidget(self.true_jump)
         jump_row.addWidget(QLabel("False →")); jump_row.addWidget(self.false_jump)
         body_lo.addLayout(jump_row)
-        hint = QLabel("Targets can point to normal rows or group headers such as G1/G2.")
+
+        self.retry_attempts = QSpinBox(); self.retry_attempts.setRange(1, 99)
+        self.retry_attempts.setValue(max(1, int(getattr(existing, "retry_attempts", 1) if existing else 1)))
+        self.retry_delay = field(str(getattr(existing, "retry_delay", 0.25) if existing else 0.25))
+        retry_row = QHBoxLayout(); retry_row.addWidget(self.retry_attempts); retry_row.addWidget(self.retry_delay)
+        body_lo.addWidget(label("Smart retry attempts / delay")); body_lo.addLayout(retry_row)
+
+        self.fail_mode = QComboBox(); self.fail_mode.addItems(["default", "continue", "stop", "jump", "recovery_group"])
+        self.fail_mode.setCurrentText(getattr(existing, "on_fail_action", "default") if existing else "default")
+        self.fail_target = QComboBox(); add_targets(self.fail_target); select_target(self.fail_target, int(getattr(existing, "on_fail_target", -1) if existing else -1))
+        body_lo.addWidget(label("On false/fail")); body_lo.addWidget(self.fail_mode); body_lo.addWidget(label("Fail target")); body_lo.addWidget(self.fail_target)
+
+        hint = QLabel("Targets can point to normal rows or group headers such as G1/G2. Recovery mode jumps to the first recovery group if no target is chosen.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; background: transparent;")
         body_lo.addWidget(hint)
@@ -147,4 +159,8 @@ class ConditionDialog(QDialog):
         a.condition_var_value = self.var_value.text().strip()
         a.condition_jump_true = int(self.true_jump.currentData() if self.true_jump.currentData() is not None else -1)
         a.condition_jump_false = int(self.false_jump.currentData() if self.false_jump.currentData() is not None else -1)
+        a.retry_attempts = int(self.retry_attempts.value())
+        a.retry_delay = float(self.retry_delay.text() or 0)
+        a.on_fail_action = self.fail_mode.currentText()
+        a.on_fail_target = int(self.fail_target.currentData() if self.fail_target.currentData() is not None else -1)
         return a

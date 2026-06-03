@@ -75,6 +75,7 @@ class ExecutionEngine:
         self._img_template_cache = {}   # action_b64_key -> [PIL.Image, ...]
         self._loop_counters = {}        # runtime loop-block counters keyed by row index
         self.loops = 1
+        self.variables = {}
 
     def start(self):
         t = threading.Thread(target=self.run, args=(self.loops,), daemon=True)
@@ -318,7 +319,11 @@ class ExecutionEngine:
             except Exception:
                 return False
         elif ctype == "variable":
-            val = getattr(self, f"_var_{action.condition_var_name}", "")
+            val = ""
+            try:
+                val = getattr(self, "variables", {}).get(action.condition_var_name, "")
+            except Exception:
+                val = getattr(self, f"_var_{action.condition_var_name}", "")
             return str(val) == str(action.condition_var_value)
         return True
 
@@ -353,6 +358,40 @@ class ExecutionEngine:
         except Exception:
             pass
         return f"row {row + 1}"
+
+    def _first_child_after_group(self, target: int) -> int:
+        if 0 <= target < len(self.actions) and getattr(self.actions[target], "action_type", "") == "group":
+            gid = getattr(self.actions[target], "group_id", "")
+            for row in range(target + 1, len(self.actions)):
+                candidate = self.actions[row]
+                if getattr(candidate, "action_type", "") == "group":
+                    break
+                if getattr(candidate, "group_id", "") == gid and bool(getattr(candidate, "enabled", True)):
+                    return row
+        return target
+
+    def _recovery_group_target(self) -> int:
+        for row, action in enumerate(self.actions):
+            if getattr(action, "action_type", "") == "group" and getattr(action, "group_role", "normal") == "recovery":
+                return row
+        return -1
+
+    def _smart_fail_target(self, action: Action) -> int:
+        mode = (getattr(action, "on_fail_action", "default") or "default").lower()
+        if mode in {"", "default", "continue"}:
+            return -1
+        if mode == "stop":
+            self.running = False
+            self.status("Smart retry failed — stopping macro")
+            return -1
+        target = int(getattr(action, "on_fail_target", -1) or -1)
+        if mode == "recovery_group" and target < 0:
+            target = self._recovery_group_target()
+        if 0 <= target < len(self.actions):
+            target = self._first_child_after_group(target)
+            self.status(f"Smart retry failed — jumping to {self._target_label(target)}")
+            return target
+        return -1
 
     def _after_deploy(self, action: Action):
         """Notify observers after an action has actually reached its execution path."""
@@ -454,10 +493,19 @@ class ExecutionEngine:
                     repeat = max(1, getattr(actual_action, 'repeat_count', 1))
 
                     if actual_action.is_image():
+                        attempts = max(1, int(getattr(actual_action, "retry_attempts", 1) or 1))
+                        delay = max(0.0, float(getattr(actual_action, "retry_delay", 0.0) or 0.0))
                         for _r in range(repeat):
                             if not self.running:
                                 break
-                            self._exec_image_search(actual_action)
+                            for attempt in range(attempts):
+                                if attempts > 1:
+                                    self.status(f"Image retry {attempt + 1}/{attempts}")
+                                self._exec_image_search(actual_action)
+                                if self._last_image_found or not self.running:
+                                    break
+                                if attempt < attempts - 1 and delay > 0:
+                                    time.sleep(delay)
                         loop_actions_executed += 1
                         self._after_deploy(actual_action)
                         if self.total_actions > 0:
@@ -466,12 +514,16 @@ class ExecutionEngine:
                         if self._last_image_found:
                             jf = getattr(actual_action, 'jump_to_on_found', -1)
                             if 0 <= jf < len(self.actions):
-                                i = jf
+                                i = self._first_child_after_group(jf)
                                 continue
                         else:
+                            fail_target = self._smart_fail_target(actual_action)
+                            if 0 <= fail_target < len(self.actions):
+                                i = fail_target
+                                continue
                             jnf = getattr(actual_action, 'jump_to_on_not_found', -1)
                             if 0 <= jnf < len(self.actions):
-                                i = jnf
+                                i = self._first_child_after_group(jnf)
                                 continue
                         # loop_until_found: finish the current timeline pass, then
                         # restart the sequence without incrementing loop count.
@@ -566,14 +618,26 @@ class ExecutionEngine:
                         continue
 
                     if actual_action.is_condition():
-                        result = self._eval_condition(actual_action)
-                        self.status(f"Condition {actual_action.condition_type} → {result}")
+                        attempts = max(1, int(getattr(actual_action, "retry_attempts", 1) or 1))
+                        delay = max(0.0, float(getattr(actual_action, "retry_delay", 0.0) or 0.0))
+                        result = False
+                        for attempt in range(attempts):
+                            result = self._eval_condition(actual_action)
+                            self.status(f"Condition {actual_action.condition_type} → {result}")
+                            if result or attempt >= attempts - 1:
+                                break
+                            if delay > 0:
+                                time.sleep(delay)
                         if result:
                             j = actual_action.condition_jump_true
                         else:
+                            fail_target = self._smart_fail_target(actual_action)
+                            if 0 <= fail_target < len(self.actions):
+                                i = fail_target
+                                continue
                             j = actual_action.condition_jump_false
                         if 0 <= j < len(self.actions):
-                            i = j
+                            i = self._first_child_after_group(j)
                             continue
                         loop_actions_executed += 1
                         self._after_deploy(actual_action)

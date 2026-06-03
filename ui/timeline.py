@@ -170,6 +170,8 @@ class TimelineDelegate(QStyledItemDelegate):
             row = index.row()
             if hasattr(view, "is_row_collapsed_hidden") and view.is_row_collapsed_hidden(row):
                 return
+            if hasattr(view, "is_row_filtered_hidden") and view.is_row_filtered_hidden(row):
+                return
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             action = index.data(ActionListModel.ActionRole)
             selected = bool(option.state & QStyle.StateFlag.State_Selected)
@@ -398,7 +400,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 count = int(group_badge.get("count", 0) or 0)
                 dur = float(group_badge.get("duration", 0.0) or 0.0)
                 hidden = " hidden" if bool(getattr(action, "group_collapsed", False)) else ""
-                detail = f"{count} action{'s' if count != 1 else ''}{hidden} · ~{dur:.1f}s"
+                role = "Recovery · " if getattr(action, "group_role", "normal") == "recovery" else ""
+                detail = f"{role}{count} action{'s' if count != 1 else ''}{hidden} · ~{dur:.1f}s"
                 if hasattr(view, "group_progress"):
                     gp = view.group_progress(row)
                     if gp.get("active") or gp.get("progress", 0) > 0:
@@ -532,6 +535,19 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Image threshold metadata chip intentionally removed. Image rows now
             # show the template name in the detail text, avoiding cramped metadata.
+
+            if group_drop_target and kind == "group":
+                feedback = self.drop_feedback_text(row) if hasattr(self, "drop_feedback_text") else "Add to group"
+                fb_w = 110 if compact else min(180, max(112, painter.fontMetrics().horizontalAdvance(feedback) + 22))
+                fb_rect = QRectF(max(text_x, outer.right() - fb_w - 72), outer.center().y() - 13, fb_w, 26)
+                glow_col = QColor(type_color); glow_col.setAlpha(38)
+                painter.setBrush(glow_col)
+                painter.setPen(QPen(QColor(type_color), 1.4))
+                painter.drawRoundedRect(fb_rect, 7, 7)
+                painter.setPen(QColor(type_color))
+                painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
+                painter.drawText(fb_rect, Qt.AlignmentFlag.AlignCenter, feedback)
+
             # Kebab menu dots.
             dot_x = outer.right() - (16 if compact else 22)
             painter.setBrush(QColor(COLORS["text_dim"]))
@@ -568,6 +584,8 @@ class TimelineDelegate(QStyledItemDelegate):
         view = option.widget
         if hasattr(view, "is_row_collapsed_hidden") and view.is_row_collapsed_hidden(index.row()):
             return QSize(100, 0)
+        if hasattr(view, "is_row_filtered_hidden") and view.is_row_filtered_hidden(index.row()):
+            return QSize(100, 0)
         zoom = float(getattr(view, "zoom", 1.0) or 1.0)
         action = index.data(ActionListModel.ActionRole)
         base_height = 52 if getattr(action, "action_type", "") == "group" else (56 if getattr(option.widget, "width", lambda: 999)() < 700 else 64)
@@ -595,6 +613,7 @@ class TimelineView(QListView):
         self.paused = False
         self.image_states = {}
         self._search = ""
+        self._quick_filter = "all"
         self._drag_start_row = -1
         self._drag_allowed = False
         self.drag_source_row = -1
@@ -683,7 +702,7 @@ class TimelineView(QListView):
                 headers.append({
                     "row": row, "action": action, "gid": gid, "color": color,
                     "name": name, "badge": f"G{len(headers) + 1}",
-                    "count": count, "duration": duration,
+                    "count": count, "duration": duration, "role": getattr(action, "group_role", "normal"),
                 })
         return headers
 
@@ -1220,18 +1239,94 @@ class TimelineView(QListView):
         if not self.viewport().rect().contains(rect):
             self.ensure_visible(index)
 
+    def set_quick_filter(self, value: str):
+        self._quick_filter = (value or "all").strip().lower()
+        self.doItemsLayout()
+        self.viewport().update()
+
+    def _row_matches_search(self, row: int) -> bool:
+        query = (self._search or "").strip().lower()
+        if not query:
+            return True
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return False
+        action = actions[row]
+        meta = self.group_badge(row)
+        kind = getattr(action, "action_type", "key") or "key"
+        haystack = " ".join(str(x or "") for x in (
+            getattr(action, "label", ""), getattr(action, "key", ""), kind,
+            getattr(action, "group_name", ""), getattr(action, "condition_type", ""),
+            meta.get("badge", "") if meta else "", meta.get("name", "") if meta else "",
+        )).lower()
+        tokens = [t for t in query.replace(",", " ").split() if t]
+        for token in tokens:
+            if ":" in token:
+                field, value = token.split(":", 1)
+                if field in {"type", "kind"} and kind != value:
+                    return False
+                if field == "group":
+                    g = ((meta.get("badge", "") + " " + meta.get("name", "")) if meta else "").lower()
+                    if value not in g:
+                        return False
+                if field == "status":
+                    if value == "disabled" and bool(getattr(action, "enabled", True)):
+                        return False
+                    if value in {"warn", "warning", "error"} and bool(getattr(action, "enabled", True)) and not (kind == "image" and not getattr(action, "image_data", "")):
+                        return False
+                if field == "key" and value not in str(getattr(action, "key", "")).lower():
+                    return False
+                if field == "image" and not (kind == "image" and value in "template image".lower()):
+                    return False
+            elif token not in haystack:
+                return False
+        return True
+
+    def _row_matches_quick_filter(self, row: int) -> bool:
+        filt = (self._quick_filter or "all").lower()
+        if filt in {"", "all"}:
+            return True
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return False
+        action = actions[row]
+        kind = getattr(action, "action_type", "key") or "key"
+        if filt == "images":
+            return kind == "image"
+        if filt == "loops":
+            return kind == "loop"
+        if filt == "conditions":
+            return kind == "condition"
+        if filt == "groups":
+            return kind == "group"
+        if filt == "warnings":
+            return (not bool(getattr(action, "enabled", True))) or (kind == "image" and not getattr(action, "image_data", ""))
+        if filt == "current group":
+            if not self.active_group_id:
+                return True
+            return getattr(action, "group_id", "") == self.active_group_id
+        return True
+
+    def is_row_filtered_hidden(self, row: int) -> bool:
+        return not (self._row_matches_search(row) and self._row_matches_quick_filter(row))
+
+    def drop_feedback_text(self, row: int) -> str:
+        meta = self.group_badge(row)
+        if meta:
+            return f"Add to {meta.get('badge', 'G')}"
+        return "Add to group"
+
     def set_search(self, text: str):
         self._search = (text or "").strip().lower()
-        if not self._search:
-            self.viewport().update()
-            return
+        first = -1
         for row in range(self.model().rowCount()):
-            action = self.model().get(row)
-            haystack = " ".join(str(getattr(action, name, "") or "") for name in ("label", "key", "action_type"))
-            if self._search in haystack.lower():
-                self.set_active(row)
-                self.ensure_visible(row)
+            if not self.is_row_collapsed_hidden(row) and not self.is_row_filtered_hidden(row):
+                first = row
                 break
+        if first >= 0 and self._search:
+            self.set_active(first)
+            self.ensure_visible(first)
+        self.doItemsLayout()
         self.viewport().update()
 
     def refresh(self):

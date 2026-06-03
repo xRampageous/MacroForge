@@ -25,7 +25,7 @@ def make_playback_panel(window):
     panel = QFrame()
     panel.setObjectName("mf2_playback_panel")
     panel.setStyleSheet(f"QFrame#mf2_playback_panel {{ background-color: {C['bg']}; border: none; }}")
-    panel.setFixedHeight(168)
+    panel.setFixedHeight(188)
     panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     lo = QVBoxLayout(panel)
@@ -73,7 +73,7 @@ def make_playback_panel(window):
 
     # ── 1. Playback buttons ────────────────────────────
     play_section = QFrame()
-    play_section.setFixedWidth(154)
+    play_section.setFixedWidth(166)
     play_section.setStyleSheet("background: transparent; border: none;")
     play_lo = QVBoxLayout(play_section)
     play_lo.setContentsMargins(0, 0, 0, 0)
@@ -131,13 +131,14 @@ def make_playback_panel(window):
     play_row.addWidget(self.stop_btn)
 
     play_lo.addLayout(play_row)
+
     play_lo.addStretch()
     controls_row.addWidget(play_section)
     controls_row.addWidget(vline(), alignment=Qt.AlignmentFlag.AlignVCenter)
 
     # ── 2. Playback options ────────────────────────────
     options_section = QFrame()
-    options_section.setFixedWidth(360)
+    options_section.setFixedWidth(280)
     options_section.setStyleSheet("background: transparent; border: none;")
     opt_lo = QVBoxLayout(options_section)
     opt_lo.setContentsMargins(0, 0, 0, 0)
@@ -225,6 +226,18 @@ def make_playback_panel(window):
     self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))
     controls_row.addWidget(self.collapse_playback_btn, alignment=Qt.AlignmentFlag.AlignTop)
     dlo.addLayout(controls_row)
+
+    self.playback_feedback_label = QLabel("Timeline feedback will appear here")
+    self.playback_feedback_label.setObjectName("playback_feedback")
+    self.playback_feedback_label.setFixedHeight(28)
+    self.playback_feedback_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    self.playback_feedback_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+    self.playback_feedback_label.setToolTip("Live playback timeline feedback")
+    self.playback_feedback_label.setStyleSheet(
+        f"QLabel#playback_feedback {{ background-color: {C['bg_tertiary']}; color: {C['text_dim']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 10px; font-size: 12px; }}"
+    )
+    dlo.addWidget(self.playback_feedback_label)
 
     # ── 3. Progress expands; stat chips remain static ───
     progress_row = QHBoxLayout()

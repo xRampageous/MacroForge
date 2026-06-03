@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
     _diag_msg = pyqtSignal(str)
     _image_match_state = pyqtSignal(int, str)
     _trace_row = pyqtSignal(int)
+    _playback_feedback_msg = pyqtSignal(str)
 
     def __init__(self, profile_manager=None, settings_manager=None):
         super().__init__()
@@ -117,6 +118,8 @@ class MainWindow(QMainWindow):
         self._last_preflight = {"errors": [], "warnings": []}
         self._runtime_error_dialog_open = False
         self._last_runtime_error = ""
+        self.macro_variables = {}
+
 
         # Recorder state
         self._recorder = {
@@ -157,6 +160,7 @@ class MainWindow(QMainWindow):
         self._diag_msg.connect(self._append_diagnostic)
         self._image_match_state.connect(self._do_image_match_state)
         self._trace_row.connect(self._do_trace_row)
+        self._playback_feedback_msg.connect(self._set_playback_feedback)
 
         self._check_update_silent()
         self.load_last_session()
@@ -275,24 +279,60 @@ class MainWindow(QMainWindow):
     #  KEYBOARD SHORTCUTS
     # ═══════════════════════════════════════════════════════
 
+    def _hotkey(self, name: str, default: str) -> str:
+        try:
+            hotkeys = self.settings_manager.settings.setdefault("hotkeys", {})
+            value = (hotkeys.get(name) or default or "").strip()
+            return value or default
+        except Exception:
+            return default
+
     def _setup_shortcuts(self):
-        QShortcut(QKeySequence("Ctrl+Z"), self, self.undo)
-        QShortcut(QKeySequence("Ctrl+Y"), self, self.redo)
-        QShortcut(QKeySequence("Ctrl+C"), self, self.copy_action)
-        QShortcut(QKeySequence("Ctrl+V"), self, self.paste_action)
-        QShortcut(QKeySequence("Ctrl+D"), self, self._duplicate_inspector)
-        QShortcut(QKeySequence("Delete"), self, self._delete_selected)
-        QShortcut(QKeySequence("Ctrl+Delete"), self, self._delete_selected)
-        QShortcut(QKeySequence("Ctrl+A"), self, self._select_all_actions)
-        QShortcut(QKeySequence("Ctrl+G"), self, lambda: self.create_group_from_rows())
-        QShortcut(QKeySequence("Ctrl+Shift+G"), self, self._ungroup_selected)
-        QShortcut(QKeySequence("Space"), self, self._toggle_play_pause_shortcut)
-        QShortcut(QKeySequence("Escape"), self, self._stop_or_deselect)
-        QShortcut(QKeySequence("Ctrl+S"), self, lambda: (self._do_save_session(), self.status("Session saved")))
-        QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.timeline.setFocus())
-        QShortcut(QKeySequence("Ctrl+Enter"), self, self.test_from_selected_row)
-        QShortcut(QKeySequence("Ctrl+E"), self, self.open_macro_editor)
-        QShortcut(QKeySequence("Ctrl+Shift+P"), self, self.open_preflight_report)
+        # Keep shortcut objects alive and make them reloadable from Settings.
+        for sc in getattr(self, "_shortcuts", []):
+            try:
+                sc.setEnabled(False)
+                sc.setParent(None)
+            except Exception:
+                pass
+        self._shortcuts = []
+
+        def bind(name, default, slot):
+            seq = self._hotkey(name, default)
+            if not seq:
+                return
+            try:
+                shortcut = QShortcut(QKeySequence(seq), self)
+                shortcut.activated.connect(slot)
+                self._shortcuts.append(shortcut)
+            except Exception as exc:
+                logger.debug(f"Shortcut bind failed for {name}={seq}: {exc}")
+
+        bind("undo", "Ctrl+Z", self.undo)
+        bind("redo", "Ctrl+Y", self.redo)
+        bind("copy", "Ctrl+C", self.copy_action)
+        bind("paste", "Ctrl+V", self.paste_action)
+        bind("duplicate", "Ctrl+D", self._duplicate_inspector)
+        bind("delete", "Delete", self._delete_selected)
+        bind("delete_alt", "Ctrl+Delete", self._delete_selected)
+        bind("select_all", "Ctrl+A", self._select_all_actions)
+        bind("group", "Ctrl+G", lambda: self.create_group_from_rows())
+        bind("ungroup", "Ctrl+Shift+G", self._ungroup_selected)
+        bind("play_pause", "Space", self._toggle_play_pause_shortcut)
+        bind("stop_deselect", "Escape", self._stop_or_deselect)
+        bind("save", "Ctrl+S", lambda: (self._do_save_session(), self.status("Session saved")))
+        bind("search", "Ctrl+F", lambda: self.tl_search.setFocus())
+        bind("run_from_selected", "Ctrl+Enter", self.test_from_selected_row)
+        bind("macro_editor", "Ctrl+E", self.open_macro_editor)
+        bind("record", "F7", self._toggle_record)
+        bind("preflight", "Ctrl+Shift+P", self.open_preflight_report)
+        bind("toggle_runtime_log", "Ctrl+Shift+L", self.toggle_runtime_log_panel)
+        bind("variables", "Ctrl+Alt+V", self.open_variables_dialog)
+        bind("profile_library", "Ctrl+Alt+P", self.open_profile_library)
+
+    def reload_shortcuts(self):
+        self._setup_shortcuts()
+        self.status("Hotkeys updated")
 
     def _deselect(self):
         self.select(-1)
@@ -511,6 +551,7 @@ class MainWindow(QMainWindow):
                     "badge": f"G{len(headers) + 1}",
                     "count": self._group_stats_for_id(getattr(action, "group_id", ""))[0],
                     "duration": self._group_stats_for_id(getattr(action, "group_id", ""))[1],
+                    "role": getattr(action, "group_role", "normal"),
                 })
         return headers
 
@@ -667,6 +708,108 @@ class MainWindow(QMainWindow):
         self.save_session()
         self.status(("Collapsed" if header.group_collapsed else "Expanded") + f" {meta['badge']} {meta['name']}")
 
+    def rename_group(self, row=None):
+        row = self.active_index if row is None else row
+        meta = self._group_header_for_row(row)
+        if not meta:
+            self.status("Select a group to rename")
+            return
+        old = meta["name"]
+        name, ok = QInputDialog.getText(self, "Rename Group", "Group name:", text=old)
+        if ok and name.strip():
+            self.history.push(self.action_model.actions(), self._timeline_history_state())
+            meta["action"].group_name = name.strip()
+            meta["action"].label = name.strip()
+            self.refresh(); self.save_session(); self.status(f"Renamed {meta['badge']} to {name.strip()}")
+
+    def duplicate_group(self, row=None):
+        row = self.active_index if row is None else row
+        meta = self._group_header_for_row(row)
+        if not meta:
+            self.status("Select a group to duplicate")
+            return
+        block_rows = self._contiguous_group_block(meta["row"])
+        if not block_rows:
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        actions = self.action_model.actions()
+        copies = [deepcopy(actions[r]) for r in block_rows]
+        old_gid = getattr(copies[0], "group_id", "")
+        new_gid = self._new_group_id()
+        new_color = self._group_color_for_number(len(self._group_headers()) + 1)
+        for i, action in enumerate(copies):
+            if getattr(action, "group_id", "") == old_gid:
+                action.group_id = new_gid
+                action.group_color = new_color
+            if i == 0 and getattr(action, "action_type", "") == "group":
+                action.group_name = f"{getattr(action, 'group_name', 'Group')} copy"
+                action.label = action.group_name
+                action.group_collapsed = False
+        insert_at = block_rows[-1] + 1
+        for offset, action in enumerate(copies):
+            self.action_model.insert_action(insert_at + offset, action)
+        self.active_index = insert_at
+        self.timeline.selected_indices = set(range(insert_at, insert_at + len(copies)))
+        self.refresh(); self.timeline.set_active(insert_at); self.save_session()
+        self.status(f"Duplicated {meta['badge']} {meta['name']}")
+
+    def ungroup_group(self, row=None):
+        row = self.active_index if row is None else row
+        meta = self._group_header_for_row(row)
+        if not meta:
+            self.status("Select a group to ungroup")
+            return
+        gid = meta["gid"]
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        for action in self.action_model.actions():
+            if getattr(action, "action_type", "") != "group" and getattr(action, "group_id", "") == gid:
+                action.group_id = ""
+                action.group_color = ""
+                action.block_depth = 0
+        self.action_model.remove_action(meta["row"])
+        self.active_index = -1
+        self.refresh(); self.save_session(); self.status(f"Ungrouped {meta['badge']} {meta['name']}")
+
+    def delete_group_with_children(self, row=None):
+        row = self.active_index if row is None else row
+        meta = self._group_header_for_row(row)
+        if not meta:
+            self.status("Select a group to delete")
+            return
+        reply = QMessageBox.question(self, "Delete group", f"Delete {meta['badge']} {meta['name']} and all actions inside it?")
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        gid = meta["gid"]
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        rows = [i for i, a in enumerate(self.action_model.actions()) if i == meta["row"] or getattr(a, "group_id", "") == gid]
+        for idx in sorted(rows, reverse=True):
+            self.action_model.remove_action(idx)
+        self.active_index = -1
+        self.refresh(); self.update_statistics(immediate=True); self.save_session()
+        self.status(f"Deleted {meta['badge']} and {len(rows)-1} action(s)")
+
+    def set_group_color(self, row, color):
+        meta = self._group_header_for_row(row)
+        if not meta:
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        gid = meta["gid"]
+        for action in self.action_model.actions():
+            if getattr(action, "group_id", "") == gid:
+                action.group_color = color
+        meta["action"].group_color = color
+        self.refresh(); self.save_session(); self.status(f"Updated {meta['badge']} color")
+
+    def set_group_recovery_role(self, row=None, enabled=True):
+        row = self.active_index if row is None else row
+        meta = self._group_header_for_row(row)
+        if not meta:
+            self.status("Select a group to mark as recovery")
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        meta["action"].group_role = "recovery" if enabled else "normal"
+        self.refresh(); self.save_session(); self.status(("Marked" if enabled else "Cleared") + f" {meta['badge']} as recovery")
+
     def _assign_group_from_position(self, row: int):
         if row < 0 or row >= self.action_model.rowCount():
             return
@@ -734,8 +877,24 @@ class MainWindow(QMainWindow):
         if group_meta:
             group_menu.addSeparator()
             header = group_meta["action"]
-            group_menu.addAction(("Expand" if getattr(header, "group_collapsed", False) else "Collapse") + f" {group_meta['badge']}", lambda row=index: self.toggle_group_collapsed(row))
-            group_menu.addAction("Rename / edit group", lambda row=group_meta['row']: self._open_group_editor(row))
+            group_menu.addAction(("Expand" if getattr(header, "group_collapsed", False) else "Collapse") + f" {group_meta['badge']}", lambda row=group_meta['row']: self.toggle_group_collapsed(row))
+            group_menu.addAction("Rename group…", lambda row=group_meta['row']: self.rename_group(row))
+            group_menu.addAction("Edit group…", lambda row=group_meta['row']: self._open_group_editor(row))
+            group_menu.addAction("Duplicate whole group", lambda row=group_meta['row']: self.duplicate_group(row))
+            group_menu.addAction("Ungroup contents", lambda row=group_meta['row']: self.ungroup_group(row))
+            group_menu.addAction("Delete group only", lambda row=group_meta['row']: self.delete_action(row))
+            group_menu.addAction("Delete group + actions", lambda row=group_meta['row']: self.delete_group_with_children(row))
+            group_menu.addSeparator()
+            role_txt = "Clear recovery group" if getattr(header, "group_role", "normal") == "recovery" else "Mark as recovery group"
+            group_menu.addAction(role_txt, lambda row=group_meta['row'], enabled=getattr(header, "group_role", "normal") != "recovery": self.set_group_recovery_role(row, enabled))
+            color_menu = group_menu.addMenu("Change group color")
+            for n, color in enumerate(self._group_palette(), 1):
+                color_menu.addAction(f"Color {n}", lambda c=color, row=group_meta['row']: self.set_group_color(row, c))
+            group_menu.addSeparator()
+            move_up_g = group_menu.addAction("Move group up", lambda row=group_meta['row']: self.move_action(row, -1))
+            move_down_g = group_menu.addAction("Move group down", lambda row=group_meta['row']: self.move_action(row, 1))
+            move_up_g.setEnabled(not self.engine.running and group_meta['row'] > 0)
+            move_down_g.setEnabled(not self.engine.running and group_meta['row'] < self.action_model.rowCount() - 1)
         m.addSeparator()
 
         # Kept for debug workflows, but image preview only enables for image rows.
@@ -768,6 +927,7 @@ class MainWindow(QMainWindow):
                 self.speed_combo.setCurrentText(f"{float(settings.get('speed', 1.0)):.1f}x")
                 self.inf_check.setChecked(settings.get("infinite_loop", False))
                 self.human_check.setChecked(settings.get("human_curve", True))
+                self.macro_variables = dict(settings.get("macro_variables", {}) or {})
                 # Keep the reference layout as the persisted baseline. Users
                 # can still compact rows temporarily with Ctrl+wheel.
                 self.timeline.zoom = max(1.0, float(settings.get("zoom", 1.0) or 1.0))
@@ -809,6 +969,7 @@ class MainWindow(QMainWindow):
             "speed": float(self.speed_combo.currentText().replace("x", "")),
             "infinite_loop": self.inf_check.isChecked(),
             "human_curve": self.human_check.isChecked(),
+            "macro_variables": dict(getattr(self, "macro_variables", {}) or {}),
             "zoom": self.timeline.zoom,
         }
         self.session_manager.save_profile(self.action_model.actions(), settings)
@@ -933,12 +1094,20 @@ class MainWindow(QMainWindow):
         elif action.action_type == "image":
             self.ii_sim.setText(str(getattr(action, 'similarity', 0.8)))
             self.ii_wait.setText(str(getattr(action, 'wait_timeout', 10.0)))
+            if hasattr(self, "ii_retry_count"):
+                self.ii_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
+                self.ii_retry_delay.setText(str(getattr(action, "retry_delay", 0.25)))
+                self.ii_fail_mode.setCurrentText(getattr(action, "on_fail_action", "default") or "default")
+                self._populate_target_combo(self.ii_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
         elif action.action_type == "group":
             self.ig_name.setText(getattr(action, "group_name", "") or getattr(action, "label", ""))
             self.ig_collapsed.setChecked(bool(getattr(action, "group_collapsed", False)))
+            if hasattr(self, "ig_recovery"):
+                self.ig_recovery.setChecked(getattr(action, "group_role", "normal") == "recovery")
             gid = getattr(action, "group_id", "")
             count, duration = self._group_stats_for_id(gid)
-            self.ig_meta.setText(f"{self._group_display_label(index)} · {count} action{'s' if count != 1 else ''} · ~{duration:.1f}s")
+            role = " · Recovery" if getattr(action, "group_role", "normal") == "recovery" else ""
+            self.ig_meta.setText(f"{self._group_display_label(index)} · {count} action{'s' if count != 1 else ''} · ~{duration:.1f}s{role}")
         elif action.action_type == "loop":
             self.il_label.setText(getattr(action, "label", ""))
             self.il_count.setValue(max(2, int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)) or 2)))
@@ -948,6 +1117,11 @@ class MainWindow(QMainWindow):
             self.ico_type.setCurrentText(getattr(action, "condition_type", "none") or "none")
             self._populate_target_combo(self.ico_true, int(getattr(action, "condition_jump_true", -1) or -1), include_next=True)
             self._populate_target_combo(self.ico_false, int(getattr(action, "condition_jump_false", -1) or -1), include_next=True)
+            if hasattr(self, "ico_retry_count"):
+                self.ico_retry_count.setValue(max(1, int(getattr(action, "retry_attempts", 1) or 1)))
+                self.ico_retry_delay.setText(str(getattr(action, "retry_delay", 0.25)))
+                self.ico_fail_mode.setCurrentText(getattr(action, "on_fail_action", "default") or "default")
+                self._populate_target_combo(self.ico_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
             ctype = getattr(action, "condition_type", "none") or "none"
             if ctype == "pixel_color":
                 self.ico_rule.setText(f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}")
@@ -982,11 +1156,18 @@ class MainWindow(QMainWindow):
             elif action.action_type == "image":
                 action.similarity = float(self.ii_sim.text())
                 action.wait_timeout = float(self.ii_wait.text())
+                if hasattr(self, "ii_retry_count"):
+                    action.retry_attempts = int(self.ii_retry_count.value())
+                    action.retry_delay = float(self.ii_retry_delay.text() or 0)
+                    action.on_fail_action = self.ii_fail_mode.currentText()
+                    action.on_fail_target = int(self.ii_fail_target.currentData() if self.ii_fail_target.currentData() is not None else -1)
             elif action.action_type == "group":
                 name = self.ig_name.text().strip() or "Group"
                 action.group_name = name
                 action.label = name
                 action.group_collapsed = self.ig_collapsed.isChecked()
+                if hasattr(self, "ig_recovery"):
+                    action.group_role = "recovery" if self.ig_recovery.isChecked() else "normal"
             elif action.action_type == "loop":
                 action.label = self.il_label.text().strip() or f"Loop x{self.il_count.value()}"
                 action.loop_count = int(self.il_count.value())
@@ -997,6 +1178,11 @@ class MainWindow(QMainWindow):
                 action.condition_type = self.ico_type.currentText()
                 action.condition_jump_true = int(self.ico_true.currentData() if self.ico_true.currentData() is not None else -1)
                 action.condition_jump_false = int(self.ico_false.currentData() if self.ico_false.currentData() is not None else -1)
+                if hasattr(self, "ico_retry_count"):
+                    action.retry_attempts = int(self.ico_retry_count.value())
+                    action.retry_delay = float(self.ico_retry_delay.text() or 0)
+                    action.on_fail_action = self.ico_fail_mode.currentText()
+                    action.on_fail_target = int(self.ico_fail_target.currentData() if self.ico_fail_target.currentData() is not None else -1)
             self.refresh()
             self.update_statistics()
             self.save_session()
@@ -1664,6 +1850,131 @@ class MainWindow(QMainWindow):
         dlg.exec()
         self.refresh()
 
+    def open_variables_dialog(self):
+        """Edit macro variables used by condition rules and future variable-aware fields."""
+        C = COLORS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Macro Variables")
+        dlg.resize(460, 440)
+        dlg.setStyleSheet(
+            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
+            f"QPlainTextEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 9px; padding: 9px; font-family: Consolas, monospace; font-size: 12px; }}"
+            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 7px 12px; font-weight: 700; }}"
+            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+        )
+        lo = QVBoxLayout(dlg)
+        lo.setContentsMargins(14, 14, 14, 14)
+        title = QLabel("Macro Variables")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 900;")
+        lo.addWidget(title)
+        hint = QLabel("One variable per line. Example: loop_count=5 or wait_long=8.0. Condition rows can compare these values.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        lo.addWidget(hint)
+        edit = QPlainTextEdit()
+        edit.setPlainText("\n".join(f"{k}={v}" for k, v in sorted((getattr(self, "macro_variables", {}) or {}).items())))
+        lo.addWidget(edit, 1)
+        row = QHBoxLayout(); row.addStretch()
+        save_btn = QPushButton("Save variables")
+        cancel_btn = QPushButton("Cancel")
+        def save_vars():
+            variables = {}
+            for raw in edit.toPlainText().splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    QMessageBox.warning(dlg, "Invalid variable", f"Variable line needs name=value:\n{line}")
+                    return
+                name, value = line.split("=", 1)
+                name = name.strip()
+                if not name.replace("_", "").isalnum() or not name:
+                    QMessageBox.warning(dlg, "Invalid variable", f"Invalid variable name: {name}")
+                    return
+                variables[name] = value.strip()
+            self.macro_variables = variables
+            self.save_session()
+            self.status(f"Saved {len(variables)} macro variable(s)")
+            dlg.accept()
+        save_btn.clicked.connect(save_vars)
+        cancel_btn.clicked.connect(dlg.reject)
+        row.addWidget(save_btn); row.addWidget(cancel_btn); lo.addLayout(row)
+        dlg.exec()
+
+    def open_profile_library(self):
+        """Compact profile/macro library so the main menu does not duplicate profile actions."""
+        C = COLORS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Profile / Macro Library")
+        dlg.resize(620, 480)
+        dlg.setStyleSheet(
+            f"QDialog {{ background-color: {C['bg']}; color: {C['text']}; }}"
+            f"QListWidget {{ background-color: {C['bg_tertiary']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }}"
+            f"QPushButton {{ background-color: {C['bg_card']}; color: {C['text']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 7px 11px; font-weight: 700; }}"
+            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['accent']}; }}"
+        )
+        lo = QVBoxLayout(dlg); lo.setContentsMargins(14, 14, 14, 14); lo.setSpacing(9)
+        title = QLabel("Profile / Macro Library")
+        title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 900;")
+        lo.addWidget(title)
+        hint = QLabel("Manage profiles here. The top profile selector stays for quick switching; the menu now points here to avoid duplicate profile controls.")
+        hint.setWordWrap(True); hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        lo.addWidget(hint)
+        items = QListWidget(); lo.addWidget(items, 1)
+
+        def profile_summary(name):
+            data = self.session_manager.load_profile(name) or {}
+            actions = data.get("actions", []) or []
+            settings = data.get("settings", {}) or {}
+            ts = data.get("timestamp", "never")
+            return f"{'✓ ' if name == self.session_manager.active else '  '}{name}  ·  {len(actions)} rows  ·  last edited {ts[:19]}"
+
+        def reload_items():
+            items.clear()
+            for name in self.session_manager.list_profiles():
+                items.addItem(profile_summary(name))
+
+        def selected_name():
+            row = items.currentRow()
+            profiles = self.session_manager.list_profiles()
+            return profiles[row] if 0 <= row < len(profiles) else self.session_manager.active
+
+        def open_selected():
+            self._switch_profile(selected_name()); reload_items()
+
+        def new_profile():
+            self._new_profile_dialog(); reload_items()
+
+        def duplicate_profile():
+            src = selected_name()
+            name, ok = QInputDialog.getText(dlg, "Duplicate Profile", "New profile name:", text=f"{src} copy")
+            if not ok or not name.strip():
+                return
+            data = self.session_manager.load_profile(src) or {"actions": [], "settings": {}}
+            self.session_manager.save_profile([Action.from_dict(a) for a in data.get("actions", [])], data.get("settings", {}), name.strip())
+            reload_items(); self.status(f"Duplicated profile '{src}'")
+
+        def rename_selected():
+            self.session_manager.switch_profile(selected_name())
+            self._rename_profile_dialog(); reload_items(); self._refresh_profile_btn()
+
+        def delete_selected():
+            name = selected_name()
+            if name == self.session_manager.DEFAULT_PROFILE:
+                QMessageBox.information(dlg, "Delete Profile", "The default profile cannot be deleted.")
+                return
+            if QMessageBox.question(dlg, "Delete Profile", f"Delete profile '{name}'?") == QMessageBox.StandardButton.Yes:
+                self.session_manager.delete_profile(name); reload_items(); self.load_last_session()
+
+        reload_items()
+        btn_row = QHBoxLayout(); btn_row.setSpacing(6)
+        for text, slot in (("Open", open_selected), ("New", new_profile), ("Duplicate", duplicate_profile), ("Rename", rename_selected), ("Delete", delete_selected)):
+            b = QPushButton(text); b.clicked.connect(slot); btn_row.addWidget(b)
+        btn_row.addStretch()
+        close = QPushButton("Close"); close.clicked.connect(dlg.accept); btn_row.addWidget(close)
+        lo.addLayout(btn_row)
+        dlg.exec()
+
     def open_image_confidence_preview(self, index=None):
         idx = self.active_index if index is None else index
         if idx is None or idx < 0 or idx >= self.action_model.rowCount():
@@ -1752,6 +2063,7 @@ class MainWindow(QMainWindow):
         self._run_from_index = 0
         self._run_index_map = rows
         self.engine.actions = [deepcopy(self.action_model.get(r)) for r in rows]
+        self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
         # Validate the whole macro first so references are still caught.
         if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             self._run_index_map = []
@@ -1768,7 +2080,8 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText("Running block")
+        self.status_text.setText("Playing")
+        self.playback_feedback("Running selected block")
         self.engine.infinite_loop = False
         self.engine.loops = 1
         self.engine.simulation_mode = self.sim_check.isChecked()
@@ -1983,6 +2296,7 @@ class MainWindow(QMainWindow):
         # immediately before playback. This prevents stale engine lists from
         # looping visually while not deploying the edited/current actions.
         self.engine.actions = self.action_model.actions()
+        self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
         if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             return
         self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
@@ -1996,6 +2310,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
         self.status_text.setText("Playing")
+        self.playback_feedback("Starting macro…")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
         self.timeline.clear_image_states()
@@ -2023,6 +2338,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.status_dot.set_color(COLORS["text_dark"])
         self.status_text.setText("Ready")
+        self.playback_feedback("Stopped")
         if self.session_start_time:
             self.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
@@ -2030,7 +2346,29 @@ class MainWindow(QMainWindow):
 
     def _status_cb(self, msg):
         self._diag(f"[STATUS] {msg}")
-        self._status_msg.emit(msg)
+        text = str(msg or "")
+        lower = text.lower()
+        # Keep noisy row/wait/loop playback feedback out of the top header.
+        # The top capsule now stays as Ready/Playing/Paused/Done/Error while
+        # the playback dock owns timeline-specific messages.
+        if getattr(self.engine, "running", False):
+            self._playback_feedback_msg.emit(text)
+            if any(word in lower for word in ("error", "failed", "stopped", "not found", "warning")):
+                self._status_msg.emit(text)
+            return
+        self._status_msg.emit(text)
+
+    def _set_playback_feedback(self, msg: str):
+        try:
+            if hasattr(self, "playback_feedback_label"):
+                text = str(msg or "")
+                self.playback_feedback_label.setText(text)
+                self.playback_feedback_label.setToolTip(text)
+        except Exception:
+            pass
+
+    def playback_feedback(self, msg: str):
+        self._playback_feedback_msg.emit(str(msg or ""))
 
     def _play_cb(self, idx, dur):
         self._play_action.emit(idx, dur)
@@ -2061,10 +2399,9 @@ class MainWindow(QMainWindow):
             action_name = getattr(current, "label", "") or getattr(current, "key", "") or getattr(current, "action_type", "Action")
         except Exception:
             pass
-        if active_group_label:
-            self.status(f"Playing · {active_group_label} · Row {display_idx + 1} {action_name}")
-        else:
-            self.status(f"Playing · Row {display_idx + 1} {action_name}")
+        detail = f"{active_group_label} · Row {display_idx + 1} {action_name}" if active_group_label else f"Row {display_idx + 1} {action_name}"
+        self.status("Playing")
+        self.playback_feedback(f"Playing · {detail}")
         group_log = f" in {active_group_label}" if active_group_label else ""
         self._diag(f"[PLAY] Timeline row {display_idx + 1}{group_log} active for ~{adjusted_dur:.2f}s")
         self.update_statistics()
@@ -2096,11 +2433,13 @@ class MainWindow(QMainWindow):
                         label = f"Paused · {meta['badge']} {meta['name']}"
             except Exception:
                 pass
-            self.status_text.setText(label)
+            self.status_text.setText("Paused")
+            self.playback_feedback(label)
         else:
             self.pause_btn.setIcon(icon("pause", 14, COLORS["text_inverse"]))
             self.pause_btn.setToolTip("Pause (Esc)")
-            self.status_text.setText("Running")
+            self.status_text.setText("Playing")
+            self.playback_feedback("Resumed")
 
     def _complete_cb(self):
         self._complete.emit()
@@ -2118,6 +2457,7 @@ class MainWindow(QMainWindow):
         self.progress_label.setText("100%")
         self.status_dot.set_color(COLORS["text_dark"])
         self.status_text.setText("Test done" if was_single_test else "Finished")
+        self.playback_feedback("Selected action test complete" if was_single_test else "Macro complete")
         self._diag("[TEST] Selected action test complete" if was_single_test else "[PLAY] Macro complete")
         self._single_test_active = False
         self._single_test_index = -1
@@ -2310,8 +2650,10 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
         self.status_text.setText("Testing")
+        self.playback_feedback(f"Testing row {idx + 1}")
 
         self.engine.actions = [action]
+        self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
         self.engine.infinite_loop = False
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
@@ -2345,6 +2687,7 @@ class MainWindow(QMainWindow):
         self._single_test_index = -1
         self._run_from_index = idx
         self.engine.actions = self.action_model.actions()[idx:]
+        self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
         if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             self._run_from_index = 0
             return
@@ -2359,7 +2702,8 @@ class MainWindow(QMainWindow):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
-        self.status_text.setText(f"Testing row {idx + 1}+")
+        self.status_text.setText("Testing")
+        self.playback_feedback(f"Testing from row {idx + 1}")
 
         self.engine.infinite_loop = False
         self.engine.simulation_mode = self.sim_check.isChecked()
@@ -2758,6 +3102,7 @@ class MainWindow(QMainWindow):
             "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "screen": {"width": sw, "height": sh},
             "profile": self.session_manager.active,
+            "macro_variables": dict(getattr(self, "macro_variables", {}) or {}),
             "groups": [
                 {"row": meta["row"], "id": meta["gid"], "badge": meta["badge"], "name": meta["name"], "color": meta["color"], "collapsed": bool(getattr(meta["action"], "group_collapsed", False)), "action_count": meta.get("count", 0), "duration": meta.get("duration", 0.0)}
                 for meta in self._group_headers()
@@ -2830,6 +3175,8 @@ class MainWindow(QMainWindow):
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 actions_data = data.get("actions", []) if isinstance(data, dict) else data
+                if isinstance(data, dict):
+                    self.macro_variables = dict(data.get("macro_variables", getattr(self, "macro_variables", {})) or {})
                 if not isinstance(actions_data, list):
                     raise ValueError("Unsupported macro file format")
                 self.history.push(self.action_model.actions(), self._timeline_history_state())
@@ -3215,7 +3562,7 @@ class MainWindow(QMainWindow):
         collapsed = bool(collapsed)
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(36 if collapsed else 168)
+        self.playback_panel.setFixedHeight(36 if collapsed else 188)
 
     @staticmethod
     def _format_hms(seconds: float) -> str:
