@@ -132,8 +132,6 @@ class MainWindow(QMainWindow):
         self._update_check_timer = QTimer(self)
         self._update_check_timer.setInterval(60 * 1000)
         self._update_check_timer.timeout.connect(self._check_update_silent)
-        self._pending_update_manifest = None
-        self._update_available = False
         self.history = HistoryManager()
         self.actions_played = 0
         self.session_elapsed_time = 0.0
@@ -259,18 +257,20 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        # Side-panel interactions edit or add actions.  They should not clear
-        # the current timeline selection just because the click landed on card
-        # padding, a label, or an Inspector background frame.
-        sidebar = getattr(self, "sidebar_frame", None)
-        if sidebar is not None and self._widget_is_inside(widget, sidebar):
-            return
-
         interactive_types = (
             QPushButton, QCheckBox, QComboBox, QLineEdit, QSlider,
             QSpinBox, QDoubleSpinBox, QPlainTextEdit, QListWidget,
         )
         if isinstance(widget, interactive_types):
+            return
+
+        # Any click inside the expanded side panel should preserve the current
+        # timeline selection. The Inspector contains many plain QFrame/QLabel
+        # descendants, and global background-click handling can otherwise mistake
+        # those blanks for an app-background deselect. Timeline empty-space clicks
+        # still deliberately clear selection inside TimelineView itself.
+        sidebar = getattr(self, "sidebar_frame", None)
+        if sidebar is not None and self._widget_is_inside(widget, sidebar):
             return
 
         # Inspector blank space should never clear the selected timeline action.
@@ -807,6 +807,76 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _grow_window_for_unlocked_selection_content(self, extra_padding=10):
+        """One-shot grow so a clicked action can reveal the expanded side panel.
+
+        This is intentionally limited to the short-lived timeline-click reveal
+        window. It grows only when the visible side-panel stack would extend past
+        the app content bottom, then immediately yields back to normal manual
+        resizing once the reveal flag clears.
+        """
+        try:
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                return
+            if not bool(getattr(self, "_selection_reveal_from_click", False)):
+                return
+            sidebar = getattr(self, "sidebar_frame", None)
+            if sidebar is None or not sidebar.isVisible():
+                return
+            layout = sidebar.layout()
+            if layout is None:
+                return
+            try:
+                layout.invalidate()
+            except Exception:
+                pass
+            margins = layout.contentsMargins()
+            spacer = getattr(self, "_side_panel_bottom_spacer", None)
+            visible_widgets = []
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                widget = item.widget() if item is not None else None
+                if widget is None or widget is spacer or not widget.isVisible():
+                    continue
+                visible_widgets.append(widget)
+            natural_h = margins.top() + margins.bottom()
+            if visible_widgets:
+                natural_h += max(0, layout.spacing()) * max(0, len(visible_widgets) - 1)
+            for widget in visible_widgets:
+                vals = []
+                for getter in (widget.height, widget.sizeHint().height, widget.minimumSizeHint().height):
+                    try:
+                        vals.append(int(getter()))
+                    except Exception:
+                        pass
+                natural_h += max([0] + vals)
+            central = self.centralWidget()
+            available_h = 0
+            if central is not None:
+                try:
+                    top_y = int(sidebar.mapTo(central, sidebar.rect().topLeft()).y())
+                    available_h = int(central.rect().bottom()) + 1 - top_y
+                except Exception:
+                    available_h = 0
+            if available_h <= 0:
+                available_h = int(sidebar.height() or self.height())
+            overflow = int(natural_h) - int(available_h)
+            if overflow <= 0:
+                return
+            target_h = int(self.height()) + overflow + int(extra_padding)
+            try:
+                screen = QApplication.primaryScreen()
+                if screen is not None:
+                    target_h = min(target_h, int(screen.availableGeometry().height()) - 24)
+            except Exception:
+                pass
+            if target_h > self.height():
+                self.resize(self.width(), target_h)
+        except Exception:
+            pass
+
     def _begin_selection_reveal_from_click(self):
         """Allow one short unlocked side-panel fit pass for an actual timeline click."""
         try:
@@ -892,6 +962,8 @@ class MainWindow(QMainWindow):
             self.select(index)
             if not (bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False))):
                 self._expand_inspector_for_timeline_selection()
+                QTimer.singleShot(0, self._grow_window_for_unlocked_selection_content)
+                QTimer.singleShot(35, self._grow_window_for_unlocked_selection_content)
             try:
                 rows = self._selected_rows(index)
                 if len(rows) > 1:
@@ -923,6 +995,7 @@ class MainWindow(QMainWindow):
             else:
                 # Explicit clicks may reveal/fit once, then the reveal flag clears
                 # and normal vertical resizing owns the side-panel state again.
+                self._grow_window_for_unlocked_selection_content()
                 self._update_responsive_height_panels()
         except Exception:
             pass
@@ -1022,9 +1095,9 @@ class MainWindow(QMainWindow):
         btn.setObjectName(obj)
         btn.setText("")
         btn.setIcon(QIcon())
-        btn_w = 216 if action_kind == "group" else 104
+        btn_w = int(getattr(self, "_add_action_group_width", 205)) if action_kind == "group" else int(getattr(self, "_add_action_button_width", 100))
         # Hard-lock every Add Action button to the same 42px visual height.
-        # Widths stay unchanged: 104px regular buttons, 216px Group button.
+        # Widths are driven by the 255px side-panel layout constants.
         btn_h = 42
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
@@ -4720,47 +4793,6 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
         self.status("Statistics reset")
 
-    def _set_update_button_available(self, available=False, checking=False):
-        """Refresh the top update/download icon state without showing popups."""
-        try:
-            btn = getattr(self, "update_top_btn", None)
-            if btn is None:
-                return
-            if checking:
-                color = COLORS["text_dim"]
-                tip = "Checking for updates…"
-            elif available:
-                color = COLORS["success"]
-                manifest = getattr(self, "_pending_update_manifest", None) or {}
-                remote = manifest.get("version", "new version") if isinstance(manifest, dict) else "new version"
-                tip = f"Update available: {remote} — click to download"
-            else:
-                color = COLORS["accent"]
-                tip = "Check for updates"
-            btn.setIcon(icon("download", 18, color))
-            btn.setToolTip(tip)
-            btn.setProperty("update_available", bool(available))
-            btn.setProperty("checking", bool(checking))
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
-            btn.update()
-        except Exception:
-            pass
-
-    def _mark_update_available(self, manifest):
-        """Store an available update and turn the download icon green."""
-        try:
-            self._pending_update_manifest = dict(manifest or {})
-        except Exception:
-            self._pending_update_manifest = manifest
-        self._update_available = True
-        self._set_update_button_available(available=True)
-        try:
-            remote = (manifest or {}).get("version", "new version") if isinstance(manifest, dict) else "new version"
-            self.status(f"Update available: {remote} — click the download icon")
-        except Exception:
-            pass
-
     # ═══════════════════════════════════════════════════════
     #  UPDATE CHECKING
     # ═══════════════════════════════════════════════════════
@@ -4779,20 +4811,14 @@ class MainWindow(QMainWindow):
     def _on_update_found(self, manifest):
         """Slot for _update_found signal — always runs on main thread."""
         self._set_update_done()
-        # No popup on discovery: the toolbar download icon turns green and the
-        # user can click it when ready to open the download window.
-        self._mark_update_available(manifest)
+        self._prompt_update(manifest)
 
     def _on_update_not_found(self):
         self._set_update_done()
-        self._pending_update_manifest = None
-        self._update_available = False
-        self._set_update_button_available(available=False)
         self.status("No updates found")
 
     def _on_update_error(self, error_msg):
         self._set_update_done()
-        self._set_update_button_available(available=bool(getattr(self, "_update_available", False)))
         self._on_close_update_dlg()
         QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error_msg}")
 
@@ -4818,19 +4844,13 @@ class MainWindow(QMainWindow):
 
     def _set_update_done(self):
         self._update_checking = False
-        if not bool(getattr(self, "_update_available", False)):
-            self._set_update_button_available(available=False)
 
     def _check_update_manual(self):
-        if bool(getattr(self, "_update_available", False)) and getattr(self, "_pending_update_manifest", None):
-            self._start_update_download(self._pending_update_manifest)
-            return
         if getattr(self, "_update_checking", False):
             self.status("Already checking for updates")
             return
         self._update_checking = True
-        self._update_prompt_shown = False
-        self._set_update_button_available(checking=True)
+        self._update_prompt_shown = False  # allow re-prompt on fresh check
         self.status("Checking for updates…")
 
         def _bg():
@@ -4853,16 +4873,32 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(30000, lambda: self._set_update_done() if getattr(self, "_update_checking", False) else None)
 
     def _prompt_update(self, manifest):
-        """Backwards-compatible discovery handler: mark available, no popup."""
-        self._mark_update_available(manifest)
-
-    def _start_update_download(self, manifest):
         try:
-            if not manifest:
-                self.status("No update is ready to download")
+            # Allow re-prompting on a fresh check (flag is reset when check starts)
+            if getattr(self, "_update_prompt_shown", False):
+                logger.info("Update prompt already shown, skipping duplicate")
                 return
-            remote_ver = manifest.get("version", "unknown") if isinstance(manifest, dict) else "unknown"
-            logger.info(f"Opening update download window for {remote_ver}")
+            self._update_prompt_shown = True
+            logger.info("Showing update prompt")
+
+            remote_ver = manifest.get("version", "unknown")
+            notes = manifest.get("notes", "")
+            msg = f"A new version of MacroForge is available.\n\nCurrent: {VERSION}\nLatest: {remote_ver}"
+            if notes:
+                msg += f"\n\nRelease notes:\n{notes}"
+            msg += "\n\nDownload and install now?"
+
+            box = QMessageBox(self)
+            box.setWindowTitle("Update Available")
+            box.setText(msg)
+            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            box.setDefaultButton(QMessageBox.StandardButton.Yes)
+            box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+            reply = box.exec()
+            logger.info(f"Update prompt result: {reply}")
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
 
             # Progress dialog
             self._update_dlg = QDialog(self)
@@ -4884,7 +4920,6 @@ class MainWindow(QMainWindow):
             self._update_dlg.raise_()
             self._update_dlg.activateWindow()
             self._update_dlg.update()
-            self._set_update_button_available(checking=True)
             QApplication.processEvents()
 
             # Store refs for signal-based updates (thread-safe)

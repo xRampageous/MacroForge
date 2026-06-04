@@ -574,13 +574,13 @@ def build_main_layout(window):
         )
         return inp
 
-    def inspector_field_row(label_text, widget, width=112, unit_text=None):
+    def inspector_field_row(label_text, widget, width=134, unit_text=None):
         """Aligned Inspector row with labels left and edit controls right."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(5)
+        row.setSpacing(7)
         lbl = form_label(label_text)
-        lbl.setMinimumWidth(72)
+        lbl.setMinimumWidth(82)
         row.addWidget(lbl)
         row.addStretch(1)
 
@@ -624,7 +624,7 @@ def build_main_layout(window):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(7)
         lbl = form_label(label_text)
-        lbl.setMinimumWidth(72)
+        lbl.setMinimumWidth(82)
         row.addWidget(lbl)
         row.addStretch(1)
         checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -646,53 +646,53 @@ def build_main_layout(window):
 
     brand_row = QHBoxLayout()
     brand_row.setContentsMargins(0, 0, 0, 0)
-    brand_row.setSpacing(6)
+    brand_row.setSpacing(4)
 
     brand_box = QFrame()
     brand_box.setObjectName("macroforge_brand_box")
-    brand_box.setFixedHeight(36)
+    brand_box.setFixedSize(181, 34)
+    brand_box.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     brand_box.setStyleSheet(
         f"QFrame#macroforge_brand_box {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #07172A, stop:0.55 #03101E, stop:1 #01070E); "
         f"border: 1px solid {C['border']}; border-radius: 10px; }}"
     )
     brand_box_lo = QHBoxLayout(brand_box)
-    brand_box_lo.setContentsMargins(9, 0, 5, 0)
+    brand_box_lo.setContentsMargins(8, 0, 6, 0)
     brand_box_lo.setSpacing(4)
 
     brand = QLabel("MacroForge")
     brand.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-    brand.setMinimumWidth(0)
     brand.setStyleSheet(
-        f"color: {C['text']}; font-size: 16px; font-weight: 950; "
-        "letter-spacing: 0.15px; background: transparent;"
+        f"color: {C['text']}; font-size: 15px; font-weight: 950; "
+        "letter-spacing: 0.1px; background: transparent;"
     )
-    brand_box_lo.addWidget(brand, stretch=0)
+    brand_box_lo.addWidget(brand, stretch=1)
 
     brand_sep = QLabel("|")
     brand_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
     brand_sep.setFixedWidth(5)
-    brand_sep.setStyleSheet(f"color: {C['border']}; font-size: 12px; font-weight: 800; background: transparent;")
+    brand_sep.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 800; background: transparent;")
     brand_box_lo.addWidget(brand_sep)
 
     ver = QLabel(f"v{VERSION}")
-    ver.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-    ver.setMinimumWidth(49)
+    ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    ver.setFixedSize(50, 21)
     ver.setStyleSheet(
-        f"color: {C['accent']}; background: transparent; border: none; "
-        "font-size: 10px; font-weight: 900;"
+        f"color: {C['accent']}; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 {C['bg_tertiary']}, stop:1 #010913); "
+        f"border: 1px solid {C['accent_glow']}; border-radius: 8px; "
+        "font-size: 11px; font-weight: 900;"
     )
-    brand_box_lo.addWidget(ver, stretch=0)
+    brand_box_lo.addWidget(ver)
 
-    brand_box_lo.addStretch(1)
-
+    brand_row.addWidget(brand_box, stretch=0)
+    brand_row.addStretch(1)
     self.side_panel_lock_btn = _caret_button(20)
     self.side_panel_lock_btn.setText("🔓")
     self.side_panel_lock_btn.setToolTip("Lock side panel width")
     self.side_panel_lock_btn.clicked.connect(self._toggle_side_panel_lock)
-    brand_box_lo.addWidget(self.side_panel_lock_btn)
-
-    brand_row.addWidget(brand_box, stretch=1)
+    brand_row.addWidget(self.side_panel_lock_btn)
 
     self.sidebar_collapse_btn = _caret_button(20)
     self.sidebar_collapse_btn.setText("<")
@@ -702,7 +702,7 @@ def build_main_layout(window):
 
     add_card = panel_frame("add_action_card")
     add_lo = QVBoxLayout(add_card)
-    add_lo.setContentsMargins(9, 9, 9, 10)
+    add_lo.setContentsMargins(10, 9, 10, 10)
     add_lo.setSpacing(5)
     add_body = QWidget(add_card)
     add_body.setObjectName("add_action_body")
@@ -714,8 +714,10 @@ def build_main_layout(window):
     add_grid.setContentsMargins(0, 0, 0, 0)
     add_grid.setHorizontalSpacing(5)
     add_grid.setVerticalSpacing(5)
-    add_grid.setColumnMinimumWidth(0, 100)
-    add_grid.setColumnMinimumWidth(1, 100)
+    self._add_action_button_width = 100
+    self._add_action_group_width = 205
+    add_grid.setColumnMinimumWidth(0, self._add_action_button_width)
+    add_grid.setColumnMinimumWidth(1, self._add_action_button_width)
     action_specs = [
         ("Key", self._open_key_dialog, C["key"], "key", 0, 0, 1, 1),
         ("Click", self._open_click_dialog, C["click"], "click", 0, 1, 1, 1),
@@ -727,7 +729,7 @@ def build_main_layout(window):
     ]
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
-        btn_w = 205 if colspan > 1 else 100
+        btn_w = self._add_action_group_width if colspan > 1 else self._add_action_button_width
         # Hard-lock every Add Action button to 42px tall. Widths remain unchanged.
         btn_h = 42
         btn.setFixedSize(btn_w, btn_h)
@@ -742,8 +744,8 @@ def build_main_layout(window):
 
     rec_card = panel_frame("recorder_card")
     rec_lo = QVBoxLayout(rec_card)
-    rec_lo.setContentsMargins(10, 10, 10, 12)
-    rec_lo.setSpacing(8)
+    rec_lo.setContentsMargins(12, 10, 12, 12)
+    rec_lo.setSpacing(9)
     rec_body = QWidget(rec_card)
     rec_body.setObjectName("recorder_body")
     rec_body_lo = QVBoxLayout(rec_body)
@@ -784,9 +786,9 @@ def build_main_layout(window):
     self.rec_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
     # Keep the icon-only recorder button but make it the requested wide
     # recording-control size.  Colors remain controlled by the existing theme.
-    self.rec_btn.setFixedSize(96, 44)
-    self.rec_btn.setMinimumSize(96, 44)
-    self.rec_btn.setMaximumSize(96, 44)
+    self.rec_btn.setFixedSize(97, 45)
+    self.rec_btn.setMinimumSize(97, 45)
+    self.rec_btn.setMaximumSize(97, 45)
     self.rec_btn.setToolTip("Record (F7)")
     self.rec_btn.clicked.connect(self._toggle_record)
     self.rec_pause_btn = QPushButton("Pause")
@@ -794,9 +796,9 @@ def build_main_layout(window):
     self.rec_pause_btn.setIcon(icon("pause", 16, C["text_dim"]))
     self.rec_pause_btn.setIconSize(QSize(16, 16))
     self.rec_pause_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-    self.rec_pause_btn.setFixedSize(96, 44)
-    self.rec_pause_btn.setMinimumSize(96, 44)
-    self.rec_pause_btn.setMaximumSize(96, 44)
+    self.rec_pause_btn.setFixedSize(97, 45)
+    self.rec_pause_btn.setMinimumSize(97, 45)
+    self.rec_pause_btn.setMaximumSize(97, 45)
     self.rec_pause_btn.setToolTip("Pause")
     self.rec_pause_btn.setEnabled(False)
     self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
@@ -933,8 +935,8 @@ def build_main_layout(window):
     xy = QHBoxLayout()
     xy.setContentsMargins(0, 0, 0, 0)
     xy.setSpacing(6)
-    self.ic_x.setFixedWidth(53)
-    self.ic_y.setFixedWidth(53)
+    self.ic_x.setFixedWidth(63)
+    self.ic_y.setFixedWidth(63)
     xy.addWidget(self.ic_x)
     xy.addWidget(self.ic_y)
     self.ic_btn = compact_combo(["left", "right", "middle"])
@@ -1031,21 +1033,22 @@ def build_main_layout(window):
         btn.setIcon(icon(icon_name, 13, C["text_dim"]))
         btn.setIconSize(QSize(13, 13))
         btn.setToolTip(tip)
-        btn.setFixedHeight(28)
+        btn.setFixedSize(width, 28)
         btn.setMinimumWidth(width)
+        btn.setMaximumWidth(width)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(slot)
         btn.setStyleSheet(
             f"QPushButton#image_inspector_tool_btn {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
-            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 5px; "
+            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 8px; "
             "font-size: 10px; font-weight: 750; }}"
             f"QPushButton#image_inspector_tool_btn:hover {{ border-color: {C['accent']}; color: {C['accent_hover']}; }}"
         )
         return btn
 
-    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 58)
-    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 62)
-    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 48)
+    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 62)
+    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 64)
+    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 50)
     image_actions.addWidget(self.ii_browse_btn)
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
@@ -1094,11 +1097,11 @@ def build_main_layout(window):
 
     image_flat_lo.addLayout(flat_section_title("On Fail", "condition", C["accent"]))
     self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Group"])
-    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=112))
+    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=132))
 
     image_flat_lo.addLayout(flat_section_title("Fail Target", "target", C["accent"]))
     self.ii_fail_target = compact_combo()
-    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=112))
+    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=132))
 
     ii_lo.addWidget(image_flat_card)
 
@@ -1129,8 +1132,8 @@ def build_main_layout(window):
     self.il_count.setFixedHeight(30)
     self.il_target = compact_combo()
     self.il_label.setVisible(False)
-    il_lo.addLayout(inspector_field_row("Repeat count", self.il_count, width=112))
-    il_lo.addLayout(inspector_field_row("Target", self.il_target, width=112))
+    il_lo.addLayout(inspector_field_row("Repeat count", self.il_count, width=132))
+    il_lo.addLayout(inspector_field_row("Target", self.il_target, width=132))
     il_outer.addWidget(loop_card)
 
     self.insp_condition = QWidget()
@@ -1159,12 +1162,12 @@ def build_main_layout(window):
     ico_retry.addWidget(self.ico_retry_count)
     ico_retry.addWidget(self.ico_retry_delay)
     self.ico_label.setVisible(False)
-    ico_lo.addLayout(inspector_field_row("Type", self.ico_type, width=112))
-    ico_lo.addLayout(inspector_field_row("True target", self.ico_true, width=112))
-    ico_lo.addLayout(inspector_field_row("False target", self.ico_false, width=112))
-    ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=112))
-    ico_lo.addLayout(inspector_field_row("On false/fail", self.ico_fail_mode, width=112))
-    ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=112))
+    ico_lo.addLayout(inspector_field_row("Type", self.ico_type, width=132))
+    ico_lo.addLayout(inspector_field_row("True target", self.ico_true, width=132))
+    ico_lo.addLayout(inspector_field_row("False target", self.ico_false, width=132))
+    ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=132))
+    ico_lo.addLayout(inspector_field_row("On false/fail", self.ico_fail_mode, width=132))
+    ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=132))
     ico_lo.addWidget(self.ico_rule)
     ico_outer.addWidget(condition_card)
 
@@ -1551,7 +1554,7 @@ def build_main_layout(window):
     self.search_top_btn = header_icon_button("search_top_btn", "search", C["text_dim"], "Search timeline actions", None, width=38)
     dock_lo.addWidget(self.search_top_btn)
 
-    self.update_top_btn = header_icon_button("update_top_btn", "download", C["accent"], "Check for updates", self._check_update_manual, width=38)
+    self.update_top_btn = header_icon_button("update_top_btn", "update", C["accent"], "Check for updates", self._check_update_manual, width=38)
     dock_lo.addWidget(self.update_top_btn)
     self.settings_top_btn = header_icon_button("settings_top_btn", "settings", C["text_dim"], "Settings", self.open_settings_dialog, width=38)
     dock_lo.addWidget(self.settings_top_btn)
@@ -1687,7 +1690,7 @@ def build_main_layout(window):
 
     self.tl_search_popup = QFrame(self)
     self.tl_search_popup.setObjectName("timeline_search_popup")
-    self.tl_search_popup.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    self.tl_search_popup.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
     self.tl_search_popup.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.tl_search_popup.setVisible(False)
     self.tl_search_popup.setStyleSheet(
