@@ -130,6 +130,111 @@ def build_main_layout(window):
                 except Exception:
                     pass
 
+        def _collapsible_body_height_hint(widget):
+            """Return the natural height of the whole collapsible body.
+
+            Qt can report a stale/partial ``sizeHint`` while a body has just
+            been collapsed or is still constrained by a previous animation.
+            Measure from the body layout first so the IMAGE sub-panel uses the
+            full section body container, not just the visible preview/template
+            child that happened to have the last painted height.
+            """
+            if widget is None:
+                return 1
+
+            def _item_height(item):
+                if item is None:
+                    return 0
+                child = item.widget()
+                if child is not None:
+                    if not child.isVisible() and child is not widget:
+                        return 0
+                    try:
+                        child.ensurePolished()
+                    except Exception:
+                        pass
+                    vals = []
+                    for getter in (child.sizeHint, child.minimumSizeHint):
+                        try:
+                            vals.append(int(getter().height()))
+                        except Exception:
+                            pass
+                    try:
+                        if int(child.maximumHeight()) != 0:
+                            vals.append(int(child.height()))
+                    except Exception:
+                        pass
+                    return max([0] + vals)
+                child_layout = item.layout()
+                if child_layout is not None:
+                    return _layout_height(child_layout)
+                spacer = item.spacerItem()
+                if spacer is not None:
+                    try:
+                        return max(0, int(spacer.sizeHint().height()))
+                    except Exception:
+                        return 0
+                return 0
+
+            def _layout_height(layout):
+                if layout is None:
+                    return 0
+                try:
+                    layout.invalidate()
+                    layout.activate()
+                except Exception:
+                    pass
+                try:
+                    margins = layout.contentsMargins()
+                    total = int(margins.top()) + int(margins.bottom())
+                except Exception:
+                    total = 0
+                visible_items = []
+                try:
+                    count = layout.count()
+                except Exception:
+                    count = 0
+                for i in range(count):
+                    item = layout.itemAt(i)
+                    h = _item_height(item)
+                    if h > 0:
+                        visible_items.append(h)
+                if visible_items:
+                    try:
+                        total += max(0, int(layout.spacing())) * max(0, len(visible_items) - 1)
+                    except Exception:
+                        pass
+                    total += sum(visible_items)
+                try:
+                    total = max(total, int(layout.sizeHint().height()))
+                except Exception:
+                    pass
+                return max(0, total)
+
+            try:
+                widget.ensurePolished()
+            except Exception:
+                pass
+            try:
+                widget.setMinimumHeight(0)
+                widget.setMaximumHeight(16777215)
+            except Exception:
+                pass
+            try:
+                layout = widget.layout()
+            except Exception:
+                layout = None
+
+            vals = []
+            if layout is not None:
+                vals.append(_layout_height(layout))
+            for getter in (widget.sizeHint, widget.minimumSizeHint):
+                try:
+                    vals.append(int(getter().height()))
+                except Exception:
+                    pass
+            return max(1, *vals)
+
         def _side_panel_animation_tick(_value=None):
             try:
                 body_widget.updateGeometry()
@@ -212,7 +317,7 @@ def build_main_layout(window):
                 body_widget.updateGeometry()
                 if parent is not None:
                     parent.updateGeometry()
-                end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
+                end_h = _collapsible_body_height_hint(body_widget)
                 body_widget.setMaximumHeight(start_h)
 
             try:
@@ -388,6 +493,7 @@ def build_main_layout(window):
         lo.setSpacing(7)
         body = QWidget(card)
         body.setObjectName(f"{card.objectName()}_body")
+        body.setProperty("collapsible_title", title)
         body_lo = QVBoxLayout(body)
         body_lo.setContentsMargins(0, 0, 0, 0)
         body_lo.setSpacing(7)
