@@ -559,44 +559,61 @@ def build_main_layout(window):
         )
         return inp
 
-    def inspector_field_row(label_text, widget, width=132, unit_text=None):
+    def inspector_field_row(label_text, widget, width=134, unit_text=None):
         """Aligned Inspector row with labels left and edit controls right."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(7)
         lbl = form_label(label_text)
+        lbl.setMinimumWidth(82)
         row.addWidget(lbl)
         row.addStretch(1)
-        holder = None
+
+        value_area = QWidget()
+        value_area.setObjectName("inspector_row_value_area")
+        value_lo = QHBoxLayout(value_area)
+        value_lo.setContentsMargins(0, 0, 0, 0)
+        value_lo.setSpacing(5)
+        value_lo.addStretch(1)
+        value_width = int(width) + (25 if unit_text else 0)
+        value_area.setFixedWidth(value_width)
+        value_area.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
         if isinstance(widget, QHBoxLayout):
             holder = QWidget()
             holder.setObjectName("inspector_row_value_holder")
             holder.setLayout(widget)
             holder.setFixedWidth(width)
             holder.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            row.addWidget(holder)
+            value_lo.addWidget(holder, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         else:
             try:
                 widget.setFixedWidth(width)
                 widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             except Exception:
                 pass
-            row.addWidget(widget)
+            value_lo.addWidget(widget, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
         if unit_text:
             unit = QLabel(unit_text)
             unit.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
             unit.setFixedWidth(20)
             unit.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-            row.addWidget(unit)
+            value_lo.addWidget(unit)
+
+        row.addWidget(value_area)
         return row
 
     def inspector_check_row(label_text, checkbox):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(7)
-        row.addWidget(form_label(label_text))
+        lbl = form_label(label_text)
+        lbl.setMinimumWidth(82)
+        row.addWidget(lbl)
         row.addStretch(1)
-        row.addWidget(checkbox)
+        checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        row.addWidget(checkbox, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         return row
 
     # Left command rail.
@@ -843,14 +860,17 @@ def build_main_layout(window):
 
     self.insp_empty = QLabel("Select an action to inspect")
     self.insp_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.insp_empty.setMinimumHeight(42)
     self.insp_empty.setStyleSheet(
-        f"color: {C['text_dark']}; font-size: 10px; padding: 6px; background: transparent;"
+        f"color: {C['text_dim']}; font-size: 10px; font-weight: 800; padding: 8px; "
+        f"background-color: {C['bg_secondary']}; border: 1px solid {C['border']}; "
+        "border-radius: 8px;"
     )
     insp_body_lo.addWidget(self.insp_empty)
 
     self._insp_lo = QVBoxLayout()
     self._insp_lo.setContentsMargins(0, 0, 0, 0)
-    self._insp_lo.setSpacing(6)
+    self._insp_lo.setSpacing(7)
 
     self.insp_key = QWidget()
     ik_outer = QVBoxLayout(self.insp_key)
@@ -941,6 +961,13 @@ def build_main_layout(window):
     self.ii_retry_card = image_flat_card
     self.ii_on_fail_card = image_flat_card
     self.ii_fail_target_card = image_flat_card
+    try:
+        self.ii_image_settings_body = image_flat_lo.parentWidget()
+        if self.ii_image_settings_body is not None:
+            self.ii_image_settings_body.setMinimumHeight(0)
+            self.ii_image_settings_body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+    except Exception:
+        self.ii_image_settings_body = None
 
     image_flat_lo.addLayout(flat_section_title("Image Template", "image", C["image"]))
 

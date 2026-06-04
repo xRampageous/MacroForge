@@ -445,6 +445,26 @@ class MainWindow(QMainWindow):
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
                 controls = getattr(self, "_panel_collapse_controls", {})
 
+                active_anims = getattr(self, "_collapse_animations", {})
+                if active_anims:
+                    # Do not let the app-bottom policy start another collapse or
+                    # expand while the previous section is still moving.  The
+                    # layout helper runs a follow-up pass when each animation
+                    # finishes; this small queued retry is a safety net for
+                    # resize events that arrive mid-animation.
+                    if not bool(getattr(self, "_height_panel_recheck_queued", False)):
+                        self._height_panel_recheck_queued = True
+
+                        def _retry_height_policy():
+                            try:
+                                self._height_panel_recheck_queued = False
+                                self._update_responsive_height_panels()
+                            except Exception:
+                                pass
+
+                        QTimer.singleShot(96, _retry_height_policy)
+                    return
+
                 def _panel_collapsed(body_name: str) -> bool:
                     ctl = controls.get(body_name)
                     return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
