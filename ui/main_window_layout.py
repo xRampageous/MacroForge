@@ -80,9 +80,11 @@ def build_main_layout(window):
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
 
         body_name = body_widget.objectName() or ""
-        # Image settings are a flat Inspector editor now, so there are no
-        # nested Image Inspector sub-panel bodies to special-case.
-        image_inspector_bodies = set()
+        # The flat Image editor has one collapsible body inside the main
+        # Inspector.  Treat it like the other collapsible bodies, but refresh
+        # the Inspector parent after it animates so the side panel measures the
+        # full editor instead of a stale preview height.
+        image_inspector_bodies = {"inspector_group_image_settings_body"}
         is_image_inspector_body = body_name in image_inspector_bodies
 
         parent = body_widget.parentWidget()
@@ -557,6 +559,46 @@ def build_main_layout(window):
         )
         return inp
 
+    def inspector_field_row(label_text, widget, width=132, unit_text=None):
+        """Aligned Inspector row with labels left and edit controls right."""
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(7)
+        lbl = form_label(label_text)
+        row.addWidget(lbl)
+        row.addStretch(1)
+        holder = None
+        if isinstance(widget, QHBoxLayout):
+            holder = QWidget()
+            holder.setObjectName("inspector_row_value_holder")
+            holder.setLayout(widget)
+            holder.setFixedWidth(width)
+            holder.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            row.addWidget(holder)
+        else:
+            try:
+                widget.setFixedWidth(width)
+                widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            except Exception:
+                pass
+            row.addWidget(widget)
+        if unit_text:
+            unit = QLabel(unit_text)
+            unit.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            unit.setFixedWidth(20)
+            unit.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
+            row.addWidget(unit)
+        return row
+
+    def inspector_check_row(label_text, checkbox):
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(7)
+        row.addWidget(form_label(label_text))
+        row.addStretch(1)
+        row.addWidget(checkbox)
+        return row
+
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
@@ -814,32 +856,27 @@ def build_main_layout(window):
     ik_outer = QVBoxLayout(self.insp_key)
     ik_outer.setContentsMargins(0, 0, 0, 0)
     ik_outer.setSpacing(6)
-    key_card, ik_lo = inspector_group("KEY ACTION", "key", C["key"])
+    key_card, ik_lo = inspector_group("KEY SETTINGS", "key", C["key"])
     self.ik_key = form_input("key")
     self.ik_dur = form_input("duration")
-    self.ik_hold = QCheckBox("Hold mode")
+    self.ik_hold = QCheckBox("Hold")
     self.ik_repeat = form_input("repeat", "1")
     self.ik_label = form_input("label")
-    for label, widget in [
-        ("Key", self.ik_key),
-        ("Duration", self.ik_dur),
-        ("Repeat", self.ik_repeat),
-    ]:
-        ik_lo.addWidget(form_label(label))
-        ik_lo.addWidget(widget)
+    ik_lo.addLayout(inspector_field_row("Key", self.ik_key))
+    ik_lo.addLayout(inspector_field_row("Duration", self.ik_dur))
+    ik_lo.addLayout(inspector_field_row("Repeat", self.ik_repeat))
+    ik_lo.addLayout(inspector_check_row("Hold mode", self.ik_hold))
     self.ik_label.setVisible(False)
-    ik_lo.addWidget(self.ik_hold)
     ik_outer.addWidget(key_card)
 
     self.insp_pause = QWidget()
     ip_outer = QVBoxLayout(self.insp_pause)
     ip_outer.setContentsMargins(0, 0, 0, 0)
     ip_outer.setSpacing(6)
-    pause_card, ip_lo = inspector_group("DELAY ACTION", "delay", C["pause"])
+    pause_card, ip_lo = inspector_group("DELAY SETTINGS", "delay", C["pause"])
     self.ip_dur = form_input("duration")
     self.ip_label = form_input("label")
-    ip_lo.addWidget(form_label("Duration"))
-    ip_lo.addWidget(self.ip_dur)
+    ip_lo.addLayout(inspector_field_row("Duration", self.ip_dur))
     self.ip_label.setVisible(False)
     ip_outer.addWidget(pause_card)
 
@@ -847,26 +884,24 @@ def build_main_layout(window):
     ic_outer = QVBoxLayout(self.insp_click)
     ic_outer.setContentsMargins(0, 0, 0, 0)
     ic_outer.setSpacing(6)
-    click_card, ic_lo = inspector_group("CLICK ACTION", "click", C["click"])
+    click_card, ic_lo = inspector_group("CLICK SETTINGS", "click", C["click"])
     self.ic_x = form_input("x")
     self.ic_y = form_input("y")
     xy = QHBoxLayout()
-    xy.setSpacing(5)
+    xy.setContentsMargins(0, 0, 0, 0)
+    xy.setSpacing(6)
+    self.ic_x.setFixedWidth(63)
+    self.ic_y.setFixedWidth(63)
     xy.addWidget(self.ic_x)
     xy.addWidget(self.ic_y)
     self.ic_btn = compact_combo(["left", "right", "middle"])
     self.ic_rand = form_input("rand")
     self.ic_repeat = form_input("repeat", "1")
     self.ic_label = form_input("label")
-    ic_lo.addWidget(form_label("X, Y"))
-    ic_lo.addLayout(xy)
-    for label, widget in [
-        ("Button", self.ic_btn),
-        ("Randomness", self.ic_rand),
-        ("Repeat", self.ic_repeat),
-    ]:
-        ic_lo.addWidget(form_label(label))
-        ic_lo.addWidget(widget)
+    ic_lo.addLayout(inspector_field_row("X / Y", xy))
+    ic_lo.addLayout(inspector_field_row("Button", self.ic_btn))
+    ic_lo.addLayout(inspector_field_row("Randomness", self.ic_rand))
+    ic_lo.addLayout(inspector_field_row("Repeat", self.ic_repeat))
     self.ic_label.setVisible(False)
     ic_outer.addWidget(click_card)
 
@@ -894,19 +929,14 @@ def build_main_layout(window):
         row.addStretch()
         return row
 
-    image_flat_card = QFrame()
+    image_flat_card, image_flat_lo = inspector_group("IMAGE SETTINGS", "image", C["image"])
     image_flat_card.setObjectName("image_flat_inspector_card")
     image_flat_card.setStyleSheet(
         f"QFrame#image_flat_inspector_card {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #04111D, stop:1 #00060E); border: 1px solid {C['border']}; "
         "border-radius: 8px; }}"
     )
-    image_flat_lo = QVBoxLayout(image_flat_card)
-    image_flat_lo.setContentsMargins(8, 8, 8, 9)
-    image_flat_lo.setSpacing(8)
     self.ii_image_card = image_flat_card
-    # Compatibility aliases: Image settings are now one flat editor card, not
-    # five nested collapsible sub-panels.
     self.ii_matching_card = image_flat_card
     self.ii_retry_card = image_flat_card
     self.ii_on_fail_card = image_flat_card
@@ -967,7 +997,7 @@ def build_main_layout(window):
 
     self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 66)
     self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 66)
-    self.ii_test_btn = image_tool_btn("Test / Locate", "play", "Test or locate this image action", self.test_selected_action, 88)
+    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 58)
     image_actions.addWidget(self.ii_browse_btn)
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
@@ -975,14 +1005,8 @@ def build_main_layout(window):
     image_flat_lo.addLayout(image_actions)
 
     image_flat_lo.addLayout(flat_section_title("Matching", "target", C["accent"]))
-    sim_row = QHBoxLayout()
-    sim_row.setContentsMargins(0, 0, 0, 0)
-    sim_lbl = form_label("Similarity")
-    sim_row.addWidget(sim_lbl)
-    sim_row.addStretch()
-    self.ii_sim = inspector_value("0.85", 54)
-    sim_row.addWidget(self.ii_sim)
-    image_flat_lo.addLayout(sim_row)
+    self.ii_sim = inspector_value("0.85", 58)
+    image_flat_lo.addLayout(inspector_field_row("Similarity", self.ii_sim, width=58))
     self.ii_sim_slider = QSlider(Qt.Orientation.Horizontal)
     self.ii_sim_slider.setRange(0, 100)
     self.ii_sim_slider.setValue(85)
@@ -1005,61 +1029,28 @@ def build_main_layout(window):
     scale_row.addStretch()
     scale_row.addWidget(right_scale)
     image_flat_lo.addLayout(scale_row)
-    wait_row = QHBoxLayout()
-    wait_row.setContentsMargins(0, 0, 0, 0)
-    wait_row.addWidget(form_label("Wait timeout"))
-    wait_row.addStretch()
-    self.ii_wait = inspector_value("1000", 58)
-    wait_row.addWidget(self.ii_wait)
-    wait_ms = QLabel("ms")
-    wait_ms.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-    wait_row.addWidget(wait_ms)
-    image_flat_lo.addLayout(wait_row)
+    self.ii_wait = inspector_value("1000", 68)
+    image_flat_lo.addLayout(inspector_field_row("Wait timeout", self.ii_wait, width=68, unit_text="ms"))
 
     image_flat_lo.addLayout(flat_section_title("Retry", "update", C["accent"]))
-    retry_values = QHBoxLayout()
-    retry_values.setContentsMargins(0, 0, 0, 0)
-    retry_values.setSpacing(7)
-    retry_values.addWidget(form_label("Retry attempts"))
     self.ii_retry_count = QSpinBox()
     self.ii_retry_count.setRange(1, 99)
-    self.ii_retry_count.setFixedSize(58, 28)
+    self.ii_retry_count.setFixedHeight(28)
     self.ii_retry_count.setStyleSheet(
         f"QSpinBox {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
         f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 8px; font-size: 11px; }}"
     )
-    retry_values.addWidget(self.ii_retry_count)
-    retry_values.addStretch()
-    image_flat_lo.addLayout(retry_values)
-    delay_row = QHBoxLayout()
-    delay_row.setContentsMargins(0, 0, 0, 0)
-    delay_row.setSpacing(7)
-    delay_row.addWidget(form_label("Retry delay"))
-    delay_row.addStretch()
+    image_flat_lo.addLayout(inspector_field_row("Retry attempts", self.ii_retry_count, width=58))
     self.ii_retry_delay = inspector_value("250", 68)
-    delay_row.addWidget(self.ii_retry_delay)
-    delay_row.addWidget(form_label("ms"))
-    image_flat_lo.addLayout(delay_row)
+    image_flat_lo.addLayout(inspector_field_row("Retry delay", self.ii_retry_delay, width=68, unit_text="ms"))
 
     image_flat_lo.addLayout(flat_section_title("On Fail", "condition", C["accent"]))
-    on_fail_row = QHBoxLayout()
-    on_fail_row.setContentsMargins(0, 0, 0, 0)
-    on_fail_row.addWidget(form_label("On fail"))
-    on_fail_row.addStretch()
     self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Group"])
-    self.ii_fail_mode.setFixedWidth(132)
-    on_fail_row.addWidget(self.ii_fail_mode)
-    image_flat_lo.addLayout(on_fail_row)
+    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=132))
 
     image_flat_lo.addLayout(flat_section_title("Fail Target", "target", C["accent"]))
-    target_row = QHBoxLayout()
-    target_row.setContentsMargins(0, 0, 0, 0)
-    target_row.addWidget(form_label("Fail target"))
-    target_row.addStretch()
     self.ii_fail_target = compact_combo()
-    self.ii_fail_target.setFixedWidth(132)
-    target_row.addWidget(self.ii_fail_target)
-    image_flat_lo.addLayout(target_row)
+    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=132))
 
     ii_lo.addWidget(image_flat_card)
 
@@ -1067,16 +1058,15 @@ def build_main_layout(window):
     ig_outer = QVBoxLayout(self.insp_group)
     ig_outer.setContentsMargins(0, 0, 0, 0)
     ig_outer.setSpacing(6)
-    group_card, ig_lo = inspector_group("GROUP", "folder", C["group"])
+    group_card, ig_lo = inspector_group("GROUP SETTINGS", "folder", C["group"])
     self.ig_name = form_input("group name")
     self.ig_collapsed = QCheckBox("Collapsed")
-    self.ig_recovery = QCheckBox("Recovery group")
+    self.ig_recovery = QCheckBox("Recovery")
     self.ig_meta = QLabel("0 actions - ~0.0s")
     self.ig_meta.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
-    ig_lo.addWidget(form_label("Group name"))
-    ig_lo.addWidget(self.ig_name)
-    ig_lo.addWidget(self.ig_collapsed)
-    ig_lo.addWidget(self.ig_recovery)
+    ig_lo.addLayout(inspector_field_row("Group name", self.ig_name))
+    ig_lo.addLayout(inspector_check_row("Collapsed", self.ig_collapsed))
+    ig_lo.addLayout(inspector_check_row("Recovery group", self.ig_recovery))
     ig_lo.addWidget(self.ig_meta)
     ig_outer.addWidget(group_card)
 
@@ -1084,24 +1074,22 @@ def build_main_layout(window):
     il_outer = QVBoxLayout(self.insp_loop)
     il_outer.setContentsMargins(0, 0, 0, 0)
     il_outer.setSpacing(6)
-    loop_card, il_lo = inspector_group("LOOP", "loop", C["loop"])
+    loop_card, il_lo = inspector_group("LOOP SETTINGS", "loop", C["loop"])
     self.il_label = form_input("loop label")
     self.il_count = QSpinBox()
     self.il_count.setRange(2, 9999)
     self.il_count.setFixedHeight(30)
     self.il_target = compact_combo()
     self.il_label.setVisible(False)
-    il_lo.addWidget(form_label("Repeat count"))
-    il_lo.addWidget(self.il_count)
-    il_lo.addWidget(form_label("Target"))
-    il_lo.addWidget(self.il_target)
+    il_lo.addLayout(inspector_field_row("Repeat count", self.il_count, width=132))
+    il_lo.addLayout(inspector_field_row("Target", self.il_target, width=132))
     il_outer.addWidget(loop_card)
 
     self.insp_condition = QWidget()
     ico_outer = QVBoxLayout(self.insp_condition)
     ico_outer.setContentsMargins(0, 0, 0, 0)
     ico_outer.setSpacing(6)
-    condition_card, ico_lo = inspector_group("CONDITION", "condition", C["condition"])
+    condition_card, ico_lo = inspector_group("CONDITION SETTINGS", "condition", C["condition"])
     self.ico_label = form_input("condition label")
     self.ico_type = compact_combo(["pixel_color", "variable", "none"])
     self.ico_true = compact_combo()
@@ -1113,25 +1101,22 @@ def build_main_layout(window):
     self.ico_fail_mode = compact_combo(["default", "continue", "stop", "jump", "recovery_group"])
     self.ico_fail_target = compact_combo()
     self.ico_rule = QLabel("Edit for pixel/variable values")
+    self.ico_rule.setWordWrap(True)
     self.ico_rule.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
     ico_retry = QHBoxLayout()
-    ico_retry.setSpacing(5)
+    ico_retry.setContentsMargins(0, 0, 0, 0)
+    ico_retry.setSpacing(6)
+    self.ico_retry_count.setFixedWidth(61)
+    self.ico_retry_delay.setFixedWidth(65)
     ico_retry.addWidget(self.ico_retry_count)
     ico_retry.addWidget(self.ico_retry_delay)
     self.ico_label.setVisible(False)
-    for label, widget in [
-        ("Type", self.ico_type),
-        ("True target", self.ico_true),
-        ("False target", self.ico_false),
-    ]:
-        ico_lo.addWidget(form_label(label))
-        ico_lo.addWidget(widget)
-    ico_lo.addWidget(form_label("Retry attempts / delay"))
-    ico_lo.addLayout(ico_retry)
-    ico_lo.addWidget(form_label("On false/fail"))
-    ico_lo.addWidget(self.ico_fail_mode)
-    ico_lo.addWidget(form_label("Fail target"))
-    ico_lo.addWidget(self.ico_fail_target)
+    ico_lo.addLayout(inspector_field_row("Type", self.ico_type, width=132))
+    ico_lo.addLayout(inspector_field_row("True target", self.ico_true, width=132))
+    ico_lo.addLayout(inspector_field_row("False target", self.ico_false, width=132))
+    ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=132))
+    ico_lo.addLayout(inspector_field_row("On false/fail", self.ico_fail_mode, width=132))
+    ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=132))
     ico_lo.addWidget(self.ico_rule)
     ico_outer.addWidget(condition_card)
 

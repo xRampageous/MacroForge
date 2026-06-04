@@ -449,10 +449,19 @@ class MainWindow(QMainWindow):
                     ctl = controls.get(body_name)
                     return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-                # Image settings are now flat inside the main Inspector, so
-                # automatic height collapse only manages the main side-panel
-                # cards. Expansion restores the same set in reverse order.
+                # Image actions use one collapsible Image Settings block inside
+                # the flat Inspector.  Let that block collapse before the main
+                # Inspector, then continue with the regular side-panel cards.
+                try:
+                    image_settings_visible = bool(
+                        getattr(self, "insp_image", None) is not None
+                        and self.insp_image.isVisible()
+                        and "inspector_group_image_settings_body" in controls
+                    )
+                except Exception:
+                    image_settings_visible = False
                 collapse_steps = [
+                    ("inspector_group_image_settings_body", image_settings_visible),
                     ("inspector_body", True),
                     ("recorder_body", True),
                     ("add_action_body", True),
@@ -602,6 +611,15 @@ class MainWindow(QMainWindow):
                     "add_action_body",
                     "recorder_body",
                     "inspector_body",
+                    "inspector_group_key_settings_body",
+                    "inspector_group_delay_settings_body",
+                    "inspector_group_click_settings_body",
+                    "inspector_group_image_settings_body",
+                    "inspector_group_group_settings_body",
+                    "inspector_group_loop_settings_body",
+                    "inspector_group_condition_settings_body",
+                    # Legacy names from older Inspector layouts.  Harmless if
+                    # absent and keeps patched user trees resilient.
                     "inspector_group_key_action_body",
                     "inspector_group_pause_action_body",
                     "inspector_group_click_action_body",
