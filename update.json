@@ -1,6 +1,6 @@
 {
-  "version": "3.5.13",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.13/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.13/MacroForge-v3.5.13.zip",
-  "notes": "v3.5.13: Apply selection expand group move followup patch - updated main_window.py and main_window_layout.py with selection expand group move followup."
+  "version": "3.5.14",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.14/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.14/MacroForge-v3.5.14.zip",
+  "notes": "v3.5.14: Apply timeline selection resize stability patch - updated main_window.py with timeline selection resize stability."
 }
