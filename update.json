@@ -1,6 +1,6 @@
 {
-  "version": "3.5.44",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.44/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.44/MacroForge-v3.5.44.zip",
-  "notes": "v3.5.44: Apply side panel header fit unlocked reveal patch - updated main_window.py and main_window_layout.py with side panel header fit unlocked reveal."
+  "version": "3.5.43",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.43/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.43/MacroForge-v3.5.43.zip",
+  "notes": "v3.5.43: Apply side panel fit branding update polish patch - updated icons.py, main_window.py and main_window_layout.py with side panel fit branding update polish."
 }
