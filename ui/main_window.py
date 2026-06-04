@@ -283,9 +283,63 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._update_responsive_panels()
+        vertical_changed = True
+        try:
+            old_size = event.oldSize()
+            new_size = event.size()
+            if old_size.isValid():
+                vertical_changed = old_size.height() != new_size.height()
+        except Exception:
+            vertical_changed = True
+
+        try:
+            # During live vertical resizing, panel height animations can fight
+            # the user's drag and leave bodies half-clamped.  Do not let the
+            # height auto-collapser toggle panels on every pixel; settle current
+            # animations now, then run the responsive height pass once the resize
+            # event storm has paused.
+            if vertical_changed:
+                self._panel_resize_generation = int(getattr(self, "_panel_resize_generation", 0)) + 1
+                generation = self._panel_resize_generation
+                self._suppress_auto_panel_animations = True
+                settler = getattr(self, "_settle_active_collapse_animations", None)
+                if settler is not None:
+                    settler()
+            else:
+                generation = int(getattr(self, "_panel_resize_generation", 0))
+        except Exception:
+            generation = 0
+
+        # Width-based side rail behavior can stay immediate.  Height-based panel
+        # collapsing/expanding is debounced below to avoid animation/resize jitter.
+        self._update_responsive_side_panel()
+        if not vertical_changed:
+            self._update_responsive_height_panels()
         self._autosize_inspector_panel()
         self._apply_panel_size_locks()
+
+        try:
+            def _release_resize_animation_suppression(gen=generation, was_vertical=vertical_changed):
+                if int(getattr(self, "_panel_resize_generation", 0)) != int(gen):
+                    return
+                settler = getattr(self, "_settle_active_collapse_animations", None)
+                if settler is not None:
+                    settler()
+                if was_vertical:
+                    # Apply responsive height changes only after the vertical resize
+                    # has settled, and keep animation suppression enabled for this
+                    # pass so panels snap cleanly instead of glitching mid-drag.
+                    self._suppress_auto_panel_animations = True
+                    self._update_responsive_height_panels()
+                    if settler is not None:
+                        settler()
+                    self._autosize_inspector_panel()
+                self._suppress_auto_panel_animations = False
+                self._autosize_inspector_panel()
+
+            QTimer.singleShot(90 if vertical_changed else 0, _release_resize_animation_suppression)
+        except Exception:
+            self._suppress_auto_panel_animations = False
 
     def _update_responsive_panels(self):
         """Auto-hide panels for both width and height pressure."""
@@ -631,6 +685,88 @@ class MainWindow(QMainWindow):
                 self.setMinimumSize(int(getattr(self, "_base_min_width", 760)), base_h)
         except Exception:
             pass
+
+    def _reveal_selection_panels(self, action_type=None):
+        """Open the side/Inspector path needed for the currently selected action.
+
+        Selecting a timeline row should always make the matching Inspector
+        visible, even if the side panel or Inspector sections were previously
+        collapsed by compact-height mode or by the user.  This reveal is
+        intentionally scoped to the selected Inspector path so Add Action and
+        Recorder user-collapse preferences are not stomped by every selection.
+        """
+        try:
+            if int(getattr(self, "active_index", -1)) < 0:
+                return
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+
+            # A timeline click is an explicit reveal request.  Use auto=False so
+            # a previously user-collapsed side rail or Inspector is reopened and
+            # its manual-collapsed flag is cleared for the selected action path.
+            side_setter = getattr(self, "_set_side_panel_collapsed", None)
+            if bool(getattr(self, "_side_panel_collapsed", False)) and side_setter is not None:
+                side_setter(False, auto=False)
+
+            set_panel = getattr(self, "_set_collapsible_panel", None)
+            if set_panel is None:
+                return
+
+            set_panel("inspector_body", False, auto=False)
+
+            body_for_type = {
+                "key": "inspector_group_key_action_body",
+                "pause": "inspector_group_delay_action_body",
+                "click": "inspector_group_click_action_body",
+                "group": "inspector_group_group_body",
+                "loop": "inspector_group_loop_body",
+                "condition": "inspector_group_condition_body",
+            }.get(str(action_type or "").lower())
+            if body_for_type:
+                set_panel(body_for_type, False, auto=False)
+
+            if str(action_type or "").lower() == "image":
+                for body_name in (
+                    "inspector_group_image_body",
+                    "inspector_group_matching_body",
+                    "inspector_group_retry_body",
+                    "inspector_group_on_fail_body",
+                    "inspector_group_fail_target_body",
+                ):
+                    set_panel(body_name, False, auto=False)
+
+            self._autosize_inspector_panel()
+            if hasattr(self, "sidebar_frame"):
+                self.sidebar_frame.updateGeometry()
+            QTimer.singleShot(0, self._autosize_inspector_panel)
+            QTimer.singleShot(35, self._refresh_unlocked_selection_height)
+        except Exception:
+            pass
+
+    def _timeline_action_selected(self, index):
+        """Handle timeline clicks, including clicks on the already-active row.
+
+        Qt's currentChanged signal does not fire when the user clicks the row
+        that is already selected.  The timeline still emits action_clicked, so
+        route it here to re-open collapsed side/Inspector panels every time the
+        user deliberately clicks an action.
+        """
+        try:
+            self.select(index)
+            if index is None or index < 0 or index >= self.action_model.rowCount():
+                return
+            action = self.action_model.get(index)
+            action_type = getattr(action, "action_type", None)
+            self._reveal_selection_panels(action_type)
+            QTimer.singleShot(0, lambda kind=action_type: self._reveal_selection_panels(kind))
+            QTimer.singleShot(45, lambda kind=action_type: self._reveal_selection_panels(kind))
+            self._refresh_unlocked_selection_height()
+            QTimer.singleShot(90, self._refresh_unlocked_selection_height)
+        except Exception:
+            try:
+                self.select(index)
+            except Exception:
+                pass
 
     def _auto_grow_for_active_selection(self):
         """Unlocked selection should reveal the selected Inspector instead of leaving it clipped."""
@@ -1193,7 +1329,7 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _setup_timeline_connections(self):
-        self.timeline.action_clicked.connect(self.select)
+        self.timeline.action_clicked.connect(self._timeline_action_selected)
         self.timeline.action_double_clicked.connect(self._open_active_dialog)
         self.timeline.action_dragged.connect(self.move_action_to)
         if hasattr(self.timeline, "action_dragged_many"):
@@ -1881,6 +2017,7 @@ class MainWindow(QMainWindow):
 
     def select(self, index):
         self._inspector_loading = True
+        selected_action_type = None
         try:
             if index is None or index < 0 or index >= self.action_model.rowCount():
                 self.active_index = -1
@@ -1915,6 +2052,7 @@ class MainWindow(QMainWindow):
                 self.timeline.selected_indices.clear()
                 self.timeline.set_active(index)
             action = self.action_model.get(index)
+            selected_action_type = getattr(action, "action_type", None)
             self._update_timeline_links(index)
             self.inspector_selector.clear()
             if action.action_type == "image":
@@ -2019,6 +2157,9 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, self._apply_panel_size_locks)
                 QTimer.singleShot(35, self._apply_panel_size_locks)
             else:
+                if selected_action_type is not None and int(getattr(self, "active_index", -1)) >= 0:
+                    self._reveal_selection_panels(selected_action_type)
+                    QTimer.singleShot(0, lambda kind=selected_action_type: self._reveal_selection_panels(kind))
                 self._refresh_unlocked_selection_height()
                 QTimer.singleShot(35, self._refresh_unlocked_selection_height)
                 QTimer.singleShot(90, self._refresh_unlocked_selection_height)
