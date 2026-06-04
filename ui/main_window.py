@@ -910,37 +910,91 @@ class MainWindow(QMainWindow):
             self._clear_selection_reveal_from_click()
 
     def _expand_inspector_for_timeline_selection(self):
-        """Open the Inspector area when an action is explicitly selected.
+        """Open the Inspector/action settings after any timeline row click.
 
-        This is intentionally limited to Inspector-owned sections. It does not
-        change side-panel resize thresholds or force a persistent selected-row
-        height lock; it simply makes the selected action editor fully visible
-        once when the user clicks a timeline action in unlocked mode.
+        Re-clicking the already-selected row must behave like the first click:
+        expand the Inspector and the selected action settings in one click, then
+        perform the same one-shot unlocked height reveal without holding the
+        window size afterward.
         """
         try:
             setter = getattr(self, "_set_collapsible_panel", None)
             if not callable(setter):
                 return
+
             controls = getattr(self, "_panel_collapse_controls", {}) or {}
-            for body_name in (
-                "inspector_body",
-                "inspector_group_key_settings_body",
-                "inspector_group_delay_settings_body",
-                "inspector_group_click_settings_body",
-                "inspector_group_image_settings_body",
-                "inspector_group_group_settings_body",
-                "inspector_group_loop_settings_body",
-                "inspector_group_condition_settings_body",
-            ):
-                if body_name in controls:
-                    setter(body_name, False, auto=False)
-            if hasattr(self, "_autosize_inspector_panel"):
-                self._autosize_inspector_panel()
-            try:
-                QTimer.singleShot(35, self._autosize_inspector_panel)
-                QTimer.singleShot(90, self._autosize_inspector_panel)
-            except Exception:
-                pass
+
+            def _current_action_kind():
+                try:
+                    if 0 <= int(getattr(self, "active_index", -1)) < self.action_model.rowCount():
+                        return getattr(self.action_model.get(self.active_index), "action_type", "") or "key"
+                except Exception:
+                    pass
+                return ""
+
+            def _selected_body_names():
+                kind = _current_action_kind()
+                names = ["inspector_body"]
+                body_by_kind = {
+                    "key": "inspector_group_key_settings_body",
+                    "pause": "inspector_group_delay_settings_body",
+                    "click": "inspector_group_click_settings_body",
+                    "image": "inspector_group_image_settings_body",
+                    "group": "inspector_group_group_settings_body",
+                    "loop": "inspector_group_loop_settings_body",
+                    "condition": "inspector_group_condition_settings_body",
+                }
+                body_name = body_by_kind.get(kind)
+                if body_name:
+                    names.append(body_name)
+                # Keep a safe fallback for older/current flat Inspector builds:
+                # hidden panes are ignored by Qt, but clearing their collapsed flags
+                # prevents repeated clicks from opening only one nested body at a time.
+                names.extend([
+                    "inspector_group_key_settings_body",
+                    "inspector_group_delay_settings_body",
+                    "inspector_group_click_settings_body",
+                    "inspector_group_image_settings_body",
+                    "inspector_group_group_settings_body",
+                    "inspector_group_loop_settings_body",
+                    "inspector_group_condition_settings_body",
+                ])
+                ordered = []
+                seen = set()
+                for name in names:
+                    if name in controls and name not in seen:
+                        ordered.append(name)
+                        seen.add(name)
+                return ordered
+
+            def _expand_once():
+                try:
+                    for body_name in _selected_body_names():
+                        ctl = controls.get(body_name)
+                        body_widget = ctl[0] if ctl else None
+                        if body_widget is not None:
+                            body_widget.setProperty("user_collapsed", False)
+                            body_widget.setProperty("auto_collapsed", False)
+                        setter(body_name, False, auto=False)
+
+                    autosize = getattr(self, "_autosize_inspector_panel", None)
+                    if callable(autosize):
+                        autosize()
+                    grow = getattr(self, "_grow_window_for_unlocked_selection_content", None)
+                    if callable(grow):
+                        grow()
+                except Exception:
+                    pass
+
+            # Run immediately and then retry shortly while Qt finishes any
+            # collapse/expand animation. This gives re-clicked selected rows the
+            # same one-click reveal as newly selected rows.
+            _expand_once()
+            for delay in (18, 45, 92):
+                try:
+                    QTimer.singleShot(delay, _expand_once)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -2254,6 +2308,26 @@ class MainWindow(QMainWindow):
         if self._run_index_map and 0 <= idx < len(self._run_index_map):
             return self._run_index_map[idx]
         return self._single_test_index if self._single_test_active and idx == 0 else self._run_from_index + idx
+
+    def _status_pill_display_text(self, text, limit=None):
+        """Return status-pill text capped for the top toolbar.
+
+        The full message is still preserved as the QLabel tooltip by status().
+        """
+        full_text = str(text or "")
+        try:
+            if limit is None:
+                label = getattr(self, "status_text", None)
+                limit = int(label.property("max_chars") or 43) if label is not None else 43
+        except Exception:
+            limit = 43
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 43
+        if limit <= 0 or len(full_text) <= limit:
+            return full_text
+        return full_text[:max(0, limit - 1)].rstrip() + "…"
 
     # ═══════════════════════════════════════════════════════
     #  SELECTION & EDITING

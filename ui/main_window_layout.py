@@ -1100,11 +1100,11 @@ def build_main_layout(window):
 
     image_flat_lo.addLayout(flat_section_title("On Fail", "condition", C["accent"]))
     self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Group"])
-    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=132))
+    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=112))
 
     image_flat_lo.addLayout(flat_section_title("Fail Target", "target", C["accent"]))
     self.ii_fail_target = compact_combo()
-    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=132))
+    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=112))
 
     ii_lo.addWidget(image_flat_card)
 
@@ -1601,6 +1601,8 @@ def build_main_layout(window):
     self.status_icon.setVisible(False)
     sp_lo.addWidget(self.status_icon)
     self.status_text = QLabel("Ready")
+    self.status_text.setProperty("max_chars", 43)
+    self.status_text.setToolTip("Ready")
     self.status_text.setObjectName("status_text")
     self.status_text.setAutoFillBackground(False)
     self.status_text.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
