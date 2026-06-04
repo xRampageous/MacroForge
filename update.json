@@ -1,6 +1,6 @@
 {
-  "version": "3.5.14",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.14/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.14/MacroForge-v3.5.14.zip",
-  "notes": "v3.5.14: Apply timeline selection resize stability patch - updated main_window.py with timeline selection resize stability."
+  "version": "3.5.15",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.15/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.15/MacroForge-v3.5.15.zip",
+  "notes": "v3.5.15: Apply vertical resize panel response fix patch - updated main_window.py with vertical resize panel response fix."
 }
