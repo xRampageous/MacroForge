@@ -962,6 +962,15 @@ class MainWindow(QMainWindow):
                 self._expand_inspector_for_timeline_selection()
                 QTimer.singleShot(0, self._grow_window_for_unlocked_selection_content)
                 QTimer.singleShot(35, self._grow_window_for_unlocked_selection_content)
+                # Clicking an already-selected row may not produce a selection
+                # change, but it should still reopen the Inspector/action
+                # settings body.  Queue a couple of reveal passes after Qt has
+                # processed the click and layout updates so collapsed action
+                # settings expand reliably on repeated clicks.
+                QTimer.singleShot(0, self._expand_inspector_for_timeline_selection)
+                QTimer.singleShot(45, self._expand_inspector_for_timeline_selection)
+                QTimer.singleShot(45, self._grow_window_for_unlocked_selection_content)
+                QTimer.singleShot(90, self._refresh_unlocked_selection_height)
             try:
                 rows = self._selected_rows(index)
                 if len(rows) > 1:

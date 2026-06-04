@@ -934,16 +934,19 @@ def build_main_layout(window):
     self.ic_y = form_input("y")
     xy = QHBoxLayout()
     xy.setContentsMargins(0, 0, 0, 0)
-    xy.setSpacing(6)
-    self.ic_x.setFixedWidth(63)
-    self.ic_y.setFixedWidth(63)
+    xy.setSpacing(5)
+    # Fit the paired X/Y coordinate inputs inside the 255px Inspector card.
+    # The shared row helper clamps the right-side value holder, so the paired
+    # controls must include their own spacing in the requested holder width.
+    self.ic_x.setFixedWidth(46)
+    self.ic_y.setFixedWidth(46)
     xy.addWidget(self.ic_x)
     xy.addWidget(self.ic_y)
     self.ic_btn = compact_combo(["left", "right", "middle"])
     self.ic_rand = form_input("rand")
     self.ic_repeat = form_input("repeat", "1")
     self.ic_label = form_input("label")
-    ic_lo.addLayout(inspector_field_row("X / Y", xy, width=102))
+    ic_lo.addLayout(inspector_field_row("X / Y", xy, width=97))
     ic_lo.addLayout(inspector_field_row("Button", self.ic_btn))
     ic_lo.addLayout(inspector_field_row("Randomness", self.ic_rand))
     ic_lo.addLayout(inspector_field_row("Repeat", self.ic_repeat))
