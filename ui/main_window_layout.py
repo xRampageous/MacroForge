@@ -110,6 +110,41 @@ def build_main_layout(window):
             except Exception:
                 pass
 
+        def _queue_side_panel_rebalance(reason="collapse", delays=(0, 45, 95, 165)):
+            """Let the side-panel stack settle into space freed by a collapse/expand.
+
+            The rebalancer is intentionally passive: it does not add resize
+            thresholds or change lock state.  It only invalidates/activates the
+            side-panel layout and refreshes stale height clamps so the spacer
+            and Inspector can absorb freed height smoothly while a body animates.
+            """
+            rebalance = getattr(self, "_rebalance_side_panel_space", None)
+            if not callable(rebalance):
+                return
+            for delay in delays:
+                try:
+                    if delay <= 0:
+                        rebalance(reason=reason)
+                    else:
+                        QTimer.singleShot(delay, lambda r=reason: rebalance(reason=r))
+                except Exception:
+                    pass
+
+        def _side_panel_animation_tick(_value=None):
+            try:
+                body_widget.updateGeometry()
+                if parent is not None:
+                    parent.updateGeometry()
+                sidebar_frame = getattr(self, "sidebar_frame", None)
+                if sidebar_frame is not None:
+                    layout = sidebar_frame.layout()
+                    if layout is not None:
+                        layout.invalidate()
+                        layout.activate()
+                    sidebar_frame.updateGeometry()
+            except Exception:
+                pass
+
         def _finish_parent():
             if parent is None:
                 return
@@ -183,9 +218,15 @@ def build_main_layout(window):
                 _finish_parent()
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
+                _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 45, 120))
 
+            try:
+                anim.valueChanged.connect(_side_panel_animation_tick)
+            except Exception:
+                pass
             anim.finished.connect(_finished)
             self._collapse_animations[anim_key] = anim
+            _queue_side_panel_rebalance(reason=f"{body_name}.start", delays=(0, 35))
             anim.start()
         except Exception:
             if collapsed:
@@ -195,7 +236,9 @@ def build_main_layout(window):
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
             _finish_parent()
+            _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 45, 120))
         body_widget.updateGeometry()
+        _side_panel_animation_tick()
 
     def _set_collapsible_panel(body_name, collapsed, auto=False):
         body_widget, caret = self._panel_collapse_controls.get(body_name, (None, None))
@@ -989,6 +1032,106 @@ def build_main_layout(window):
     self.add_action_body = add_body
     self.recorder_body = rec_body
     self.insp_card = insp_card
+
+    def _rebalance_side_panel_space(reason="", final=False):
+        """Re-settle the side-panel layout after a section collapse/expand.
+
+        Collapsing Add Action, Recorder, or Image Inspector sub-sections frees
+        vertical space.  This helper keeps that extra space inside the sidebar
+        layout instead of letting stale max-height clamps or a delayed layout
+        pass cause visible jumps.  It is layout-only and does not change the
+        user's manual collapsed state, lock state, or auto-collapse thresholds.
+        """
+        try:
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                return
+
+            controls = getattr(self, "_panel_collapse_controls", {})
+            active_anims = getattr(self, "_collapse_animations", {})
+            body_names = (
+                "add_action_body",
+                "recorder_body",
+                "inspector_body",
+                "inspector_group_image_body",
+                "inspector_group_matching_body",
+                "inspector_group_retry_body",
+                "inspector_group_on_fail_body",
+                "inspector_group_fail_target_body",
+            )
+
+            for body_name in body_names:
+                ctl = controls.get(body_name)
+                if not ctl:
+                    continue
+                body, caret = ctl
+                if body is None or caret is None:
+                    continue
+
+                anim_key = body.objectName() or str(id(body))
+                is_animating = anim_key in active_anims
+                is_collapsed = bool(caret.property("collapsed"))
+                parent = body.parentWidget()
+
+                body.setMinimumHeight(0)
+                if is_animating:
+                    # Let the active height animation own maximumHeight; just
+                    # push geometry updates through the parent/sidebar layouts.
+                    body.updateGeometry()
+                    if parent is not None:
+                        parent.updateGeometry()
+                    continue
+
+                if is_collapsed:
+                    body.setMaximumHeight(0)
+                    body.setVisible(False)
+                    if parent is not None:
+                        parent.setMinimumHeight(0)
+                        parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
+                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                        parent.updateGeometry()
+                else:
+                    body.setVisible(True)
+                    body.setMaximumHeight(16777215)
+                    body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                    if parent is not None:
+                        parent.setMinimumHeight(0)
+                        parent.setMaximumHeight(16777215)
+                        if parent.objectName() == "inspector_card":
+                            parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                        else:
+                            parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                        parent.updateGeometry()
+                    body.updateGeometry()
+
+            spacer = getattr(self, "_side_panel_bottom_spacer", None)
+            if spacer is not None:
+                spacer.setMinimumHeight(0)
+                spacer.setMaximumHeight(16777215)
+                spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+                spacer.updateGeometry()
+
+            if hasattr(self, "_autosize_inspector_panel"):
+                # Inspector content may have just gained/returned height.  Run
+                # this after releases above so it clamps to the current natural
+                # selected pane, not a stale collapsed value.
+                try:
+                    self._autosize_inspector_panel()
+                except Exception:
+                    pass
+
+            layout = sidebar.layout()
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+            sidebar.updateGeometry()
+            central_widget = self.centralWidget()
+            if central_widget is not None and central_widget.layout() is not None:
+                central_widget.layout().invalidate()
+                central_widget.layout().activate()
+        except Exception:
+            pass
+
+    self._rebalance_side_panel_space = _rebalance_side_panel_space
 
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
