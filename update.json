@@ -1,6 +1,6 @@
 {
-  "version": "3.5.34",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.34/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.34/MacroForge-v3.5.34.zip",
-  "notes": "v3.5.34: Apply side panel animation stability fix patch - updated main_window_layout.py with side panel animation stability fix."
+  "version": "3.5.35",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.35/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.35/MacroForge-v3.5.35.zip",
+  "notes": "v3.5.35: Apply side panel collapse order snappy animation patch - updated main_window.py and main_window_layout.py with side panel collapse order snappy animation."
 }
