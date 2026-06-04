@@ -442,6 +442,17 @@ class MainWindow(QMainWindow):
             if any_panel_locked:
                 return
 
+            # Collapse/expand must be serialized.  Nested Inspector groups are
+            # inside the main Inspector card, so a second guard pass while one
+            # section is still animating can measure the half-collapsed parent
+            # and start the next step too early.  Defer until the animation
+            # finish callback has released height clamps and refreshed layout.
+            active_anims = getattr(self, "_collapse_animations", {})
+            if active_anims:
+                self._side_panel_responsive_retry_pending = True
+                return
+            self._side_panel_responsive_retry_pending = False
+
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
                 image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
                 controls = getattr(self, "_panel_collapse_controls", {})
@@ -569,7 +580,12 @@ class MainWindow(QMainWindow):
                 if hits_app_bottom:
                     for body_name, _enabled in active_steps:
                         if not _panel_collapsed(body_name):
-                            set_panel(body_name, True, auto=True)
+                            if set_panel(body_name, True, auto=True):
+                                # Run exactly one auto step.  The animation
+                                # finish/settle pass will re-check the bottom
+                                # contact and decide whether the next section
+                                # is still needed.
+                                self._side_panel_responsive_retry_pending = True
                             break
                 else:
                     # Expand in reverse order, but only when the next section's
@@ -580,7 +596,9 @@ class MainWindow(QMainWindow):
                         if _panel_collapsed(body_name):
                             delta_h = _estimated_expand_delta(body_name)
                             if stack_h + delta_h <= max(0, available_h - restore_margin):
-                                set_panel(body_name, False, auto=True)
+                                if set_panel(body_name, False, auto=True):
+                                    # Same one-step scheduler for expansion.
+                                    self._side_panel_responsive_retry_pending = True
                             break
 
             if hasattr(self, "playback_panel"):

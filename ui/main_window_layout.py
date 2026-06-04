@@ -72,6 +72,7 @@ def build_main_layout(window):
 
     self._panel_collapse_controls = {}
     self._collapse_animations = {}
+    self._side_panel_responsive_retry_pending = False
 
     def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
@@ -344,7 +345,16 @@ def build_main_layout(window):
                 _finish_parent()
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
+                # The app-bottom guard should run only after the current
+                # animation has fully settled.  Mark that a retry is wanted;
+                # the responsive helper will no-op if another panel is still
+                # animating, then the last finished panel will trigger it again.
+                self._side_panel_responsive_retry_pending = True
+                responsive_height = getattr(self, "_update_responsive_height_panels", None)
                 _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 24, 65))
+                if callable(responsive_height):
+                    QTimer.singleShot(0, responsive_height)
+                    QTimer.singleShot(45, responsive_height)
 
             try:
                 anim.valueChanged.connect(_side_panel_animation_tick)
@@ -1300,6 +1310,7 @@ def build_main_layout(window):
                 responsive_height = getattr(self, "_update_responsive_height_panels", None)
                 if callable(responsive_height):
                     QTimer.singleShot(0, responsive_height)
+                    QTimer.singleShot(45, responsive_height)
         except Exception:
             pass
 
