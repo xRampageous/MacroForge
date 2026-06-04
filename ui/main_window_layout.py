@@ -141,6 +141,9 @@ def build_main_layout(window):
                     if layout is not None:
                         layout.invalidate()
                         layout.activate()
+                    hug = getattr(self, "_apply_side_panel_content_hug", None)
+                    if callable(hug):
+                        hug(reason=f"{body_name}.animation")
                     sidebar_frame.updateGeometry()
             except Exception:
                 pass
@@ -438,6 +441,7 @@ def build_main_layout(window):
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
     sidebar.setFixedWidth(270)
+    sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #020A13, stop:1 #000309); border-right: 1px solid {C['border']}; }}"
@@ -992,8 +996,9 @@ def build_main_layout(window):
     sb_lo.addWidget(insp_card, stretch=0)
     self._side_panel_bottom_spacer = QWidget()
     self._side_panel_bottom_spacer.setObjectName("side_panel_bottom_spacer")
-    self._side_panel_bottom_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-    sb_lo.addWidget(self._side_panel_bottom_spacer, stretch=1)
+    self._side_panel_bottom_spacer.setFixedHeight(0)
+    self._side_panel_bottom_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+    sb_lo.addWidget(self._side_panel_bottom_spacer, stretch=0)
 
     self._side_panel_collapsed = False
     self._side_panel_auto_collapsed = False
@@ -1033,14 +1038,90 @@ def build_main_layout(window):
     self.recorder_body = rec_body
     self.insp_card = insp_card
 
+    def _apply_side_panel_content_hug(reason=""):
+        """Keep the expanded side-panel frame hugging its visible cards.
+
+        The sidebar itself is now top-aligned in the main layout.  When panels
+        collapse, the old expanding spacer must not absorb the freed height
+        inside the visible side-panel frame, otherwise the frame stretches down
+        into a large dead area below the last card.  This helper releases stale
+        clamps, recalculates the natural visible-card height, then caps the
+        sidebar to that height so its bottom follows the last visible panel.
+        """
+        try:
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                sidebar.setMinimumHeight(0)
+                sidebar.setMaximumHeight(16777215)
+                sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+                return
+
+            spacer = getattr(self, "_side_panel_bottom_spacer", None)
+            if spacer is not None:
+                spacer.setMinimumHeight(0)
+                spacer.setMaximumHeight(0)
+                spacer.setFixedHeight(0)
+                spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+                spacer.updateGeometry()
+
+            sidebar.setMinimumHeight(0)
+            sidebar.setMaximumHeight(16777215)
+            sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
+
+            layout = sidebar.layout()
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+
+            # Use the current laid-out top-level sidebar card heights where
+            # possible so the frame follows an active collapse animation instead
+            # of waiting for the final sizeHint to settle.
+            hug_h = 0
+            if layout is not None:
+                margins = layout.contentsMargins()
+                hug_h = margins.top() + margins.bottom()
+                visible_items = []
+                for i in range(layout.count()):
+                    item = layout.itemAt(i)
+                    widget = item.widget() if item is not None else None
+                    if widget is None or widget is spacer or not widget.isVisible():
+                        continue
+                    visible_items.append(widget)
+                if visible_items:
+                    spacing = max(0, layout.spacing())
+                    hug_h += spacing * max(0, len(visible_items) - 1)
+                    for widget in visible_items:
+                        current_h = widget.height()
+                        if current_h <= 0:
+                            current_h = widget.sizeHint().height()
+                        hug_h += max(0, current_h)
+
+            hint_h = max(sidebar.minimumSizeHint().height(), sidebar.sizeHint().height())
+            target_h = max(1, min(max(hug_h, 1), max(hint_h, 1)))
+            # Keep the cap safely within the current window height while allowing
+            # a couple of pixels for border/layout rounding.
+            window_h = max(1, self.height())
+            target_h = min(window_h, target_h + 2)
+            sidebar.setMaximumHeight(target_h)
+            sidebar.updateGeometry()
+
+            central_widget = self.centralWidget()
+            if central_widget is not None and central_widget.layout() is not None:
+                central_widget.layout().invalidate()
+                central_widget.layout().activate()
+        except Exception:
+            pass
+
+    self._apply_side_panel_content_hug = _apply_side_panel_content_hug
+
     def _rebalance_side_panel_space(reason="", final=False):
         """Re-settle the side-panel layout after a section collapse/expand.
 
         Collapsing Add Action, Recorder, or Image Inspector sub-sections frees
-        vertical space.  This helper keeps that extra space inside the sidebar
-        layout instead of letting stale max-height clamps or a delayed layout
-        pass cause visible jumps.  It is layout-only and does not change the
-        user's manual collapsed state, lock state, or auto-collapse thresholds.
+        vertical space.  This helper keeps the visible side-panel frame content-
+        hugged so that freed height appears outside the frame instead of as a
+        dead area below the last sidebar card.  It is layout-only and does not
+        change the user's manual collapsed state, lock state, or auto-collapse
+        thresholds.
         """
         try:
             if bool(getattr(self, "_side_panel_collapsed", False)):
@@ -1106,8 +1187,9 @@ def build_main_layout(window):
             spacer = getattr(self, "_side_panel_bottom_spacer", None)
             if spacer is not None:
                 spacer.setMinimumHeight(0)
-                spacer.setMaximumHeight(16777215)
-                spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+                spacer.setMaximumHeight(0)
+                spacer.setFixedHeight(0)
+                spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
                 spacer.updateGeometry()
 
             if hasattr(self, "_autosize_inspector_panel"):
@@ -1123,6 +1205,9 @@ def build_main_layout(window):
             if layout is not None:
                 layout.invalidate()
                 layout.activate()
+            hug = getattr(self, "_apply_side_panel_content_hug", None)
+            if callable(hug):
+                hug(reason=reason)
             sidebar.updateGeometry()
             central_widget = self.centralWidget()
             if central_widget is not None and central_widget.layout() is not None:
@@ -1132,6 +1217,11 @@ def build_main_layout(window):
             pass
 
     self._rebalance_side_panel_space = _rebalance_side_panel_space
+    try:
+        QTimer.singleShot(0, lambda: self._apply_side_panel_content_hug(reason="initial"))
+        QTimer.singleShot(120, lambda: self._apply_side_panel_content_hug(reason="initial.settle"))
+    except Exception:
+        pass
 
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
@@ -1146,6 +1236,14 @@ def build_main_layout(window):
         sidebar.setFixedWidth(target_width)
         sidebar.setMinimumWidth(target_width)
         sidebar.setMaximumWidth(target_width)
+        if collapsed:
+            sidebar.setMinimumHeight(0)
+            sidebar.setMaximumHeight(16777215)
+            sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        else:
+            sidebar.setMinimumHeight(0)
+            sidebar.setMaximumHeight(16777215)
+            sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
         margin = 0 if collapsed else 10
         sb_lo.setContentsMargins(margin, 14, margin, 10)
         brand_box.setVisible(not collapsed)
@@ -1185,7 +1283,7 @@ def build_main_layout(window):
             auto=False,
         )
     )
-    main_lo.addWidget(sidebar)
+    main_lo.addWidget(sidebar, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
     # Main workspace.
     content = QFrame()
