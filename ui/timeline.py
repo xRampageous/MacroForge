@@ -309,6 +309,14 @@ class TimelineDelegate(QStyledItemDelegate):
                     self._rounded_rect(painter, shadow, 8, shadow_col.name(QColor.NameFormat.HexArgb))
                 self._rounded_rect(painter, outer, 8, bg, border, 1)
 
+            search_active = bool((getattr(view, "_search", "") or "").strip())
+            if search_active and hasattr(view, "_row_matches_search") and view._row_matches_search(row):
+                search_border = QColor(COLORS.get("accent", type_color))
+                search_border.setAlpha(145 if row == getattr(view, "_search_focus_row", -1) else 84)
+                painter.setPen(QPen(search_border, 1.4 if row == getattr(view, "_search_focus_row", -1) else 1.0))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(QRectF(outer).adjusted(1, 1, -1, -1), 8, 8)
+
             # Compact-aware layout. Timeline metadata stays visible at every
             # supported window size; only the progress rail flexes horizontally.
             compact = outer.width() < 760
@@ -649,6 +657,7 @@ class TimelineView(QListView):
         self.image_states = {}
         self._search = ""
         self._quick_filter = "all"
+        self._search_focus_row = -1
         self._drag_start_row = -1
         self._drag_allowed = False
         self.drag_source_row = -1
@@ -1574,25 +1583,37 @@ class TimelineView(QListView):
         return True
 
     def _row_matches_quick_filter(self, row: int) -> bool:
-        filt = (self._quick_filter or "all").lower()
-        if filt in {"", "all"}:
+        filt = (self._quick_filter or "all").strip().lower()
+        if filt in {"", "all", "all actions"}:
             return True
         actions = self._actions()
         if row < 0 or row >= len(actions):
             return False
         action = actions[row]
         kind = getattr(action, "action_type", "key") or "key"
-        if filt == "images":
+        if kind == "pause":
+            kind = "delay"
+        if filt in {"key", "keys"}:
+            return kind == "key"
+        if filt in {"click", "clicks"}:
+            return kind == "click"
+        if filt in {"delay", "delays", "pause", "pauses"}:
+            return kind in {"delay", "pause"}
+        if filt in {"image", "images", "image actions"}:
             return kind == "image"
-        if filt == "loops":
-            return kind == "loop"
-        if filt == "conditions":
+        if filt in {"condition", "conditions"}:
             return kind == "condition"
-        if filt == "groups":
+        if filt in {"loop", "loops"}:
+            return kind == "loop"
+        if filt in {"group", "groups"}:
             return kind == "group"
-        if filt == "warnings":
+        if filt in {"selected", "selected only"}:
+            return row in getattr(self, "selected_indices", set())
+        if filt in {"disabled", "disabled actions"}:
+            return not bool(getattr(action, "enabled", True))
+        if filt in {"warnings", "warning", "errors", "error", "errors / warnings", "warnings / missing data"}:
             return (not bool(getattr(action, "enabled", True))) or (kind == "image" and not getattr(action, "image_data", ""))
-        if filt == "current group":
+        if filt in {"current group", "active group"}:
             if not self.active_group_id:
                 return True
             return getattr(action, "group_id", "") == self.active_group_id
@@ -1600,6 +1621,52 @@ class TimelineView(QListView):
 
     def is_row_filtered_hidden(self, row: int) -> bool:
         return not (self._row_matches_search(row) and self._row_matches_quick_filter(row))
+
+    def search_match_rows(self):
+        if not (self._search or "").strip():
+            return []
+        rows = []
+        for row in range(self.model().rowCount()):
+            if self.is_row_collapsed_hidden(row):
+                continue
+            if self._row_matches_search(row) and self._row_matches_quick_filter(row):
+                rows.append(row)
+        return rows
+
+    def jump_to_search_match(self, direction: int = 1) -> int:
+        rows = self.search_match_rows()
+        if not rows:
+            self._search_focus_row = -1
+            self.viewport().update()
+            return -1
+        direction = 1 if int(direction or 1) >= 0 else -1
+        current = self.currentIndex().row() if self.currentIndex().isValid() else self._search_focus_row
+        if current not in rows:
+            if direction > 0:
+                chosen = next((r for r in rows if r > current), rows[0])
+            else:
+                chosen = next((r for r in reversed(rows) if r < current), rows[-1])
+        else:
+            pos = rows.index(current)
+            chosen = rows[(pos + direction) % len(rows)]
+        self._search_focus_row = chosen
+        idx = self.model().index(chosen, 0)
+        self.setCurrentIndex(idx)
+        sel = self.selectionModel()
+        if sel is not None:
+            sel.select(idx, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
+        self.sync_selection()
+        try:
+            self.selection_summary_changed.emit(self.selected_rows())
+        except Exception:
+            pass
+        try:
+            self.action_clicked.emit(chosen)
+        except Exception:
+            pass
+        self.ensure_visible(chosen)
+        self.viewport().update()
+        return chosen
 
     def drop_feedback_text(self, row: int) -> str:
         meta = self.group_badge(row)
@@ -1615,8 +1682,11 @@ class TimelineView(QListView):
                 first = row
                 break
         if first >= 0 and self._search:
+            self._search_focus_row = first
             self.set_active(first)
             self.ensure_visible(first)
+        elif not self._search:
+            self._search_focus_row = -1
         self.doItemsLayout()
         self.viewport().update()
 

@@ -4678,10 +4678,10 @@ class MainWindow(QMainWindow):
             try:
                 text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
                 icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(230, min(520, text_w + icon_w + 38))
+                target_w = max(260, min(430, text_w + icon_w + 38))
                 if hasattr(self, "status_pill"):
                     self.status_pill.setMinimumWidth(target_w)
-                    self.status_pill.setMaximumWidth(520)
+                    self.status_pill.setMaximumWidth(430)
             except Exception:
                 pass
             # Update status icon based on state

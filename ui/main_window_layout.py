@@ -993,7 +993,10 @@ def build_main_layout(window):
 
     header_shell = QFrame()
     header_shell.setFixedHeight(62)
-    header_shell.setStyleSheet(f"background-color: {C['bg']}; border: none;")
+    header_shell.setObjectName("header_shell")
+    header_shell.setStyleSheet(
+        "QFrame#header_shell { background: transparent; border: none; }"
+    )
     shell_lo = QVBoxLayout(header_shell)
     shell_lo.setContentsMargins(8, 6, 8, 4)
     shell_lo.setSpacing(0)
@@ -1001,11 +1004,12 @@ def build_main_layout(window):
     header_dock = QFrame()
     header_dock.setObjectName("header_dock")
     header_dock.setStyleSheet(
-        f"QFrame#header_dock {{ background-color: {C['bg_card']}; "
-        f"border: 1px solid {C['border']}; border-radius: 11px; }}"
+        f"QFrame#header_dock {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 #020A13, stop:0.55 #03101E, stop:1 #000309); "
+        f"border: 1px solid {C['border']}; border-radius: 12px; }}"
     )
     dock_lo = QHBoxLayout(header_dock)
-    dock_lo.setContentsMargins(7, 6, 7, 6)
+    dock_lo.setContentsMargins(7, 6, 10, 6)
     dock_lo.setSpacing(5)
 
     def header_separator():
@@ -1013,8 +1017,8 @@ def build_main_layout(window):
         sep.setObjectName("toolbar_separator")
         sep.setFixedSize(1, 28)
         sep.setStyleSheet(
-            f"QFrame#toolbar_separator {{ background-color: {C['border']}; "
-            "border: none; border-radius: 1px; }}"
+            "QFrame#toolbar_separator { background-color: #0E2A40; "
+            "border: none; border-radius: 1px; }"
         )
         return sep
 
@@ -1027,13 +1031,14 @@ def build_main_layout(window):
         btn.setFixedSize(width, 38)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         radius = 9 if not grouped else 8
-        border_color = C["border"] if not grouped else "transparent"
-        bg = C["bg_tertiary"] if not grouped else "transparent"
+        border_color = "#15354D" if not grouped else "transparent"
+        bg = "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #07172A, stop:1 #020A13)" if not grouped else "transparent"
         btn.setStyleSheet(
-            f"QPushButton#{obj} {{ background-color: {bg}; color: {color}; "
+            f"QPushButton#{obj} {{ background: {bg}; color: {color}; "
             f"border: 1px solid {border_color}; border-radius: {radius}px; padding: 0; }}"
-            f"QPushButton#{obj}:hover {{ border-color: {color}; background-color: {C['bg_hover']}; }}"
-            f"QPushButton#{obj}:checked {{ border-color: {color}; background-color: {C['accent_glow']}; }}"
+            f"QPushButton#{obj}:hover {{ border-color: {color}; background: {C['bg_hover']}; }}"
+            f"QPushButton#{obj}:pressed {{ border-color: {color}; background: {C['bg_pressed']}; }}"
+            f"QPushButton#{obj}:checked {{ border-color: {color}; background: {C['accent_glow']}; }}"
             f"QPushButton#{obj}::menu-indicator {{ image: none; width: 0px; }}"
         )
         if slot is not None:
@@ -1044,7 +1049,8 @@ def build_main_layout(window):
     tools.setObjectName("toolbar_group")
     tools.setFixedHeight(42)
     tools.setStyleSheet(
-        f"QFrame#toolbar_group {{ background-color: {C['bg_tertiary']}; "
+        f"QFrame#toolbar_group {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 #07172A, stop:0.58 {C['bg_tertiary']}, stop:1 #020A13); "
         f"border: 1px solid {C['border']}; border-radius: 12px; }}"
     )
     tools_lo = QHBoxLayout(tools)
@@ -1054,7 +1060,7 @@ def build_main_layout(window):
     self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report, grouped=True)
     self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel, grouped=True)
     self.runtime_log_btn.setCheckable(True)
-    self.mode_filter_btn = header_icon_button("mode_filter_btn", "menu", C["accent"], "Mode filters", None, width=46, grouped=True)
+    self.mode_filter_btn = header_icon_button("mode_filter_btn", "menu", C["accent"], "Mode filters: All actions", None, width=46, grouped=True)
     self.compact_view_btn = self.mode_filter_btn
     for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.mode_filter_btn):
         tools_lo.addWidget(btn)
@@ -1073,10 +1079,12 @@ def build_main_layout(window):
     self.profile_btn.setFixedSize(164, 38)
     self.profile_btn.clicked.connect(self._show_profile_menu)
     self.profile_btn.setStyleSheet(
-        f"QPushButton#profile_switcher {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 11px; padding: 0 12px; "
+        f"QPushButton#profile_switcher {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 #07172A, stop:1 {C['bg_card']}); color: {C['text']}; "
+        f"border: 1px solid #15354D; border-radius: 11px; padding: 0 12px; "
         "font-size: 12px; font-weight: 800; text-align: left; }}"
-        f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
+        f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; background: {C['bg_hover']}; }}"
+        f"QPushButton#profile_switcher:pressed {{ background: {C['bg_pressed']}; }}"
     )
     dock_lo.addWidget(self.profile_btn)
 
@@ -1084,8 +1092,6 @@ def build_main_layout(window):
     dock_lo.addWidget(header_separator())
     dock_lo.addSpacing(5)
 
-    # Compact search: the top bar stays icon-only, while Ctrl+F/click opens a
-    # small themed search popover connected to the existing timeline search API.
     self.search_top_btn = header_icon_button("search_top_btn", "search", C["text_dim"], "Search timeline actions", None, width=38)
     dock_lo.addWidget(self.search_top_btn)
 
@@ -1096,31 +1102,32 @@ def build_main_layout(window):
 
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
-    status_pill.setMinimumWidth(230)
-    status_pill.setMaximumWidth(520)
-    status_pill.setFixedHeight(38)
+    status_pill.setMinimumWidth(260)
+    status_pill.setMaximumWidth(430)
+    status_pill.setFixedHeight(36)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setAutoFillBackground(False)
     status_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     status_pill.setStyleSheet(
-        f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 13px; }}"
+        f"QFrame#status_pill {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 #07172A, stop:0.6 {C['bg_tertiary']}, stop:1 #020A13); "
+        f"border: 1px solid {C['border']}; border-radius: 12px; }}"
         "QFrame#status_pill QLabel { background: transparent; border: none; }"
         "QFrame#status_pill QWidget { background: transparent; border: none; }"
     )
     self.status_pill = status_pill
     sp_lo = QHBoxLayout(status_pill)
-    sp_lo.setContentsMargins(12, 0, 12, 0)
-    sp_lo.setSpacing(8)
+    sp_lo.setContentsMargins(11, 0, 11, 0)
+    sp_lo.setSpacing(7)
     self.status_dot = StatusDot()
     self.status_dot.set_color(C["success"])
-    self.status_dot.setFixedSize(13, 13)
+    self.status_dot.setFixedSize(12, 12)
     self.status_dot.setAutoFillBackground(False)
     self.status_dot.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     sp_lo.addWidget(self.status_dot)
     self.status_icon = QLabel()
-    self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
-    self.status_icon.setFixedSize(16, 16)
+    self.status_icon.setPixmap(icon("check", 15, C["success"]).pixmap(15, 15))
+    self.status_icon.setFixedSize(15, 15)
     self.status_icon.setScaledContents(True)
     self.status_icon.setAutoFillBackground(False)
     self.status_icon.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -1134,6 +1141,7 @@ def build_main_layout(window):
     self.status_text.setStyleSheet(f"QLabel#status_text {{ background: transparent; border: none; color: {C['text']}; font-size: 11px; font-weight: 850; }}")
     self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     self.status_text.setWordWrap(False)
+    self.status_text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
     sp_lo.addWidget(self.status_text, stretch=1)
 
     # Keep the autosave label object alive for existing save-session logic and
@@ -1150,33 +1158,58 @@ def build_main_layout(window):
     dock_lo.addWidget(status_pill)
 
     toolbar_menu_style = (
-        f"QMenu {{ background-color: {C['bg_card']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 6px; }}"
-        f"QMenu::item {{ padding: 7px 22px 7px 12px; border-radius: 6px; }}"
+        f"QMenu {{ background-color: #020A13; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; }}"
+        f"QMenu::item {{ padding: 7px 24px 7px 12px; border-radius: 7px; }}"
         f"QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}"
+        f"QMenu::item:checked {{ background-color: {C['accent_glow']}; color: {C['accent_hover']}; }}"
         f"QMenu::separator {{ height: 1px; background: {C['border']}; margin: 5px 4px; }}"
     )
 
     self.mode_filter_menu = QMenu(self)
     self.mode_filter_menu.setObjectName("mode_filter_menu")
     self.mode_filter_menu.setStyleSheet(toolbar_menu_style)
-    self._current_timeline_filter = "All"
+    self._current_timeline_filter = "All actions"
+    self._mode_filter_actions = {}
 
-    def _apply_timeline_filter(value):
-        self._current_timeline_filter = value
+    def _apply_timeline_filter(label, slug):
+        self._current_timeline_filter = label
+        for action_slug, action in getattr(self, "_mode_filter_actions", {}).items():
+            action.setChecked(action_slug == slug)
         try:
-            self.timeline.set_quick_filter(value)
+            self.timeline.set_quick_filter(slug)
         except Exception:
             pass
-        self.mode_filter_btn.setToolTip(f"Mode filters: {value}")
+        self.mode_filter_btn.setToolTip(f"Mode filters: {label}")
         try:
-            self.status(f"Timeline filter: {value}")
+            self.status(f"Filter: {label}")
         except Exception:
             pass
 
-    for label in ("All", "Images", "Loops", "Conditions", "Groups", "Warnings", "Current group"):
+    filter_items = [
+        ("All actions", "all"), None,
+        ("Key actions", "key"),
+        ("Click actions", "click"),
+        ("Delay actions", "delay"),
+        ("Image actions", "image"),
+        ("Condition actions", "condition"),
+        ("Loop actions", "loop"),
+        ("Group headers", "group"), None,
+        ("Selected only", "selected"),
+        ("Warnings / missing data", "warnings"),
+        ("Disabled actions", "disabled"),
+        ("Current group", "current group"),
+    ]
+    for item in filter_items:
+        if item is None:
+            self.mode_filter_menu.addSeparator()
+            continue
+        label, slug = item
         act = self.mode_filter_menu.addAction(label)
-        act.triggered.connect(lambda checked=False, value=label: _apply_timeline_filter(value))
+        act.setCheckable(True)
+        act.setChecked(slug == "all")
+        self._mode_filter_actions[slug] = act
+        act.triggered.connect(lambda checked=False, label=label, slug=slug: _apply_timeline_filter(label, slug))
 
     def _show_mode_filter_menu():
         self.mode_filter_menu.popup(self.mode_filter_btn.mapToGlobal(self.mode_filter_btn.rect().bottomLeft()))
@@ -1186,10 +1219,23 @@ def build_main_layout(window):
     self.tl_search_menu = QMenu(self)
     self.tl_search_menu.setObjectName("timeline_search_menu")
     self.tl_search_menu.setStyleSheet(toolbar_menu_style)
+    search_action = QWidgetAction(self.tl_search_menu)
+    search_wrap = QFrame()
+    search_wrap.setObjectName("timeline_search_wrap")
+    search_wrap.setStyleSheet(
+        "QFrame#timeline_search_wrap { background: transparent; border: none; }"
+        f"QLabel#timeline_search_results {{ color: {C['text_dim']}; font-size: 10px; font-weight: 750; }}"
+        f"QPushButton#timeline_search_mini {{ background: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 9px; font-size: 10px; font-weight: 800; }}"
+        f"QPushButton#timeline_search_mini:hover {{ border-color: {C['accent']}; color: {C['accent_hover']}; background: {C['bg_hover']}; }}"
+    )
+    search_lo = QVBoxLayout(search_wrap)
+    search_lo.setContentsMargins(6, 5, 6, 6)
+    search_lo.setSpacing(6)
     self.tl_search = QLineEdit()
     self.tl_search.setPlaceholderText("Search actions...")
     self.tl_search.setClearButtonEnabled(True)
-    self.tl_search.setFixedSize(260, 34)
+    self.tl_search.setFixedSize(290, 34)
     self.tl_search.addAction(icon("search", 15, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
     self.tl_search.setStyleSheet(
         f"QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
@@ -1197,21 +1243,91 @@ def build_main_layout(window):
         "font-size: 12px; font-weight: 650; }}"
         f"QLineEdit:focus {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
     )
-    self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
-    search_action = QWidgetAction(self.tl_search_menu)
-    search_wrap = QFrame()
-    search_wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
-    search_lo = QVBoxLayout(search_wrap)
-    search_lo.setContentsMargins(6, 4, 6, 4)
-    search_lo.setSpacing(0)
     search_lo.addWidget(self.tl_search)
+    search_controls = QHBoxLayout()
+    search_controls.setContentsMargins(0, 0, 0, 0)
+    search_controls.setSpacing(5)
+    self.tl_search_result_label = QLabel("Type to search")
+    self.tl_search_result_label.setObjectName("timeline_search_results")
+    search_controls.addWidget(self.tl_search_result_label, stretch=1)
+
+    def _mini_search_btn(text, tip):
+        btn = QPushButton(text)
+        btn.setObjectName("timeline_search_mini")
+        btn.setFixedHeight(26)
+        btn.setToolTip(tip)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        return btn
+
+    self.tl_search_prev_btn = _mini_search_btn("Prev", "Previous search result")
+    self.tl_search_next_btn = _mini_search_btn("Next", "Next search result")
+    self.tl_search_clear_btn = _mini_search_btn("Clear", "Clear search")
+    search_controls.addWidget(self.tl_search_prev_btn)
+    search_controls.addWidget(self.tl_search_next_btn)
+    search_controls.addWidget(self.tl_search_clear_btn)
+    search_lo.addLayout(search_controls)
     search_action.setDefaultWidget(search_wrap)
     self.tl_search_menu.addAction(search_action)
+
+    def _refresh_timeline_search_feedback(push_status=False):
+        text = self.tl_search.text().strip() if hasattr(self, "tl_search") else ""
+        if not text:
+            self.tl_search_result_label.setText("Type to search")
+            return
+        try:
+            matches = self.timeline.search_match_rows()
+        except Exception:
+            matches = []
+        count = len(matches)
+        self.tl_search_result_label.setText("No matches" if count == 0 else f"{count} match" + ("" if count == 1 else "es"))
+        if push_status:
+            try:
+                self.status("Search: no matches" if count == 0 else f"Search: {count} match" + ("" if count == 1 else "es"))
+            except Exception:
+                pass
+
+    def _timeline_search_changed(text):
+        try:
+            self.timeline.set_search(text)
+        except Exception:
+            pass
+        _refresh_timeline_search_feedback(push_status=bool(str(text).strip()))
+
+    def _jump_timeline_search(direction):
+        try:
+            row = self.timeline.jump_to_search_match(direction)
+        except Exception:
+            row = -1
+        _refresh_timeline_search_feedback(push_status=True)
+        if row >= 0:
+            try:
+                self.status(f"Search result: action {row + 1}")
+            except Exception:
+                pass
+
+    def _clear_timeline_search():
+        self.tl_search.clear()
+        try:
+            self.timeline.set_search("")
+            self.timeline.viewport().update()
+        except Exception:
+            pass
+        _refresh_timeline_search_feedback(push_status=False)
+        try:
+            self.status("Search cleared")
+        except Exception:
+            pass
+
+    self.tl_search.textChanged.connect(_timeline_search_changed)
+    self.tl_search_prev_btn.clicked.connect(lambda checked=False: _jump_timeline_search(-1))
+    self.tl_search_next_btn.clicked.connect(lambda checked=False: _jump_timeline_search(1))
+    self.tl_search_clear_btn.clicked.connect(lambda checked=False: _clear_timeline_search())
 
     def _show_timeline_search_popup():
         self.tl_search_menu.popup(self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft()))
         QTimer.singleShot(0, self.tl_search.setFocus)
         QTimer.singleShot(0, self.tl_search.selectAll)
+        QTimer.singleShot(0, lambda: _refresh_timeline_search_feedback(push_status=False))
 
     self._show_timeline_search_popup = _show_timeline_search_popup
     self.search_top_btn.clicked.connect(_show_timeline_search_popup)
