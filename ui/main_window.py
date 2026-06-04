@@ -1059,14 +1059,6 @@ class MainWindow(QMainWindow):
             if body is not None:
                 body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
 
-            normalize_image_groups = getattr(self, "_normalize_image_inspector_subpanel_heights", None)
-            if callable(normalize_image_groups) and not bool(getattr(self, "_normalizing_image_inspector_heights", False)):
-                try:
-                    self._normalizing_image_inspector_heights = True
-                    normalize_image_groups(reason="autosize")
-                finally:
-                    self._normalizing_image_inspector_heights = False
-
             if body is not None and not body.isVisible():
                 # Collapsed Inspector: clamp to the header-only size.
                 card.setMinimumHeight(0)
