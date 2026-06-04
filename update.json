@@ -1,6 +1,6 @@
 {
-  "version": "3.5.19",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.19/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.19/MacroForge-v3.5.19.zip",
-  "notes": "v3.5.19: Apply top toolbar rework patch - updated icons.py, main_window.py and main_window_layout.py with top toolbar rework."
+  "version": "3.5.20",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.20/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.20/MacroForge-v3.5.20.zip",
+  "notes": "v3.5.20: Apply status pill black box fix patch - updated main_window_layout.py with status pill black box fix."
 }
