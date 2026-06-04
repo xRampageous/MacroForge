@@ -1,6 +1,6 @@
 {
-  "version": "3.5.48",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.48/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.48/MacroForge-v3.5.48.zip",
-  "notes": "v3.5.48: Apply side panel reveal image status polish patch - updated main_window.py and main_window_layout.py with side panel reveal, image status polish."
+  "version": "3.5.49",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.49/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.49/MacroForge-v3.5.49.zip",
+  "notes": "v3.5.49: Apply side panel one-click reveal stability patch - updated main_window.py and main_window_layout.py with reveal stability, auto-collapse suppression, and image settings polish."
 }
