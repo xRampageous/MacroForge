@@ -87,6 +87,31 @@ def build_main_layout(window):
             except Exception:
                 pass
 
+        def _natural_body_height():
+            """Measure the expanded body even after it has been hidden/clamped."""
+            try:
+                old_visible = body_widget.isVisible()
+                old_max = body_widget.maximumHeight()
+                body_widget.setVisible(True)
+                body_widget.setMaximumHeight(16777215)
+                body_widget.updateGeometry()
+                if parent is not None:
+                    parent.setMaximumHeight(16777215)
+                    parent.updateGeometry()
+                measured = max(
+                    int(body_widget.sizeHint().height()),
+                    int(body_widget.minimumSizeHint().height()),
+                    int(body_widget.property("expanded_height_hint") or 0),
+                    1,
+                )
+                body_widget.setProperty("expanded_height_hint", measured)
+                if collapsed:
+                    body_widget.setMaximumHeight(old_max)
+                    body_widget.setVisible(old_visible)
+                return measured
+            except Exception:
+                return max(int(body_widget.property("expanded_height_hint") or 0), 1)
+
         def _finish_parent():
             if parent is None:
                 return
@@ -102,43 +127,41 @@ def build_main_layout(window):
                 else:
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
-            if parent_name == "inspector_card" and hasattr(self, "_autosize_inspector_panel"):
+            if hasattr(self, "_autosize_inspector_panel"):
                 self._autosize_inspector_panel()
+                QTimer.singleShot(0, self._autosize_inspector_panel)
+            if hasattr(self, "_refresh_unlocked_selection_height"):
+                QTimer.singleShot(25, self._refresh_unlocked_selection_height)
 
         try:
             body_widget.setMinimumHeight(0)
             if collapsed:
                 start_h = max(body_widget.height(), body_widget.sizeHint().height(), 1)
+                body_widget.setProperty("expanded_height_hint", start_h)
                 end_h = 0
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(start_h)
             else:
+                # Release the parent clamp before the body expands.  The previous
+                # implementation waited until animation finish, which clipped the
+                # visible expand motion for Inspector sub-panels.
+                if parent is not None:
+                    parent.setMaximumHeight(16777215)
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                    parent.updateGeometry()
                 body_widget.setVisible(True)
                 start_h = max(0, body_widget.height())
                 if start_h <= 1:
                     start_h = 0
-                body_widget.setMaximumHeight(16777215)
-                body_widget.updateGeometry()
-                end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
+                end_h = _natural_body_height()
                 body_widget.setMaximumHeight(start_h)
+                body_widget.updateGeometry()
 
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            anim.setDuration(int(getattr(self, "_collapse_animation_ms", 82)))
-            anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+            anim.setDuration(105 if collapsed else 115)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             anim.setStartValue(start_h)
             anim.setEndValue(end_h)
-
-            def _tick(_value=None):
-                try:
-                    body_widget.updateGeometry()
-                    if parent is not None:
-                        parent.updateGeometry()
-                    if hasattr(self, "sidebar_frame"):
-                        self.sidebar_frame.updateGeometry()
-                except Exception:
-                    pass
-
-            anim.valueChanged.connect(_tick)
 
             def _finished():
                 if collapsed:
@@ -159,6 +182,8 @@ def build_main_layout(window):
                 body_widget.setMaximumHeight(0)
                 body_widget.setVisible(False)
             else:
+                if parent is not None:
+                    parent.setMaximumHeight(16777215)
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
             _finish_parent()
@@ -191,6 +216,35 @@ def build_main_layout(window):
         return True
 
     self._set_collapsible_panel = _set_collapsible_panel
+
+    def _bind_collapse_header_click(widget, body_widget):
+        """Let the panel header/title toggle too; the caret still remains the visible control."""
+        if widget is None or body_widget is None:
+            return
+        try:
+            widget.setCursor(Qt.CursorShape.PointingHandCursor)
+            widget.setToolTip("Collapse/expand panel")
+            def _mouse_press(event, body=body_widget):
+                try:
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        caret = self._panel_collapse_controls.get(body.objectName(), (None, None))[1]
+                        if caret is not None:
+                            self._set_collapsible_panel(
+                                body.objectName(),
+                                not bool(caret.property("collapsed")),
+                                auto=False,
+                            )
+                            event.accept()
+                            return
+                except Exception:
+                    pass
+                try:
+                    QWidget.mousePressEvent(widget, event)
+                except Exception:
+                    pass
+            widget.mousePressEvent = _mouse_press
+        except Exception:
+            pass
 
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
@@ -234,6 +288,8 @@ def build_main_layout(window):
                     auto=False,
                 )
             )
+            for clickable in (left_balance, title_wrap, ico, lbl):
+                _bind_collapse_header_click(clickable, body_widget)
             row.addWidget(caret)
         else:
             caret = QLabel("^")
@@ -341,6 +397,8 @@ def build_main_layout(window):
                 auto=False,
             )
         )
+        for clickable in (left_balance, title_wrap, ico, lbl):
+            _bind_collapse_header_click(clickable, body)
         head.addWidget(caret)
         lo.addLayout(head)
         lo.addWidget(body)
@@ -924,7 +982,6 @@ def build_main_layout(window):
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
     self._bottom_panel_locked = False
-    self._collapse_animation_ms = 82
     self._side_panel_expanded_width = 270
     self._side_panel_collapsed_width = 22
     self._side_panel_auto_collapse_width = 910
@@ -959,7 +1016,6 @@ def build_main_layout(window):
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
         auto = bool(auto)
-        was_collapsed = bool(getattr(self, "_side_panel_collapsed", False))
         if auto:
             self._side_panel_auto_collapsed = collapsed
         else:
@@ -980,11 +1036,14 @@ def build_main_layout(window):
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
-        sidebar.updateGeometry()
-        if was_collapsed and not collapsed and hasattr(self, "_auto_grow_for_side_panel_expand"):
-            self._auto_grow_for_side_panel_expand()
-            QTimer.singleShot(0, self._auto_grow_for_side_panel_expand)
-            QTimer.singleShot(35, self._auto_grow_for_side_panel_expand)
+        if not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
+            if collapsed:
+                if hasattr(self, "_auto_grow_for_collapsed_side_panel"):
+                    self._auto_grow_for_collapsed_side_panel()
+            else:
+                if hasattr(self, "_auto_grow_after_side_panel_expand"):
+                    QTimer.singleShot(0, self._auto_grow_after_side_panel_expand)
+                    QTimer.singleShot(35, self._auto_grow_after_side_panel_expand)
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
 

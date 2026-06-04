@@ -369,14 +369,12 @@ class MainWindow(QMainWindow):
                     else:
                         image_sequence_complete = True
 
-                    # Expanding: restore in the same top-to-bottom order as
-                    # collapse. Do not let lower sections reopen before the
-                    # first collapsed section has enough height to expand.
+                    # Expanding: restore in the same order as collapse, one
+                    # section per pass: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
                     for body_name, _collapse_attr, expand_attr in image_steps:
-                        if _panel_collapsed(body_name):
+                        if _panel_collapsed(body_name) and height >= int(getattr(self, expand_attr, 16777215)):
+                            set_panel(body_name, False, auto=True)
                             image_sequence_complete = False
-                            if height >= int(getattr(self, expand_attr, 16777215)):
-                                set_panel(body_name, False, auto=True)
                             break
 
                 # Main panel order starts only after all Image sub-panels are
@@ -554,11 +552,70 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _auto_grow_for_side_panel_expand(self):
-        """Grow vertically once when reopening the side panel from minimum height.
+    def _default_expanded_side_panel_height(self):
+        """Measure the side-panel stack for unlocked auto-grow without enabling a height lock."""
+        try:
+            sidebar = getattr(self, "sidebar_frame", None)
+            if sidebar is not None:
+                sidebar.updateGeometry()
+            self._autosize_inspector_panel()
+            if sidebar is not None:
+                sidebar.updateGeometry()
+                natural = max(int(sidebar.sizeHint().height()), int(sidebar.minimumSizeHint().height()))
+            else:
+                natural = 0
+            target_h = max(
+                int(getattr(self, "_base_min_height", 420)),
+                int(getattr(self, "_height_auto_recorder_expand", 720)),
+                int(getattr(self, "_height_auto_inspector_expand", 840)),
+                natural + 8,
+            )
+            return max(420, min(1800, int(target_h)))
+        except Exception:
+            return max(int(getattr(self, "_base_min_height", 420)), int(self.height()))
 
-        This mirrors the lock-height measurement path but does not keep the
-        window locked afterward; normal resizing remains available immediately.
+    def _restore_auto_collapsed_side_sections(self):
+        """Reopen only panels that the height auto-collapser closed, preserving manual user collapses."""
+        try:
+            set_panel = getattr(self, "_set_collapsible_panel", None)
+            if set_panel is None:
+                return
+            image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
+            for body_name in ("add_action_body", "recorder_body", "inspector_body"):
+                set_panel(body_name, False, auto=True)
+            if image_visible:
+                for body_name in (
+                    "inspector_group_image_body",
+                    "inspector_group_matching_body",
+                    "inspector_group_retry_body",
+                    "inspector_group_on_fail_body",
+                    "inspector_group_fail_target_body",
+                ):
+                    set_panel(body_name, False, auto=True)
+        except Exception:
+            pass
+
+    def _auto_grow_for_collapsed_side_panel(self):
+        """Keep collapsed side-rail transitions from trapping the window at the minimum height."""
+        try:
+            if not bool(getattr(self, "_side_panel_collapsed", False)):
+                return
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+            base_h = int(getattr(self, "_base_min_height", 420))
+            if int(self.height()) > base_h + 28:
+                return
+            target_h = max(720, base_h, int(getattr(self, "_height_auto_recorder_expand", 720)))
+            if self.height() < target_h:
+                self.resize(self.width(), target_h)
+        except Exception:
+            pass
+
+    def _auto_grow_after_side_panel_expand(self):
+        """When the side panel is expanded at minimum height, grow to fit the default expanded stack.
+
+        This is a one-shot resize only.  It does not leave the window locked, so
+        normal manual resizing remains available immediately afterward.
         """
         try:
             if bool(getattr(self, "_side_panel_collapsed", False)):
@@ -566,30 +623,35 @@ class MainWindow(QMainWindow):
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
                 return
             base_h = int(getattr(self, "_base_min_height", 420))
-            if int(self.height()) > base_h + 28:
-                return
-            self._autosize_inspector_panel()
-            sidebar = getattr(self, "sidebar_frame", None)
-            side_h = 0
-            if sidebar is not None:
-                sidebar.updateGeometry()
-                side_h = max(int(sidebar.sizeHint().height()), int(sidebar.minimumSizeHint().height()))
-            target_h = max(
-                base_h,
-                side_h + 8,
-                int(getattr(self, "_height_auto_recorder_expand", 720)),
-                int(getattr(self, "_height_auto_inspector_expand", 840)),
-            )
-            target_h = max(base_h, min(1800, int(target_h)))
-            if self.height() < target_h:
+            target_h = self._default_expanded_side_panel_height()
+            near_minimum = int(self.height()) <= base_h + 36
+            if near_minimum and int(self.height()) < target_h:
+                self.setMaximumHeight(16777215)
                 self.resize(self.width(), target_h)
+                self.setMinimumSize(int(getattr(self, "_base_min_width", 760)), base_h)
         except Exception:
             pass
 
-    # Backward-compatible alias for older overlay code paths.  It now only acts
-    # after the side panel has actually been expanded.
-    def _auto_grow_for_collapsed_side_panel(self):
-        self._auto_grow_for_side_panel_expand()
+    def _auto_grow_for_active_selection(self):
+        """Unlocked selection should reveal the selected Inspector instead of leaving it clipped."""
+        try:
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                return
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+            if int(getattr(self, "active_index", -1)) < 0:
+                return
+            target_h = self._default_expanded_side_panel_height()
+            base_h = int(getattr(self, "_base_min_height", 420))
+            # Grow when the user is effectively at the compact/minimum layout or
+            # when the selected Inspector would still be visibly clipped.
+            should_grow = int(self.height()) <= base_h + 48 or int(self.height()) + 18 < target_h
+            if should_grow and int(self.height()) < target_h:
+                self.setMaximumHeight(16777215)
+                self.resize(self.width(), target_h)
+                self.setMinimumSize(int(getattr(self, "_base_min_width", 760)), base_h)
+        except Exception:
+            pass
 
     def _refresh_unlocked_selection_height(self):
         """Recalculate side-panel/Inspector height after selection changes while unlocked."""
@@ -599,24 +661,15 @@ class MainWindow(QMainWindow):
             self._autosize_inspector_panel()
             if hasattr(self, "sidebar_frame"):
                 self.sidebar_frame.updateGeometry()
-            if not bool(getattr(self, "_side_panel_collapsed", False)):
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                self._auto_grow_for_collapsed_side_panel()
+            else:
+                self._restore_auto_collapsed_side_sections()
+                self._autosize_inspector_panel()
+                self._auto_grow_for_active_selection()
                 # Selection changes can change the Inspector's natural height,
                 # so run the responsive height pass even when no lock is active.
                 self._update_responsive_height_panels()
-        except Exception:
-            pass
-
-    def _schedule_selection_height_refresh(self):
-        """Run selection-height repair immediately, then after Qt layout settles."""
-        try:
-            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
-                self._apply_panel_size_locks()
-                QTimer.singleShot(0, self._apply_panel_size_locks)
-                QTimer.singleShot(35, self._apply_panel_size_locks)
-            else:
-                self._refresh_unlocked_selection_height()
-                QTimer.singleShot(0, self._refresh_unlocked_selection_height)
-                QTimer.singleShot(35, self._refresh_unlocked_selection_height)
         except Exception:
             pass
 
@@ -1151,13 +1204,6 @@ class MainWindow(QMainWindow):
             self.timeline.action_dropped_many_into_group.connect(self.move_actions_into_group)
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
         self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
-        if hasattr(self.timeline, "selection_changed"):
-            self.timeline.selection_changed.connect(self._on_timeline_selection_changed)
-
-    def _on_timeline_selection_changed(self, rows=None, current=-1):
-        if bool(getattr(self, "_inspector_loading", False)):
-            return
-        self._schedule_selection_height_refresh()
 
     def _selected_rows(self, fallback=None):
         """Return current timeline multi-selection as stable source-model rows."""
@@ -1273,7 +1319,7 @@ class MainWindow(QMainWindow):
                     action.group_name = name
                     changed = True
                 if getattr(action, "label", "") != name:
-                    action.label = inspector_label_text or name
+                    action.label = name
                     changed = True
                 if getattr(action, "block_depth", 0) != 0:
                     action.block_depth = 0
@@ -1969,7 +2015,13 @@ class MainWindow(QMainWindow):
                 pass
         finally:
             self._inspector_loading = False
-            self._schedule_selection_height_refresh()
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                QTimer.singleShot(0, self._apply_panel_size_locks)
+                QTimer.singleShot(35, self._apply_panel_size_locks)
+            else:
+                self._refresh_unlocked_selection_height()
+                QTimer.singleShot(35, self._refresh_unlocked_selection_height)
+                QTimer.singleShot(90, self._refresh_unlocked_selection_height)
 
     def _apply_inspector(self, autosave=False):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
@@ -2411,18 +2463,37 @@ class MainWindow(QMainWindow):
 
         if getattr(actions[index], "action_type", "") == "group":
             block_rows = self._contiguous_group_block(index)
+            if not block_rows:
+                return
             if target_index in block_rows:
                 self.status("Group is already there")
                 return
             block = [actions[r] for r in block_rows]
-            remaining = [a for i, a in enumerate(actions) if i not in set(block_rows)]
-            removed_before_target = sum(1 for r in block_rows if r < target_index)
-            insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
+            block_set = set(block_rows)
+            remaining = [a for i, a in enumerate(actions) if i not in block_set]
+
+            if target_index < index:
+                # Moving upward: target_index is the desired header row after removal.
+                insert_at = target_index
+            elif target_index > block_rows[-1]:
+                # Moving downward: target_index refers to the row to land after in
+                # the original list.  Add one after subtracting the moved block so
+                # dragging or menu-moving down by one row actually advances.
+                insert_at = target_index - len(block_rows) + 1
+            else:
+                self.status("Group is already there")
+                return
+            insert_at = max(0, min(insert_at, len(remaining)))
+
             new_actions = remaining[:insert_at] + block + remaining[insert_at:]
+            new_index_by_id = {id(a): i for i, a in enumerate(new_actions)}
+            row_map = {old_i: new_index_by_id.get(id(a), old_i) for old_i, a in enumerate(actions)}
             self.action_model.set_actions(new_actions)
+            self._apply_row_reference_map(row_map)
+            self._normalize_groups()
             new_index = insert_at
             self.active_index = new_index
-            self.timeline.selected_indices = set(range(new_index, new_index + len(block)))
+            new_rows = list(range(new_index, new_index + len(block)))
             msg = "Moved group"
         else:
             self.action_model.move_action(index, target_index)
@@ -2433,7 +2504,10 @@ class MainWindow(QMainWindow):
             msg = "Moved action"
 
         self.refresh()
-        self.timeline.set_active(new_index)
+        if 'new_rows' in locals():
+            self._select_moved_rows(new_rows, active=new_index)
+        else:
+            self.timeline.set_active(new_index)
         self.timeline.restore_scroll_position(scroll_position)
         self.timeline.flash_drop(new_index)
         self.update_statistics(immediate=True)
