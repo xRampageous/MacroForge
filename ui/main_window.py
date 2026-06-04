@@ -442,38 +442,17 @@ class MainWindow(QMainWindow):
             if any_panel_locked:
                 return
 
-            # Collapse/expand must be serialized.  Nested Inspector groups are
-            # inside the main Inspector card, so a second guard pass while one
-            # section is still animating can measure the half-collapsed parent
-            # and start the next step too early.  Defer until the animation
-            # finish callback has released height clamps and refreshed layout.
-            active_anims = getattr(self, "_collapse_animations", {})
-            if active_anims:
-                self._side_panel_responsive_retry_pending = True
-                return
-            self._side_panel_responsive_retry_pending = False
-
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
-                image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
                 controls = getattr(self, "_panel_collapse_controls", {})
 
                 def _panel_collapsed(body_name: str) -> bool:
                     ctl = controls.get(body_name)
                     return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-                # Shrink order requested for the side stack:
-                # FAIL TARGET -> ON FAIL -> RETRY -> MATCHING -> IMAGE ->
-                # INSPECTOR -> RECORDER -> ADD ACTION.
-                # The expand path restores this in reverse order:
-                # ADD ACTION -> RECORDER -> INSPECTOR -> IMAGE -> MATCHING ->
-                # RETRY -> ON FAIL -> FAIL TARGET.
-                # Image-specific rows are skipped when a non-image action is selected.
+                # Image settings are now flat inside the main Inspector, so
+                # automatic height collapse only manages the main side-panel
+                # cards. Expansion restores the same set in reverse order.
                 collapse_steps = [
-                    ("inspector_group_fail_target_body", image_visible),
-                    ("inspector_group_on_fail_body", image_visible),
-                    ("inspector_group_retry_body", image_visible),
-                    ("inspector_group_matching_body", image_visible),
-                    ("inspector_group_image_body", image_visible),
                     ("inspector_body", True),
                     ("recorder_body", True),
                     ("add_action_body", True),
@@ -580,12 +559,7 @@ class MainWindow(QMainWindow):
                 if hits_app_bottom:
                     for body_name, _enabled in active_steps:
                         if not _panel_collapsed(body_name):
-                            if set_panel(body_name, True, auto=True):
-                                # Run exactly one auto step.  The animation
-                                # finish/settle pass will re-check the bottom
-                                # contact and decide whether the next section
-                                # is still needed.
-                                self._side_panel_responsive_retry_pending = True
+                            set_panel(body_name, True, auto=True)
                             break
                 else:
                     # Expand in reverse order, but only when the next section's
@@ -596,9 +570,7 @@ class MainWindow(QMainWindow):
                         if _panel_collapsed(body_name):
                             delta_h = _estimated_expand_delta(body_name)
                             if stack_h + delta_h <= max(0, available_h - restore_margin):
-                                if set_panel(body_name, False, auto=True):
-                                    # Same one-step scheduler for expansion.
-                                    self._side_panel_responsive_retry_pending = True
+                                set_panel(body_name, False, auto=True)
                             break
 
             if hasattr(self, "playback_panel"):
@@ -630,11 +602,6 @@ class MainWindow(QMainWindow):
                     "add_action_body",
                     "recorder_body",
                     "inspector_body",
-                    "inspector_group_image_body",
-                    "inspector_group_matching_body",
-                    "inspector_group_retry_body",
-                    "inspector_group_on_fail_body",
-                    "inspector_group_fail_target_body",
                     "inspector_group_key_action_body",
                     "inspector_group_pause_action_body",
                     "inspector_group_click_action_body",
@@ -1041,23 +1008,32 @@ class MainWindow(QMainWindow):
             self.insp_group, self.insp_loop, self.insp_condition,
         ):
             w.setVisible(False)
+
+        if hasattr(self, "inspector_action_row"):
+            self.inspector_action_row.setVisible(bool(show))
+
         self.insp_empty.setVisible(False)
-        if show:
-            mapping = {
-                "key": self.insp_key,
-                "pause": self.insp_pause,
-                "click": self.insp_click,
-                "image": self.insp_image,
-                "group": self.insp_group,
-                "loop": self.insp_loop,
-                "condition": self.insp_condition,
-            }
-            pane = mapping.get(action_type)
-            if pane is not None:
-                pane.setVisible(True)
-            else:
-                self.insp_empty.setText("Use Edit for this block")
-                self.insp_empty.setVisible(True)
+        if not show:
+            self.insp_empty.setText("Select an action to inspect")
+            self.insp_empty.setVisible(True)
+            self._autosize_inspector_panel()
+            return
+
+        mapping = {
+            "key": self.insp_key,
+            "pause": self.insp_pause,
+            "click": self.insp_click,
+            "image": self.insp_image,
+            "group": self.insp_group,
+            "loop": self.insp_loop,
+            "condition": self.insp_condition,
+        }
+        pane = mapping.get(action_type)
+        if pane is not None:
+            pane.setVisible(True)
+        else:
+            self.insp_empty.setText("Use Edit for this block")
+            self.insp_empty.setVisible(True)
         self._autosize_inspector_panel()
 
     def _autosize_inspector_panel(self):
@@ -2114,6 +2090,8 @@ class MainWindow(QMainWindow):
                 self.timeline.selected_indices.clear()
                 self.inspector_selector.clear()
                 self.inspector_selector.addItem("Select an action")
+                if hasattr(self, "inspector_action_row"):
+                    self.inspector_action_row.setVisible(False)
                 if hasattr(self, "inspector_type_badge"):
                     self.inspector_type_badge.setText("ACTION")
                     self.inspector_type_badge.setEnabled(False)
@@ -2142,6 +2120,8 @@ class MainWindow(QMainWindow):
                 self.timeline.set_active(index)
             action = self.action_model.get(index)
             self._update_timeline_links(index)
+            if hasattr(self, "inspector_action_row"):
+                self.inspector_action_row.setVisible(True)
             self.inspector_selector.clear()
             if action.action_type == "image":
                 self.inspector_selector.addItem(icon("image", 14, COLORS["image"]), "Image Action")
@@ -2234,6 +2214,8 @@ class MainWindow(QMainWindow):
                 row_label = "?"
             try:
                 self._show_inspector(False)
+                if hasattr(self, "inspector_action_row"):
+                    self.inspector_action_row.setVisible(False)
                 self.insp_empty.setText(f"Could not inspect row {row_label}. Try profile repair or edit this action.")
                 self.insp_empty.setVisible(True)
                 self.status(f"Could not inspect row {row_label}")

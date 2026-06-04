@@ -72,7 +72,6 @@ def build_main_layout(window):
 
     self._panel_collapse_controls = {}
     self._collapse_animations = {}
-    self._side_panel_responsive_retry_pending = False
 
     def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
@@ -81,13 +80,9 @@ def build_main_layout(window):
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
 
         body_name = body_widget.objectName() or ""
-        image_inspector_bodies = {
-            "inspector_group_image_body",
-            "inspector_group_matching_body",
-            "inspector_group_retry_body",
-            "inspector_group_on_fail_body",
-            "inspector_group_fail_target_body",
-        }
+        # Image settings are a flat Inspector editor now, so there are no
+        # nested Image Inspector sub-panel bodies to special-case.
+        image_inspector_bodies = set()
         is_image_inspector_body = body_name in image_inspector_bodies
 
         parent = body_widget.parentWidget()
@@ -345,16 +340,7 @@ def build_main_layout(window):
                 _finish_parent()
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
-                # The app-bottom guard should run only after the current
-                # animation has fully settled.  Mark that a retry is wanted;
-                # the responsive helper will no-op if another panel is still
-                # animating, then the last finished panel will trigger it again.
-                self._side_panel_responsive_retry_pending = True
-                responsive_height = getattr(self, "_update_responsive_height_panels", None)
                 _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 24, 65))
-                if callable(responsive_height):
-                    QTimer.singleShot(0, responsive_height)
-                    QTimer.singleShot(45, responsive_height)
 
             try:
                 anim.valueChanged.connect(_side_panel_animation_tick)
@@ -759,30 +745,43 @@ def build_main_layout(window):
     insp_body_lo.setSpacing(8)
     insp_lo.addLayout(section_header("INSPECTOR", "search", C["accent"], insp_body))
 
-    selector_row = QHBoxLayout()
-    selector_row.setSpacing(6)
+    # Common Inspector action header.
+    # Empty state shows only "Select an action to inspect".  Once a row is
+    # selected, the Inspector uses a single shared header for every action:
+    # [Label: _____________] [TYPE].  The TYPE button keeps the existing dialog
+    # opener behavior, while the old selector combo and menu button are kept out
+    # of the visible layout to remove header clutter.
     self.inspector_selector = compact_combo(["Select an action"])
     self.inspector_selector.setEnabled(False)
-    self.inspector_selector.setIconSize(QSize(15, 15))
-    self.inspector_selector.setStyleSheet(
-        f"QComboBox {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 4px 8px; "
-        "font-size: 11px; }}"
-        "QComboBox::drop-down { border: none; width: 20px; }"
+    self.inspector_selector.setVisible(False)
+
+    self.inspector_action_row = QWidget()
+    self.inspector_action_row.setObjectName("inspector_action_row")
+    selector_row = QHBoxLayout(self.inspector_action_row)
+    selector_row.setContentsMargins(0, 0, 0, 0)
+    selector_row.setSpacing(6)
+
+    inspector_label_caption = QLabel("Label:")
+    inspector_label_caption.setObjectName("inspector_label_caption")
+    inspector_label_caption.setStyleSheet(
+        f"QLabel#inspector_label_caption {{ color: {C['text_dim']}; font-size: 10px; "
+        "font-weight: 850; background: transparent; }}"
     )
-    selector_row.addWidget(self.inspector_selector, stretch=1)
+    selector_row.addWidget(inspector_label_caption)
 
     self.inspector_label = form_input("timeline label")
     self.inspector_label.setObjectName("inspector_label")
     self.inspector_label.setToolTip("Timeline label/name for the selected action")
     self.inspector_label.setEnabled(False)
-    self.inspector_label.setFixedWidth(86)
-    selector_row.addWidget(self.inspector_label)
+    self.inspector_label.setMinimumWidth(132)
+    self.inspector_label.setMaximumWidth(16777215)
+    self.inspector_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    selector_row.addWidget(self.inspector_label, stretch=1)
 
     self.inspector_type_btn = QPushButton("ACTION")
     self.inspector_type_btn.setObjectName("inspector_type_btn")
     self.inspector_type_btn.setEnabled(False)
-    self.inspector_type_btn.setFixedSize(54, 30)
+    self.inspector_type_btn.setFixedSize(58, 30)
     self.inspector_type_btn.setToolTip("Open the selected action dialog")
     self.inspector_type_btn.clicked.connect(lambda checked=False: self._open_active_dialog())
     self.inspector_type_btn.setStyleSheet(
@@ -797,13 +796,8 @@ def build_main_layout(window):
 
     # Backwards-compatible alias for older update code paths.
     self.inspector_type_badge = self.inspector_type_btn
-
-    more_btn = QPushButton()
-    more_btn.setObjectName("icon_btn")
-    more_btn.setFixedSize(24, 30)
-    more_btn.setIcon(icon("menu", 14, C["text_dim"]))
-    selector_row.addWidget(more_btn)
-    insp_body_lo.addLayout(selector_row)
+    self.inspector_action_row.setVisible(False)
+    insp_body_lo.addWidget(self.inspector_action_row)
 
     self.insp_empty = QLabel("Select an action to inspect")
     self.insp_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -881,8 +875,44 @@ def build_main_layout(window):
     ii_lo.setContentsMargins(0, 0, 0, 0)
     ii_lo.setSpacing(7)
 
-    image_card, image_card_lo = inspector_group("IMAGE", "image", C["image"], show_info=False)
-    self.ii_image_card = image_card
+    def flat_section_title(text, icon_name=None, color=None):
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 3, 0, 0)
+        row.setSpacing(6)
+        if icon_name:
+            ico = QLabel()
+            ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            ico.setPixmap(icon(icon_name, 13, color or C["accent"]).pixmap(13, 13))
+            ico.setFixedSize(15, 15)
+            row.addWidget(ico)
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            f"color: {C['text']}; font-size: 11px; font-weight: 900; "
+            "letter-spacing: 0.25px; background: transparent;"
+        )
+        row.addWidget(lbl)
+        row.addStretch()
+        return row
+
+    image_flat_card = QFrame()
+    image_flat_card.setObjectName("image_flat_inspector_card")
+    image_flat_card.setStyleSheet(
+        f"QFrame#image_flat_inspector_card {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 #04111D, stop:1 #00060E); border: 1px solid {C['border']}; "
+        "border-radius: 8px; }}"
+    )
+    image_flat_lo = QVBoxLayout(image_flat_card)
+    image_flat_lo.setContentsMargins(8, 8, 8, 9)
+    image_flat_lo.setSpacing(8)
+    self.ii_image_card = image_flat_card
+    # Compatibility aliases: Image settings are now one flat editor card, not
+    # five nested collapsible sub-panels.
+    self.ii_matching_card = image_flat_card
+    self.ii_retry_card = image_flat_card
+    self.ii_on_fail_card = image_flat_card
+    self.ii_fail_target_card = image_flat_card
+
+    image_flat_lo.addLayout(flat_section_title("Image Template", "image", C["image"]))
 
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
@@ -911,42 +941,40 @@ def build_main_layout(window):
     self.image_preview_label = art_icon
     art_lo.addWidget(art_icon, stretch=1)
     preview_lo.addWidget(art, stretch=1)
+    image_flat_lo.addWidget(preview)
 
-    preview_actions = QHBoxLayout()
-    preview_actions.setContentsMargins(0, 0, 0, 0)
-    preview_actions.setSpacing(6)
-    change_btn = QPushButton("Browse")
-    change_btn.setIcon(icon("image", 13, C["text_dim"]))
-    change_btn.setIconSize(QSize(13, 13))
-    change_btn.setFixedHeight(28)
-    change_btn.setStyleSheet(
-        f"QPushButton {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 8px; "
-        "font-size: 10px; font-weight: 750; text-align: left; }}"
-        f"QPushButton:hover {{ border-color: {C['accent']}; }}"
-    )
-    change_btn.clicked.connect(self._browse_active_image_file)
-    preview_actions.addWidget(change_btn)
-    preview_actions.addStretch()
-    for attr, name, tip, slot in (
-        ("ii_zoom_btn", "search", "Zoom image", self._zoom_image_preview),
-        ("ii_fit_btn", "move", "Fit preview", self._fit_image_preview),
-        ("ii_capture_btn", "target", "Capture search region", self._capture_active_image_region),
-    ):
-        btn = QPushButton()
-        btn.setObjectName("icon_btn")
-        btn.setIcon(icon(name, 13, C["text_dim"]))
+    image_actions = QHBoxLayout()
+    image_actions.setContentsMargins(0, 0, 0, 0)
+    image_actions.setSpacing(6)
+
+    def image_tool_btn(text, icon_name, tip, slot, width=64):
+        btn = QPushButton(text)
+        btn.setObjectName("image_inspector_tool_btn")
+        btn.setIcon(icon(icon_name, 13, C["text_dim"]))
+        btn.setIconSize(QSize(13, 13))
         btn.setToolTip(tip)
-        btn.setFixedSize(28, 28)
+        btn.setFixedHeight(28)
+        btn.setMinimumWidth(width)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(slot)
-        setattr(self, attr, btn)
-        preview_actions.addWidget(btn)
-    preview_lo.addLayout(preview_actions)
-    image_card_lo.addWidget(preview)
-    ii_lo.addWidget(image_card)
+        btn.setStyleSheet(
+            f"QPushButton#image_inspector_tool_btn {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
+            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 8px; "
+            "font-size: 10px; font-weight: 750; }}"
+            f"QPushButton#image_inspector_tool_btn:hover {{ border-color: {C['accent']}; color: {C['accent_hover']}; }}"
+        )
+        return btn
 
-    matching, matching_lo = inspector_group("MATCHING", "target", C["accent"], show_info=False)
-    self.ii_matching_card = matching
+    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 66)
+    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 66)
+    self.ii_test_btn = image_tool_btn("Test / Locate", "play", "Test or locate this image action", self.test_selected_action, 88)
+    image_actions.addWidget(self.ii_browse_btn)
+    image_actions.addWidget(self.ii_capture_btn)
+    image_actions.addWidget(self.ii_test_btn)
+    image_actions.addStretch()
+    image_flat_lo.addLayout(image_actions)
+
+    image_flat_lo.addLayout(flat_section_title("Matching", "target", C["accent"]))
     sim_row = QHBoxLayout()
     sim_row.setContentsMargins(0, 0, 0, 0)
     sim_lbl = form_label("Similarity")
@@ -954,7 +982,7 @@ def build_main_layout(window):
     sim_row.addStretch()
     self.ii_sim = inspector_value("0.85", 54)
     sim_row.addWidget(self.ii_sim)
-    matching_lo.addLayout(sim_row)
+    image_flat_lo.addLayout(sim_row)
     self.ii_sim_slider = QSlider(Qt.Orientation.Horizontal)
     self.ii_sim_slider.setRange(0, 100)
     self.ii_sim_slider.setValue(85)
@@ -966,7 +994,7 @@ def build_main_layout(window):
         "border-radius: 5px; margin: -4px 0; }}"
     )
     self.ii_sim_slider.valueChanged.connect(lambda v: self.ii_sim.setText(f"{v / 100:.2f}"))
-    matching_lo.addWidget(self.ii_sim_slider)
+    image_flat_lo.addWidget(self.ii_sim_slider)
     scale_row = QHBoxLayout()
     scale_row.setContentsMargins(0, 0, 0, 0)
     left_scale = QLabel("0.00")
@@ -976,7 +1004,7 @@ def build_main_layout(window):
     scale_row.addWidget(left_scale)
     scale_row.addStretch()
     scale_row.addWidget(right_scale)
-    matching_lo.addLayout(scale_row)
+    image_flat_lo.addLayout(scale_row)
     wait_row = QHBoxLayout()
     wait_row.setContentsMargins(0, 0, 0, 0)
     wait_row.addWidget(form_label("Wait timeout"))
@@ -986,61 +1014,54 @@ def build_main_layout(window):
     wait_ms = QLabel("ms")
     wait_ms.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
     wait_row.addWidget(wait_ms)
-    matching_lo.addLayout(wait_row)
-    ii_lo.addWidget(matching)
+    image_flat_lo.addLayout(wait_row)
 
-    retry, retry_lo = inspector_group("RETRY", "update", C["accent"], show_info=False)
-    self.ii_retry_card = retry
+    image_flat_lo.addLayout(flat_section_title("Retry", "update", C["accent"]))
+    retry_values = QHBoxLayout()
+    retry_values.setContentsMargins(0, 0, 0, 0)
+    retry_values.setSpacing(7)
+    retry_values.addWidget(form_label("Retry attempts"))
     self.ii_retry_count = QSpinBox()
     self.ii_retry_count.setRange(1, 99)
-    self.ii_retry_count.setFixedSize(76, 28)
+    self.ii_retry_count.setFixedSize(58, 28)
     self.ii_retry_count.setStyleSheet(
         f"QSpinBox {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
         f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 8px; font-size: 11px; }}"
     )
-    self.ii_retry_delay = inspector_value("250", 76)
-    retry_row = QHBoxLayout()
-    retry_row.setContentsMargins(0, 0, 0, 0)
-    retry_row.setSpacing(8)
-    retry_row.addWidget(form_label("Retry attempts / delay"))
-    retry_lo.addLayout(retry_row)
-    retry_values = QHBoxLayout()
-    retry_values.setContentsMargins(0, 0, 0, 0)
-    retry_values.setSpacing(7)
-    slash = QLabel("/")
-    slash.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    slash.setStyleSheet(f"color: {C['text']}; font-size: 12px; background: transparent;")
     retry_values.addWidget(self.ii_retry_count)
-    retry_values.addWidget(slash)
-    retry_values.addWidget(self.ii_retry_delay)
-    retry_values.addWidget(form_label("ms"))
     retry_values.addStretch()
-    retry_lo.addLayout(retry_values)
-    ii_lo.addWidget(retry)
+    image_flat_lo.addLayout(retry_values)
+    delay_row = QHBoxLayout()
+    delay_row.setContentsMargins(0, 0, 0, 0)
+    delay_row.setSpacing(7)
+    delay_row.addWidget(form_label("Retry delay"))
+    delay_row.addStretch()
+    self.ii_retry_delay = inspector_value("250", 68)
+    delay_row.addWidget(self.ii_retry_delay)
+    delay_row.addWidget(form_label("ms"))
+    image_flat_lo.addLayout(delay_row)
 
-    on_fail, on_fail_lo = inspector_group("ON FAIL", "condition", C["accent"], show_info=False)
-    self.ii_on_fail_card = on_fail
+    image_flat_lo.addLayout(flat_section_title("On Fail", "condition", C["accent"]))
     on_fail_row = QHBoxLayout()
     on_fail_row.setContentsMargins(0, 0, 0, 0)
     on_fail_row.addWidget(form_label("On fail"))
     on_fail_row.addStretch()
     self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Group"])
-    self.ii_fail_mode.setFixedWidth(118)
+    self.ii_fail_mode.setFixedWidth(132)
     on_fail_row.addWidget(self.ii_fail_mode)
-    on_fail_lo.addLayout(on_fail_row)
-    ii_lo.addWidget(on_fail)
+    image_flat_lo.addLayout(on_fail_row)
 
-    fail_target, fail_target_lo = inspector_group("FAIL TARGET", "target", C["accent"], show_info=False)
-    self.ii_fail_target_card = fail_target
+    image_flat_lo.addLayout(flat_section_title("Fail Target", "target", C["accent"]))
     target_row = QHBoxLayout()
     target_row.setContentsMargins(0, 0, 0, 0)
     target_row.addWidget(form_label("Fail target"))
     target_row.addStretch()
     self.ii_fail_target = compact_combo()
-    self.ii_fail_target.setFixedWidth(118)
+    self.ii_fail_target.setFixedWidth(132)
     target_row.addWidget(self.ii_fail_target)
-    fail_target_lo.addLayout(target_row)
-    ii_lo.addWidget(fail_target)
+    image_flat_lo.addLayout(target_row)
+
+    ii_lo.addWidget(image_flat_card)
 
     self.insp_group = QWidget()
     ig_outer = QVBoxLayout(self.insp_group)
@@ -1149,11 +1170,9 @@ def build_main_layout(window):
     self._side_panel_auto_expand_width = 1040
     self._height_auto_playback_collapse = 1100
     self._height_auto_playback_expand = 1170
-    # Side-panel auto-hide order while unlocked and resizing height:
-    # FAIL TARGET -> ON FAIL -> RETRY -> MATCHING -> IMAGE -> RECORDER ->
-    # ADD ACTION -> INSPECTOR.  The expand path restores the same set in
-    # reverse order so the main Inspector body comes back before the larger
-    # top-level sections and Image groups.
+    # Side-panel auto-hide order while unlocked and resizing height.
+    # Image settings are now flat inside the main Inspector, so only the main
+    # side-panel cards participate in the automatic collapse order.
     self._height_auto_add_collapse = 1060
     self._height_auto_add_expand = 1130
     self._height_auto_recorder_collapse = 1020
@@ -1223,11 +1242,6 @@ def build_main_layout(window):
                 "add_action_body",
                 "recorder_body",
                 "inspector_body",
-                "inspector_group_image_body",
-                "inspector_group_matching_body",
-                "inspector_group_retry_body",
-                "inspector_group_on_fail_body",
-                "inspector_group_fail_target_body",
             )
 
             for body_name in body_names:
@@ -1310,7 +1324,6 @@ def build_main_layout(window):
                 responsive_height = getattr(self, "_update_responsive_height_panels", None)
                 if callable(responsive_height):
                     QTimer.singleShot(0, responsive_height)
-                    QTimer.singleShot(45, responsive_height)
         except Exception:
             pass
 
