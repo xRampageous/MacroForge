@@ -1,6 +1,6 @@
 {
-  "version": "3.5.36",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.36/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.36/MacroForge-v3.5.36.zip",
-  "notes": "v3.5.36: Apply image subpanel full body measure fix patch - updated main_window_layout.py with image subpanel full body measure fix."
+  "version": "3.5.37",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.37/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.37/MacroForge-v3.5.37.zip",
+  "notes": "v3.5.37: Apply side panel collapse scheduler stability fix patch - updated main_window.py and main_window_layout.py with side panel collapse scheduler stability fix."
 }
