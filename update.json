@@ -1,6 +1,6 @@
 {
-  "version": "3.5.24",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.24/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.24/MacroForge-v3.5.24.zip",
-  "notes": "v3.5.24: Apply image inspector subpanel collapse fix patch - updated main_window_layout.py with image inspector subpanel collapse fix."
+  "version": "3.5.25",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.25/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.25/MacroForge-v3.5.25.zip",
+  "notes": "v3.5.25: Apply image inspector collapse order patch - updated main_window.py and main_window_layout.py with image inspector collapse order."
 }
