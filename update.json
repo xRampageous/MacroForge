@@ -1,6 +1,6 @@
 {
-  "version": "3.5.37",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.37/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.37/MacroForge-v3.5.37.zip",
-  "notes": "v3.5.37: Apply side panel collapse scheduler stability fix patch - updated main_window.py and main_window_layout.py with side panel collapse scheduler stability fix."
+  "version": "3.5.38",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.38/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.38/MacroForge-v3.5.38.zip",
+  "notes": "v3.5.38: Apply flat inspector rework patch - updated main_window.py and main_window_layout.py with flat inspector rework."
 }
