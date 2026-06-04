@@ -206,10 +206,12 @@ def make_playback_panel(window):
     self.bottom_panel_lock_btn.setFixedSize(34, 34)
     self.bottom_panel_lock_btn.clicked.connect(self._toggle_bottom_panel_lock)
     self.bottom_panel_lock_btn.setStyleSheet(
-        f"QPushButton#panel_lock_btn {{ color: {C['text_dim']}; background-color: {C['bg_tertiary']}; "
+        f"QPushButton#panel_lock_btn {{ color: {C['text_dim']}; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 {C['bg_tertiary']}, stop:1 {C['bg_secondary']}); "
         f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; "
-        "font-size: 13px; font-weight: 850; }}"
+        "font-size: 13px; font-weight: 900; }}"
         f"QPushButton#panel_lock_btn:hover {{ border-color: {C['accent']}; color: {C['text']}; background-color: {C['bg_hover']}; }}"
+        f"QPushButton#panel_lock_btn:pressed {{ background-color: {C['accent_glow']}; }}"
     )
     top.addWidget(self.bottom_panel_lock_btn, alignment=Qt.AlignmentFlag.AlignTop)
 

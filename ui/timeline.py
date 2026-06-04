@@ -628,7 +628,9 @@ class TimelineView(QListView):
     action_double_clicked = pyqtSignal(int)
     action_context_menu = pyqtSignal(int, object)
     action_dragged = pyqtSignal(int, int)
+    action_dragged_many = pyqtSignal(list, int)
     action_dropped_into_group = pyqtSignal(int, int)
+    action_dropped_many_into_group = pyqtSignal(list, int)
     group_toggle_requested = pyqtSignal(int)
 
     def __init__(self, parent=None, model=None):
@@ -648,6 +650,7 @@ class TimelineView(QListView):
         self._drag_start_row = -1
         self._drag_allowed = False
         self.drag_source_row = -1
+        self.drag_source_rows = []
         self.drop_insert_row = -1
         self.drop_group_row = -1
         self.drop_feedback_label = ""
@@ -788,6 +791,33 @@ class TimelineView(QListView):
                 rows = {i.row() for i in sel.selectedIndexes() if i.isValid()}
         self.selected_indices = {r for r in rows if not self.is_row_collapsed_hidden(r)}
         return self.selected_indices
+
+    def selected_rows(self):
+        return sorted(int(r) for r in self.sync_selection())
+
+    def drag_rows(self):
+        rows = list(getattr(self, "drag_source_rows", []) or [])
+        if not rows and self.drag_source_row >= 0:
+            rows = [self.drag_source_row]
+        count = self.model().rowCount() if self.model() is not None else 0
+        return sorted({r for r in rows if 0 <= r < count and not self.is_row_collapsed_hidden(r)})
+
+    def set_selected_rows(self, rows, active=None):
+        rows = sorted({int(r) for r in (rows or []) if self.model() is not None and 0 <= int(r) < self.model().rowCount()})
+        self.clearSelection()
+        self.selected_indices = set(rows)
+        sel = self.selectionModel()
+        if sel is not None:
+            for row in rows:
+                idx = self.model().index(row, 0)
+                sel.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
+        if rows:
+            active = rows[0] if active is None or int(active) not in rows else int(active)
+            self.setCurrentIndex(self.model().index(active, 0))
+        else:
+            self.setCurrentIndex(QModelIndex())
+        self.viewport().update()
+        return rows
 
     def clear_trace(self):
         self.trace_rows.clear()
@@ -1020,6 +1050,11 @@ class TimelineView(QListView):
     def startDrag(self, supported_actions):
         if self.playing_index >= 0 or not self._drag_allowed or self._drag_start_row < 0:
             return
+        selected = self.selected_rows()
+        if self._drag_start_row in selected and len(selected) > 1:
+            self.drag_source_rows = selected
+        else:
+            self.drag_source_rows = [self._drag_start_row]
         self.drag_source_row = self._drag_start_row
         self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
         self.viewport().update()
@@ -1045,14 +1080,20 @@ class TimelineView(QListView):
                 self.drop_insert_row = -1
                 self.drop_feedback_kind = "group"
                 self.drop_feedback_valid = True
-                self.drop_feedback_label = self.drop_feedback_text(group_row)
+                drag_count = len(self.drag_rows())
+                base_label = self.drop_feedback_text(group_row)
+                self.drop_feedback_label = f"Drop {drag_count} actions into group" if drag_count > 1 else base_label
             else:
                 self.drop_group_row = -1
                 self.drop_insert_row = self._drop_insert_row(pos)
                 self.drop_feedback_kind = "insert"
                 self.drop_feedback_valid = self.drop_insert_row >= 0
                 if self.drop_feedback_valid:
-                    self.drop_feedback_label = f"Move to row {self.drop_insert_row + 1}"
+                    drag_count = len(self.drag_rows())
+                    self.drop_feedback_label = (
+                        f"Move {drag_count} actions to row {self.drop_insert_row + 1}"
+                        if drag_count > 1 else f"Move to row {self.drop_insert_row + 1}"
+                    )
                 else:
                     self.drop_feedback_label = "Drop unavailable"
             self.viewport().update()
@@ -1087,13 +1128,22 @@ class TimelineView(QListView):
                 self.drop_insert_row = -1
                 self.drop_feedback_kind = "group"
                 self.drop_feedback_valid = True
-                self.drop_feedback_label = self.drop_feedback_text(group_row)
+                drag_count = len(self.drag_rows())
+                base_label = self.drop_feedback_text(group_row)
+                self.drop_feedback_label = f"Drop {drag_count} actions into group" if drag_count > 1 else base_label
             else:
                 self.drop_group_row = -1
                 self.drop_insert_row = self._drop_insert_row(self._last_drag_pos)
                 self.drop_feedback_kind = "insert"
                 self.drop_feedback_valid = self.drop_insert_row >= 0
-                self.drop_feedback_label = f"Move to row {self.drop_insert_row + 1}" if self.drop_feedback_valid else "Drop unavailable"
+                if self.drop_feedback_valid:
+                    drag_count = len(self.drag_rows())
+                    self.drop_feedback_label = (
+                        f"Move {drag_count} actions to row {self.drop_insert_row + 1}"
+                        if drag_count > 1 else f"Move to row {self.drop_insert_row + 1}"
+                    )
+                else:
+                    self.drop_feedback_label = "Drop unavailable"
             self.viewport().update()
 
     def _stop_auto_scroll(self):
@@ -1105,6 +1155,7 @@ class TimelineView(QListView):
         self._drag_start_row = -1
         self._drag_allowed = False
         self.drag_source_row = -1
+        self.drag_source_rows = []
         self.drop_insert_row = -1
         self.drop_group_row = -1
         self.drop_feedback_label = ""
@@ -1188,21 +1239,31 @@ class TimelineView(QListView):
 
     def dropEvent(self, event):
         source = self._drag_start_row
+        rows = self.drag_rows()
         if self.playing_index >= 0 or not self._drag_allowed:
             event.ignore()
             self._stop_drag_feedback()
             return
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
         group_target = self._drop_group_row(pos)
-        target = self._drop_target_row(pos) if group_target < 0 else -1
+        target = self._drop_insert_row(pos) if group_target < 0 else -1
+        single_target = self._drop_target_row(pos) if group_target < 0 else -1
         self._stop_auto_scroll()
         event.acceptProposedAction()
         if source >= 0 and group_target >= 0:
             self.flash_drop(group_target)
-            QTimer.singleShot(0, lambda s=source, g=group_target: self.action_dropped_into_group.emit(s, g))
-        elif source >= 0 and target >= 0 and source != target:
-            self.flash_drop(target)
-            QTimer.singleShot(0, lambda s=source, t=target: self.action_dragged.emit(s, t))
+            if len(rows) > 1:
+                QTimer.singleShot(0, lambda r=rows, g=group_target: self.action_dropped_many_into_group.emit(r, g))
+            else:
+                QTimer.singleShot(0, lambda s=source, g=group_target: self.action_dropped_into_group.emit(s, g))
+        elif source >= 0 and target >= 0:
+            flash_target = target if len(rows) > 1 else single_target
+            if len(rows) > 1:
+                self.flash_drop(max(0, min(flash_target, self.model().rowCount() - 1)))
+                QTimer.singleShot(0, lambda r=rows, t=target: self.action_dragged_many.emit(r, t))
+            elif single_target >= 0 and source != single_target:
+                self.flash_drop(single_target)
+                QTimer.singleShot(0, lambda s=source, t=single_target: self.action_dragged.emit(s, t))
 
     def wheelEvent(self, event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:

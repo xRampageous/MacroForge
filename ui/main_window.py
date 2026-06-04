@@ -369,8 +369,9 @@ class MainWindow(QMainWindow):
                     else:
                         image_sequence_complete = True
 
-                    # Expanding: restore in reverse order, one section per pass.
-                    for body_name, _collapse_attr, expand_attr in reversed(image_steps):
+                    # Expanding: restore in the same order as collapse, one
+                    # section per pass: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
+                    for body_name, _collapse_attr, expand_attr in image_steps:
                         if _panel_collapsed(body_name) and height >= int(getattr(self, expand_attr, 16777215)):
                             set_panel(body_name, False, auto=True)
                             image_sequence_complete = False
@@ -445,9 +446,20 @@ class MainWindow(QMainWindow):
     def _set_lock_button_state(self, btn, locked, locked_tip, unlocked_tip):
         if btn is None:
             return
+        C = COLORS
         btn.setText("🔒" if locked else "🔓")
         btn.setToolTip(locked_tip if locked else unlocked_tip)
-        btn.setProperty("locked", locked)
+        border = C["accent"] if locked else C["border"]
+        fg = "#FFFFFF" if locked else C["text_dim"]
+        bg0 = "#0A2538" if locked else C["bg_tertiary"]
+        bg1 = "#04121E" if locked else C["bg_secondary"]
+        btn.setStyleSheet(
+            f"QPushButton {{ color: {fg}; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {bg0}, stop:1 {bg1}); border: 1px solid {border}; "
+            "border-radius: 8px; padding: 0; font-size: 13px; font-weight: 900; }}"
+            f"QPushButton:hover {{ border-color: {C['accent']}; color: {C['text']}; background-color: {C['bg_hover']}; }}"
+            f"QPushButton:pressed {{ background-color: {C['accent_glow']}; }}"
+        )
         btn.style().unpolish(btn)
         btn.style().polish(btn)
 
@@ -537,6 +549,44 @@ class MainWindow(QMainWindow):
                     self.setMinimumSize(base_w, base_h)
                 if self.maximumWidth() != max_w or self.maximumHeight() != 16777215:
                     self.setMaximumSize(max_w, 16777215)
+        except Exception:
+            pass
+
+    def _auto_grow_for_collapsed_side_panel(self):
+        """When unlocked and the side rail is collapsed at minimum height, grow back to a usable side-panel baseline."""
+        try:
+            if not bool(getattr(self, "_side_panel_collapsed", False)):
+                return
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+            base_h = int(getattr(self, "_base_min_height", 420))
+            if int(self.height()) > base_h + 28:
+                return
+            target_h = max(
+                720,
+                base_h,
+                int(getattr(self, "_height_auto_recorder_expand", 720)),
+                int(getattr(self, "_height_auto_inspector_expand", 840)),
+            )
+            if self.height() < target_h:
+                self.resize(self.width(), target_h)
+        except Exception:
+            pass
+
+    def _refresh_unlocked_selection_height(self):
+        """Recalculate side-panel/Inspector height after selection changes while unlocked."""
+        try:
+            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+            self._autosize_inspector_panel()
+            if hasattr(self, "sidebar_frame"):
+                self.sidebar_frame.updateGeometry()
+            if bool(getattr(self, "_side_panel_collapsed", False)):
+                self._auto_grow_for_collapsed_side_panel()
+            else:
+                # Selection changes can change the Inspector's natural height,
+                # so run the responsive height pass even when no lock is active.
+                self._update_responsive_height_panels()
         except Exception:
             pass
 
@@ -1063,8 +1113,12 @@ class MainWindow(QMainWindow):
         self.timeline.action_clicked.connect(self.select)
         self.timeline.action_double_clicked.connect(self._open_active_dialog)
         self.timeline.action_dragged.connect(self.move_action_to)
+        if hasattr(self.timeline, "action_dragged_many"):
+            self.timeline.action_dragged_many.connect(self.move_actions_to)
         if hasattr(self.timeline, "action_dropped_into_group"):
             self.timeline.action_dropped_into_group.connect(self.move_action_into_group)
+        if hasattr(self.timeline, "action_dropped_many_into_group"):
+            self.timeline.action_dropped_many_into_group.connect(self.move_actions_into_group)
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
         self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
 
@@ -1881,6 +1935,9 @@ class MainWindow(QMainWindow):
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
                 QTimer.singleShot(0, self._apply_panel_size_locks)
                 QTimer.singleShot(35, self._apply_panel_size_locks)
+            else:
+                self._refresh_unlocked_selection_height()
+                QTimer.singleShot(35, self._refresh_unlocked_selection_height)
 
     def _apply_inspector(self, autosave=False):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
@@ -2171,6 +2228,141 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
         self.save_session()
         self.status(f"Moved row {index + 1} into {group_meta['badge']} {group_meta['name']}")
+
+    def _select_moved_rows(self, rows, active=None):
+        rows = sorted({int(r) for r in (rows or []) if 0 <= int(r) < self.action_model.rowCount()})
+        if hasattr(self.timeline, "set_selected_rows"):
+            self.timeline.set_selected_rows(rows, active=active if active is not None else (rows[0] if rows else None))
+        elif rows:
+            self.timeline.selected_indices = set(rows)
+            self.timeline.set_active(active if active is not None else rows[0])
+        self.active_index = active if active is not None else (rows[0] if rows else -1)
+
+    def move_actions_to(self, rows, target_index):
+        """Move multiple selected non-group rows as one ordered block."""
+        if self.engine.running or self.timeline.playing_index >= 0:
+            self.status("Stop playback before reordering actions")
+            return
+        actions_before = list(self.action_model.actions())
+        count = len(actions_before)
+        rows = sorted({int(r) for r in (rows or []) if 0 <= int(r) < count})
+        if not rows:
+            return
+        if len(rows) == 1:
+            return self.move_action_to(rows[0], target_index)
+
+        group_rows = [r for r in rows if getattr(actions_before[r], "action_type", "") == "group"]
+        if group_rows:
+            self.status("Multi-drag skips group headers; drag a group header by itself")
+            rows = [r for r in rows if r not in set(group_rows)]
+            if not rows:
+                return
+
+        target_index = max(0, min(int(target_index), count))
+        row_set = set(rows)
+        scroll_position = self.timeline.scroll_position()
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+
+        moved = [actions_before[r] for r in rows]
+        remaining = [a for i, a in enumerate(actions_before) if i not in row_set]
+        removed_before_target = sum(1 for r in rows if r < target_index)
+        insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
+
+        new_actions = remaining[:insert_at] + moved + remaining[insert_at:]
+        new_index_by_id = {id(a): i for i, a in enumerate(new_actions)}
+        row_map = {old_i: new_index_by_id.get(id(a), old_i) for old_i, a in enumerate(actions_before)}
+
+        self.action_model.set_actions(new_actions)
+        self._apply_row_reference_map(row_map)
+        for row in range(insert_at, insert_at + len(moved)):
+            self._assign_group_from_position(row)
+        self._normalize_groups()
+
+        new_rows = list(range(insert_at, insert_at + len(moved)))
+        self.active_index = new_rows[0] if new_rows else -1
+        self.refresh()
+        self._select_moved_rows(new_rows, active=self.active_index)
+        self.timeline.restore_scroll_position(scroll_position)
+        if new_rows:
+            self.timeline.flash_drop(new_rows[0])
+        self.update_statistics(immediate=True)
+        self.save_session()
+        self.status(f"Moved {len(moved)} actions")
+
+    def move_actions_into_group(self, rows, group_row):
+        """Move multiple selected non-group rows into the target group."""
+        if self.engine.running or self.timeline.playing_index >= 0:
+            self.status("Stop playback before moving actions into groups")
+            return
+        actions_before = list(self.action_model.actions())
+        count = len(actions_before)
+        rows = sorted({int(r) for r in (rows or []) if 0 <= int(r) < count})
+        if not rows:
+            return
+        if len(rows) == 1:
+            return self.move_action_into_group(rows[0], group_row)
+        if group_row < 0 or group_row >= count:
+            return
+
+        group_meta = self._group_header_for_row(group_row)
+        if not group_meta or getattr(group_meta["action"], "action_type", "") != "group":
+            return
+        header_action = group_meta["action"]
+
+        movable_rows = [
+            r for r in rows
+            if actions_before[r] is not header_action and getattr(actions_before[r], "action_type", "") != "group"
+        ]
+        if not movable_rows:
+            self.status("Multi-drag into group only moves action rows")
+            return
+
+        row_set = set(movable_rows)
+        scroll_position = self.timeline.scroll_position()
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+
+        moved = [actions_before[r] for r in movable_rows]
+        remaining = [a for i, a in enumerate(actions_before) if i not in row_set]
+        try:
+            header_index = next(i for i, a in enumerate(remaining) if a is header_action)
+        except StopIteration:
+            self.status("Target group no longer exists")
+            return
+
+        target_insert = header_index + 1
+        gid = group_meta["gid"]
+        while target_insert < len(remaining):
+            candidate = remaining[target_insert]
+            if getattr(candidate, "action_type", "") == "group":
+                break
+            if getattr(candidate, "group_id", "") != gid:
+                break
+            target_insert += 1
+
+        for action in moved:
+            action.group_id = gid
+            action.group_color = group_meta["color"]
+            action.block_depth = max(1, int(getattr(action, "block_depth", 0) or 0))
+
+        new_actions = remaining[:target_insert] + moved + remaining[target_insert:]
+        new_index_by_id = {id(a): i for i, a in enumerate(new_actions)}
+        row_map = {old_i: new_index_by_id.get(id(a), old_i) for old_i, a in enumerate(actions_before)}
+
+        self.action_model.set_actions(new_actions)
+        self._apply_row_reference_map(row_map)
+        self._normalize_groups()
+
+        new_rows = list(range(target_insert, target_insert + len(moved)))
+        collapsed = bool(getattr(header_action, "group_collapsed", False))
+        active = header_index if collapsed else (new_rows[0] if new_rows else header_index)
+        self.active_index = active
+        self.refresh()
+        self._select_moved_rows([header_index] if collapsed else new_rows, active=active)
+        self.timeline.restore_scroll_position(scroll_position)
+        self.timeline.flash_drop(active)
+        self.update_statistics(immediate=True)
+        self.save_session()
+        self.status(f"Moved {len(moved)} actions into {group_meta['badge']} {group_meta['name']}")
 
     def move_action_to(self, index, target_index):
         if self.engine.running or self.timeline.playing_index >= 0:

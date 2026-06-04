@@ -1,6 +1,6 @@
 """Main layout construction for MacroForge main window."""
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -69,6 +69,7 @@ def build_main_layout(window):
         return caret
 
     self._panel_collapse_controls = {}
+    self._collapse_animations = {}
 
     def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
@@ -77,21 +78,18 @@ def build_main_layout(window):
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
 
         parent = body_widget.parentWidget()
-        if collapsed:
-            # Collapse upward: keep the header anchored and remove the body from
-            # the vertical layout by clamping it before hiding it.
-            body_widget.setMinimumHeight(0)
-            body_widget.setMaximumHeight(0)
-            body_widget.setVisible(False)
-        else:
-            # Expand downward: reveal the body below the header and release the
-            # height clamp before the parent is allowed to grow again.
-            body_widget.setVisible(True)
-            body_widget.setMinimumHeight(0)
-            body_widget.setMaximumHeight(16777215)
+        parent_name = parent.objectName() if parent is not None else ""
+        anim_key = body_widget.objectName() or str(id(body_widget))
+        previous_anim = self._collapse_animations.get(anim_key)
+        if previous_anim is not None:
+            try:
+                previous_anim.stop()
+            except Exception:
+                pass
 
-        if parent is not None:
-            parent_name = parent.objectName() or ""
+        def _finish_parent():
+            if parent is None:
+                return
             if collapsed:
                 parent.setMinimumHeight(0)
                 parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
@@ -100,15 +98,58 @@ def build_main_layout(window):
                 parent.setMinimumHeight(0)
                 parent.setMaximumHeight(16777215)
                 if parent_name == "inspector_card":
-                    # The Inspector is content-sized.  Never let it stretch to
-                    # the bottom of the side panel; a bottom spacer absorbs
-                    # unused height so the header stays under the panels above.
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
                 else:
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
             if parent_name == "inspector_card" and hasattr(self, "_autosize_inspector_panel"):
                 self._autosize_inspector_panel()
+
+        try:
+            body_widget.setMinimumHeight(0)
+            if collapsed:
+                start_h = max(body_widget.height(), body_widget.sizeHint().height(), 1)
+                end_h = 0
+                body_widget.setVisible(True)
+                body_widget.setMaximumHeight(start_h)
+            else:
+                body_widget.setVisible(True)
+                start_h = max(0, body_widget.height())
+                if start_h <= 1:
+                    start_h = 0
+                body_widget.setMaximumHeight(16777215)
+                body_widget.updateGeometry()
+                end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
+                body_widget.setMaximumHeight(start_h)
+
+            anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
+            anim.setDuration(145)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.setStartValue(start_h)
+            anim.setEndValue(end_h)
+
+            def _finished():
+                if collapsed:
+                    body_widget.setMaximumHeight(0)
+                    body_widget.setVisible(False)
+                else:
+                    body_widget.setVisible(True)
+                    body_widget.setMaximumHeight(16777215)
+                _finish_parent()
+                body_widget.updateGeometry()
+                self._collapse_animations.pop(anim_key, None)
+
+            anim.finished.connect(_finished)
+            self._collapse_animations[anim_key] = anim
+            anim.start()
+        except Exception:
+            if collapsed:
+                body_widget.setMaximumHeight(0)
+                body_widget.setVisible(False)
+            else:
+                body_widget.setVisible(True)
+                body_widget.setMaximumHeight(16777215)
+            _finish_parent()
         body_widget.updateGeometry()
 
     def _set_collapsible_panel(body_name, collapsed, auto=False):
@@ -225,7 +266,7 @@ def build_main_layout(window):
         )
         return combo
 
-    def inspector_group(title, icon_name, color, show_info=True):
+    def inspector_group(title, icon_name, color, show_info=False):
         card = QFrame()
         card.setObjectName(f"inspector_group_{title.lower().replace(' ', '_')}")
         card.setStyleSheet(
@@ -269,11 +310,6 @@ def build_main_layout(window):
         )
         title_lo.addWidget(lbl)
 
-        if show_info:
-            info = QLabel("ⓘ")
-            info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            info.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
-            title_lo.addWidget(info)
         title_lo.addStretch()
         head.addWidget(title_wrap, stretch=1)
 
@@ -930,6 +966,9 @@ def build_main_layout(window):
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
+        if collapsed and not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
+            if hasattr(self, "_auto_grow_for_collapsed_side_panel"):
+                self._auto_grow_for_collapsed_side_panel()
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
 
