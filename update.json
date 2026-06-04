@@ -1,6 +1,6 @@
 {
-  "version": "3.5.46",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.46/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.46/MacroForge-v3.5.46.zip",
-  "notes": "v3.5.46: Apply click X/Y selected reveal fix patch - updated main_window.py and main_window_layout.py with click X/Y fit and selected action reveal fix."
+  "version": "3.5.47",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.47/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.47/MacroForge-v3.5.47.zip",
+  "notes": "v3.5.47: Apply image dropdown status selected reveal fix patch - updated main_window.py and main_window_layout.py with image dropdown widths, status pill truncation, and selected reveal fix."
 }
