@@ -1121,6 +1121,13 @@ def build_main_layout(window):
     self._height_auto_recorder_expand = 970
     self._height_auto_add_collapse = 780
     self._height_auto_add_expand = 860
+    # Fit-based vertical resize guard.  The debug log showed the side stack can
+    # hit its natural minimum around 1340px while the fixed collapse thresholds
+    # are still far below the current height.  During live vertical resize,
+    # treat this near-fit zone as pressure so one section collapses and releases
+    # the layout minimum; restore only after there is measured room again.
+    self._height_auto_sidebar_fit_margin = 72
+    self._height_auto_sidebar_restore_margin = 54
     self.sidebar_frame = sidebar
     self.add_action_body = add_body
     self.recorder_body = rec_body

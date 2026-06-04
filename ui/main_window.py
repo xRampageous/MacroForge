@@ -539,7 +539,8 @@ class MainWindow(QMainWindow):
                 f"playback {getattr(self, '_height_auto_playback_collapse', '-')}→{getattr(self, '_height_auto_playback_expand', '-')} | "
                 f"inspector {getattr(self, '_height_auto_inspector_collapse', '-')}→{getattr(self, '_height_auto_inspector_expand', '-')} | "
                 f"recorder {getattr(self, '_height_auto_recorder_collapse', '-')}→{getattr(self, '_height_auto_recorder_expand', '-')} | "
-                f"add {getattr(self, '_height_auto_add_collapse', '-')}→{getattr(self, '_height_auto_add_expand', '-')}",
+                f"add {getattr(self, '_height_auto_add_collapse', '-')}→{getattr(self, '_height_auto_add_expand', '-')} | "
+                f"fit {getattr(self, '_height_auto_sidebar_fit_margin', '-')} restore {getattr(self, '_height_auto_sidebar_restore_margin', '-')}",
             ]
             if details:
                 header.append("details: " + " | ".join(str(d) for d in details))
@@ -613,16 +614,25 @@ class MainWindow(QMainWindow):
             return 0
 
     def _auto_expand_has_room(self, body_name, min_height):
-        """Decide if an auto-collapsed body can safely reopen at this height."""
+        """Decide if an auto-collapsed body can safely reopen at this height.
+
+        Do not reopen solely because the window is above a fixed threshold.  The
+        debug pass showed the window can be stuck near the side-panel's natural
+        minimum height, where fixed thresholds are technically satisfied but the
+        full stack still has almost no breathing room.  Reopen only when the
+        current collapsed stack has enough measured free space for the body plus
+        a small restore margin.
+        """
         try:
-            if int(self.height()) >= int(min_height):
-                return True
+            if int(self.height()) < int(min_height):
+                return False
             extra = self._collapsed_panel_expand_extra_px(body_name)
             if extra <= 0:
                 return False
             # Negative pressure is free space in the current collapsed stack.
             free_space = -int(self._sidebar_height_pressure_px())
-            return free_space >= extra + 14
+            restore_margin = int(getattr(self, "_height_auto_sidebar_restore_margin", 54))
+            return free_space >= extra + restore_margin
         except Exception:
             return False
 
@@ -682,9 +692,15 @@ class MainWindow(QMainWindow):
             set_panel = getattr(self, "_set_collapsible_panel", None)
             controls = getattr(self, "_panel_collapse_controls", {})
             suppress_anim = bool(getattr(self, "_suppress_auto_panel_animations", False)) or bool(getattr(self, "_panel_resize_active", False))
+            resize_driven = bool(getattr(self, "_panel_resize_active", False)) or bool(getattr(self, "_suppress_auto_panel_animations", False))
             pressure_margin = 4
+            fit_margin = int(getattr(self, "_height_auto_sidebar_fit_margin", 72))
+            restore_margin = int(getattr(self, "_height_auto_sidebar_restore_margin", 54))
             initial_pressure = int(self._sidebar_height_pressure_px())
-            _note(f"start: height={height} pressure={initial_pressure} pressure_margin={pressure_margin} suppress_anim={suppress_anim}")
+            _note(
+                f"start: height={height} pressure={initial_pressure} pressure_margin={pressure_margin} "
+                f"fit_margin={fit_margin} restore_margin={restore_margin} resize_driven={resize_driven} suppress_anim={suppress_anim}"
+            )
 
             def _height_pressure() -> int:
                 return int(self._sidebar_height_pressure_px())
@@ -693,12 +709,29 @@ class MainWindow(QMainWindow):
                 pressure = _height_pressure()
                 return pressure > pressure_margin
 
+            def _needs_fit_compaction() -> bool:
+                # While the user is actively dragging the window height, the Qt
+                # layout can stop shrinking at the current side-panel natural
+                # height.  Treat "almost no room left" as pressure so the first
+                # collapse can reduce the layout minimum and allow the window to
+                # keep shrinking.
+                pressure = _height_pressure()
+                return bool(resize_driven and pressure >= -fit_margin)
+
+            def _collapse_due_to_height_or_fit(collapse_at: int) -> bool:
+                pressure = _height_pressure()
+                return bool(height <= int(collapse_at) or pressure > pressure_margin or _needs_fit_compaction())
+
             def _can_expand(body_name: str, expand_at: int) -> bool:
-                has_room = bool(self._auto_expand_has_room(body_name, int(expand_at)))
+                compacting = _needs_fit_compaction()
+                has_room = False if compacting else bool(self._auto_expand_has_room(body_name, int(expand_at)))
                 if debug_on:
                     extra = int(self._collapsed_panel_expand_extra_px(body_name))
                     pressure = int(self._sidebar_height_pressure_px())
-                    _note(f"room-check {body_name}: height={height} expand_at={expand_at} pressure={pressure} extra={extra} -> {has_room}")
+                    _note(
+                        f"room-check {body_name}: height={height} expand_at={expand_at} pressure={pressure} "
+                        f"extra={extra} compacting={compacting} -> {has_room}"
+                    )
                 return has_room
 
             def _after_state_change():
@@ -771,13 +804,19 @@ class MainWindow(QMainWindow):
                     collapse_at = int(getattr(self, collapse_attr, 0))
                     collapsed_now = _panel_collapsed(body_name)
                     pressure_now = _height_pressure()
-                    should_collapse = height <= collapse_at or pressure_now > pressure_margin
+                    should_collapse = _collapse_due_to_height_or_fit(collapse_at)
                     if should_collapse:
                         if not collapsed_now:
-                            _note(f"image collapse trigger {body_name}: height={height} collapse_at={collapse_at} pressure={pressure_now}")
+                            _note(
+                                f"image collapse trigger {body_name}: height={height} collapse_at={collapse_at} "
+                                f"pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
+                            )
                             _auto_panel(body_name, True)
                         else:
-                            _note(f"image collapse no-op {body_name}: already collapsed height={height} collapse_at={collapse_at} pressure={pressure_now}")
+                            _note(
+                                f"image collapse no-op {body_name}: already collapsed height={height} collapse_at={collapse_at} "
+                                f"pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
+                            )
                     elif not collapsed_now:
                         image_sections_fully_collapsed = False
                         _note(f"image stays open {body_name}: height={height} collapse_at={collapse_at} pressure={pressure_now}")
@@ -852,15 +891,18 @@ class MainWindow(QMainWindow):
                 expand_at = int(getattr(self, expand_attr, 16777215))
                 collapsed_now = _panel_collapsed(body_name)
                 pressure_now = _height_pressure()
-                should_collapse = height <= collapse_at or pressure_now > pressure_margin
+                should_collapse = _collapse_due_to_height_or_fit(collapse_at)
                 if should_collapse:
                     if allow_main_collapse and not collapsed_now:
-                        _note(f"main collapse trigger {body_name}: height={height} collapse_at={collapse_at} pressure={pressure_now}")
+                        _note(
+                            f"main collapse trigger {body_name}: height={height} collapse_at={collapse_at} "
+                            f"pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
+                        )
                         _auto_panel(body_name, True)
                     else:
                         _note(
                             f"main collapse blocked/no-op {body_name}: allow={allow_main_collapse} collapsed={collapsed_now} "
-                            f"height={height} collapse_at={collapse_at} pressure={pressure_now}"
+                            f"height={height} collapse_at={collapse_at} pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
                         )
                 else:
                     can_expand = _can_expand(body_name, expand_at)
