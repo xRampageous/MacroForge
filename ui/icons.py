@@ -241,6 +241,16 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         p.drawLine(int(s * 0.55), int(s * 0.15), int(s * 0.72), int(s * 0.28))
         p.drawLine(int(s * 0.72), int(s * 0.28), int(s * 0.55), int(s * 0.38))
 
+    def _draw_download(p, s):
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawLine(int(s * 0.5), int(s * 0.18), int(s * 0.5), int(s * 0.58))
+        p.drawLine(int(s * 0.32), int(s * 0.43), int(s * 0.5), int(s * 0.62))
+        p.drawLine(int(s * 0.68), int(s * 0.43), int(s * 0.5), int(s * 0.62))
+        p.drawLine(int(s * 0.24), int(s * 0.78), int(s * 0.76), int(s * 0.78))
+        p.drawLine(int(s * 0.24), int(s * 0.68), int(s * 0.24), int(s * 0.78))
+        p.drawLine(int(s * 0.76), int(s * 0.68), int(s * 0.76), int(s * 0.78))
+
     def _draw_move(p, s):
         p.setPen(pen)
         p.drawLine(int(s * 0.5), int(s * 0.15), int(s * 0.5), int(s * 0.85))
@@ -369,7 +379,7 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         "trash": _draw_trash, "duplicate": _draw_duplicate, "edit": _draw_edit,
         "check": _draw_check, "cross": _draw_cross, "bolt": _draw_bolt,
         "loop": _draw_loop, "clock": _draw_clock, "menu": _draw_menu,
-        "update": _draw_update, "move": _draw_move, "settings": _draw_settings,
+        "update": _draw_update, "download": _draw_download, "move": _draw_move, "settings": _draw_settings,
         "browse": _draw_browse, "condition": _draw_condition, "save": _draw_save,
         "folder": _draw_folder, "undo": _draw_undo, "redo": _draw_redo,
         "search": _draw_search, "eye": _draw_eye, "target": _draw_target,
