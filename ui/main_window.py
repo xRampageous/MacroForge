@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
         self._save_session_timer.setInterval(500)
         self._save_session_timer.timeout.connect(self._do_save_session)
         self._inspector_loading = False
+        self._panel_resize_active = False
+        self._suppress_auto_panel_animations = False
         self._inspector_autosave_timer = QTimer(self)
         self._inspector_autosave_timer.setSingleShot(True)
         self._inspector_autosave_timer.setInterval(350)
@@ -293,15 +295,11 @@ class MainWindow(QMainWindow):
             vertical_changed = True
 
         try:
-            # During live vertical resizing, panel height animations can fight
-            # the user's drag and leave bodies half-clamped.  Do not let the
-            # height auto-collapser toggle panels on every pixel; settle current
-            # animations now, then run the responsive height pass once the resize
-            # event storm has paused.
             if vertical_changed:
                 self._panel_resize_generation = int(getattr(self, "_panel_resize_generation", 0)) + 1
                 generation = self._panel_resize_generation
                 self._suppress_auto_panel_animations = True
+                self._panel_resize_active = True
                 settler = getattr(self, "_settle_active_collapse_animations", None)
                 if settler is not None:
                     settler()
@@ -310,10 +308,13 @@ class MainWindow(QMainWindow):
         except Exception:
             generation = 0
 
-        # Width-based side rail behavior can stay immediate.  Height-based panel
-        # collapsing/expanding is debounced below to avoid animation/resize jitter.
+        # Width-based side-rail behavior stays immediate.  Height-based panel
+        # decisions also need an immediate pass; waiting until the resize settles
+        # made vertical drag feel like it was not collapsing/expanding at all.
         self._update_responsive_side_panel()
-        if not vertical_changed:
+        if vertical_changed:
+            self._update_responsive_height_panels()
+        else:
             self._update_responsive_height_panels()
         self._autosize_inspector_panel()
         self._apply_panel_size_locks()
@@ -326,19 +327,21 @@ class MainWindow(QMainWindow):
                 if settler is not None:
                     settler()
                 if was_vertical:
-                    # Apply responsive height changes only after the vertical resize
-                    # has settled, and keep animation suppression enabled for this
-                    # pass so panels snap cleanly instead of glitching mid-drag.
+                    # Final deterministic pass after the resize event storm.
+                    # Keep animations suppressed for this pass so sections snap
+                    # to their final state instead of getting stuck half open.
                     self._suppress_auto_panel_animations = True
                     self._update_responsive_height_panels()
                     if settler is not None:
                         settler()
                     self._autosize_inspector_panel()
+                self._panel_resize_active = False
                 self._suppress_auto_panel_animations = False
                 self._autosize_inspector_panel()
 
-            QTimer.singleShot(90 if vertical_changed else 0, _release_resize_animation_suppression)
+            QTimer.singleShot(120 if vertical_changed else 0, _release_resize_animation_suppression)
         except Exception:
+            self._panel_resize_active = False
             self._suppress_auto_panel_animations = False
 
     def _update_responsive_panels(self):
@@ -371,96 +374,125 @@ class MainWindow(QMainWindow):
             pass
 
     def _update_responsive_height_panels(self):
-        """Collapse from the bottom upward when vertical space gets tight.
+        """Collapse/expand side-stack panels from actual window height.
 
-        Panel locks are state-only.  When either panel lock is enabled, resize
-        pressure must not auto-collapse or auto-expand the side/Inspector/Image
-        sub-panel states.
+        This is intentionally deterministic during vertical resizing: animation
+        is suppressed and every threshold-crossed section is applied in one pass.
+        The old debounce-only approach could leave the UI looking unchanged while
+        the user dragged the top/bottom resize edge.
         """
         try:
             height = int(self.height())
             side_locked = bool(getattr(self, "_side_panel_locked", False))
             bottom_locked = bool(getattr(self, "_bottom_panel_locked", False))
-            any_panel_locked = side_locked or bottom_locked
-            set_panel = getattr(self, "_set_collapsible_panel", None)
-
-            if any_panel_locked:
+            if side_locked or bottom_locked:
                 return
 
-            # Image Inspector sub-panels collapse first while an Image action is
-            # selected. Order while shrinking: IMAGE -> MATCHING -> RETRY ->
-            # ON FAIL -> FAIL TARGET.  Collapse/expand is staged one section per
-            # resize pass so it feels smoother and never visually collapses into
-            # FAIL TARGET as the "main" table.
-            if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
-                image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
-                controls = getattr(self, "_panel_collapse_controls", {})
+            set_panel = getattr(self, "_set_collapsible_panel", None)
+            controls = getattr(self, "_panel_collapse_controls", {})
+            suppress_anim = bool(getattr(self, "_suppress_auto_panel_animations", False)) or bool(getattr(self, "_panel_resize_active", False))
 
-                def _panel_collapsed(body_name: str) -> bool:
-                    ctl = controls.get(body_name)
-                    return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
+            def _panel_collapsed(body_name: str) -> bool:
+                ctl = controls.get(body_name)
+                return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-                inspector_collapsed = _panel_collapsed("inspector_body")
-                image_steps = [
-                    ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand"),
-                    ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
-                    ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
-                    ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
-                    ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
-                ]
+            def _auto_panel(body_name: str, collapsed: bool) -> bool:
+                if set_panel is None:
+                    return False
+                try:
+                    return bool(set_panel(body_name, bool(collapsed), auto=True, animate=not suppress_anim))
+                except TypeError:
+                    # Backward compatibility if a user applies only this file on
+                    # top of an older layout helper that does not expose animate.
+                    return bool(set_panel(body_name, bool(collapsed), auto=True))
+                except Exception:
+                    return False
 
-                image_sequence_complete = True
-                if image_visible and not inspector_collapsed:
-                    # Shrinking: collapse the first still-open section whose
-                    # threshold has been crossed, then wait for the next resize
-                    # pass before collapsing the next one.
-                    for body_name, collapse_attr, _expand_attr in image_steps:
+            # Side rail hidden means its child cards are not visible; do not
+            # mutate child body states until the rail is open again.
+            side_rail_visible = not bool(getattr(self, "_side_panel_collapsed", False))
+
+            image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
+            image_steps = [
+                ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand"),
+                ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
+                ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
+                ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
+                ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
+            ]
+
+            # Image Inspector subsection order:
+            # shrink: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
+            # grow:   IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
+            # During resize, apply all crossed thresholds in that order so the UI
+            # visibly responds to the user's vertical drag instead of needing
+            # several separate resize-stop events.
+            image_sections_fully_collapsed = True
+            if set_panel is not None and side_rail_visible and image_visible and not _panel_collapsed("inspector_body"):
+                for body_name, collapse_attr, _expand_attr in image_steps:
+                    if height <= int(getattr(self, collapse_attr, 0)):
                         if not _panel_collapsed(body_name):
-                            image_sequence_complete = False
-                            if height <= int(getattr(self, collapse_attr, 0)):
-                                set_panel(body_name, True, auto=True)
-                            break
-                    else:
-                        image_sequence_complete = True
+                            _auto_panel(body_name, True)
+                    elif not _panel_collapsed(body_name):
+                        image_sections_fully_collapsed = False
 
-                    # Expanding: restore in the same order as collapse, one
-                    # section per pass: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
-                    for body_name, _collapse_attr, expand_attr in image_steps:
-                        if _panel_collapsed(body_name) and height >= int(getattr(self, expand_attr, 16777215)):
-                            set_panel(body_name, False, auto=True)
-                            image_sequence_complete = False
-                            break
+                # Expand only from the top downward.  A lower section is not
+                # allowed to reopen before every section above it is already open
+                # or also qualifies for reopening in this same pass.
+                previous_sections_open = True
+                for body_name, _collapse_attr, expand_attr in image_steps:
+                    if not previous_sections_open:
+                        break
+                    if _panel_collapsed(body_name):
+                        if height >= int(getattr(self, expand_attr, 16777215)):
+                            _auto_panel(body_name, False)
+                        else:
+                            previous_sections_open = False
+                    if _panel_collapsed(body_name):
+                        image_sections_fully_collapsed = False
 
-                # Main panel order starts only after all Image sub-panels are
-                # collapsed or a non-image action is selected.
-                if (not image_visible) or image_sequence_complete:
-                    if hasattr(self, "playback_panel"):
-                        if (
-                            height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
-                            and not bool(getattr(self, "_playback_collapsed", False))
-                        ):
-                            self._set_playback_collapsed(True, auto=True)
-                        elif (
-                            height >= int(getattr(self, "_height_auto_playback_expand", 1170))
-                            and bool(getattr(self, "_playback_auto_collapsed", False))
-                            and not bool(getattr(self, "_playback_user_collapsed", False))
-                        ):
-                            self._set_playback_collapsed(False, auto=True)
+                image_sections_fully_collapsed = all(_panel_collapsed(body_name) for body_name, _c, _e in image_steps)
 
-                    if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
-                        set_panel("inspector_body", True, auto=True)
-                    elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
-                        set_panel("inspector_body", False, auto=True)
+            # The bottom playback strip is outside the right-side stack, but it is
+            # still part of the compact-height policy and should react immediately
+            # while the user resizes vertically.
+            if hasattr(self, "playback_panel"):
+                if (
+                    height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
+                    and not bool(getattr(self, "_playback_collapsed", False))
+                ):
+                    self._set_playback_collapsed(True, auto=True)
+                elif (
+                    height >= int(getattr(self, "_height_auto_playback_expand", 1170))
+                    and bool(getattr(self, "_playback_auto_collapsed", False))
+                    and not bool(getattr(self, "_playback_user_collapsed", False))
+                ):
+                    self._set_playback_collapsed(False, auto=True)
 
-                    if height <= int(getattr(self, "_height_auto_recorder_collapse", 650)):
-                        set_panel("recorder_body", True, auto=True)
-                    elif height >= int(getattr(self, "_height_auto_recorder_expand", 720)):
-                        set_panel("recorder_body", False, auto=True)
+            if not side_rail_visible or set_panel is None:
+                return
 
-                    if height <= int(getattr(self, "_height_auto_add_collapse", 540)):
-                        set_panel("add_action_body", True, auto=True)
-                    elif height >= int(getattr(self, "_height_auto_add_expand", 610)):
-                        set_panel("add_action_body", False, auto=True)
+            # Main side-stack panels collapse only after the image sub-sections
+            # have yielded enough space; expansion follows thresholds normally.
+            allow_main_collapse = (not image_visible) or image_sections_fully_collapsed or _panel_collapsed("inspector_body")
+
+            main_steps = [
+                ("inspector_body", "_height_auto_inspector_collapse", "_height_auto_inspector_expand"),
+                ("recorder_body", "_height_auto_recorder_collapse", "_height_auto_recorder_expand"),
+                ("add_action_body", "_height_auto_add_collapse", "_height_auto_add_expand"),
+            ]
+            for body_name, collapse_attr, expand_attr in main_steps:
+                if height <= int(getattr(self, collapse_attr, 0)):
+                    if allow_main_collapse and not _panel_collapsed(body_name):
+                        _auto_panel(body_name, True)
+                elif height >= int(getattr(self, expand_attr, 16777215)):
+                    if _panel_collapsed(body_name):
+                        _auto_panel(body_name, False)
+
+            if suppress_anim:
+                settler = getattr(self, "_settle_active_collapse_animations", None)
+                if settler is not None:
+                    QTimer.singleShot(0, settler)
         except Exception:
             pass
 
