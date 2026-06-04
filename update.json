@@ -1,6 +1,6 @@
 {
-  "version": "3.5.17",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.17/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.17/MacroForge-v3.5.17.zip",
-  "notes": "v3.5.17: Apply one shot timeline selection reveal patch - updated main_window.py with one shot timeline selection reveal."
+  "version": "3.5.18",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.18/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.18/MacroForge-v3.5.18.zip",
+  "notes": "v3.5.18: Apply timeline multiselect polish patch - updated main_window.py and timeline.py with timeline multiselect polish."
 }
