@@ -264,9 +264,23 @@ class MainWindow(QMainWindow):
         if isinstance(widget, interactive_types):
             return
 
+        # Inspector blank space should never clear the selected timeline action.
+        # Qt can deliver clicks from child frames, stacked panes, labels, or the
+        # inspector body itself, so guard the whole Inspector ownership chain.
         inspector = getattr(self, "insp_card", None)
-        if inspector is not None and self._widget_is_inside(widget, inspector):
-            return
+        inspector_body = getattr(self, "insp_body", None)
+        inspector_widgets = [
+            inspector, inspector_body,
+            getattr(self, "inspector_action_row", None),
+            getattr(self, "insp_empty", None),
+            getattr(self, "insp_key", None), getattr(self, "insp_pause", None),
+            getattr(self, "insp_click", None), getattr(self, "insp_image", None),
+            getattr(self, "insp_group", None), getattr(self, "insp_loop", None),
+            getattr(self, "insp_condition", None),
+        ]
+        for owner in inspector_widgets:
+            if owner is not None and self._widget_is_inside(widget, owner):
+                return
 
         allowed_background_names = {
             "root", "mf3_content", "header_dock", "toolbar_group",
@@ -818,6 +832,41 @@ class MainWindow(QMainWindow):
         except Exception:
             self._clear_selection_reveal_from_click()
 
+    def _expand_inspector_for_timeline_selection(self):
+        """Open the Inspector area when an action is explicitly selected.
+
+        This is intentionally limited to Inspector-owned sections. It does not
+        change side-panel resize thresholds or force a persistent selected-row
+        height lock; it simply makes the selected action editor fully visible
+        once when the user clicks a timeline action in unlocked mode.
+        """
+        try:
+            setter = getattr(self, "_set_collapsible_panel", None)
+            if not callable(setter):
+                return
+            controls = getattr(self, "_panel_collapse_controls", {}) or {}
+            for body_name in (
+                "inspector_body",
+                "inspector_group_key_settings_body",
+                "inspector_group_delay_settings_body",
+                "inspector_group_click_settings_body",
+                "inspector_group_image_settings_body",
+                "inspector_group_group_settings_body",
+                "inspector_group_loop_settings_body",
+                "inspector_group_condition_settings_body",
+            ):
+                if body_name in controls:
+                    setter(body_name, False, auto=True)
+            if hasattr(self, "_autosize_inspector_panel"):
+                self._autosize_inspector_panel()
+            try:
+                QTimer.singleShot(35, self._autosize_inspector_panel)
+                QTimer.singleShot(90, self._autosize_inspector_panel)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     def _select_from_timeline_click(self, index):
         """Timeline click entry point.
 
@@ -832,6 +881,8 @@ class MainWindow(QMainWindow):
                 return
             self._begin_selection_reveal_from_click()
             self.select(index)
+            if not (bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False))):
+                self._expand_inspector_for_timeline_selection()
             try:
                 rows = self._selected_rows(index)
                 if len(rows) > 1:

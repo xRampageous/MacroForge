@@ -55,7 +55,7 @@ def build_main_layout(window):
         return frame
 
     def _caret_button(size=20):
-        caret = QPushButton("^")
+        caret = QPushButton("")
         caret.setObjectName("panel_caret_btn")
         caret.setFixedSize(size, size)
         caret.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -76,8 +76,8 @@ def build_main_layout(window):
     def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
-        caret.setText("v" if collapsed else "^")
-        caret.setToolTip("Expand down" if collapsed else "Collapse up")
+        caret.setText("")
+        caret.setToolTip("Expand panel" if collapsed else "Collapse panel")
 
         body_name = body_widget.objectName() or ""
         # The flat Image editor has one collapsible body inside the main
@@ -392,6 +392,38 @@ def build_main_layout(window):
 
     self._set_collapsible_panel = _set_collapsible_panel
 
+    def _wire_collapsible_header_click(body_widget, widgets):
+        """Make a panel header clickable without showing a caret glyph."""
+        if body_widget is None:
+            return
+
+        def _toggle_from_header(event=None, body=body_widget):
+            try:
+                if event is not None and hasattr(event, "button") and event.button() != Qt.MouseButton.LeftButton:
+                    return
+                controls = getattr(self, "_panel_collapse_controls", {})
+                ctl = controls.get(body.objectName())
+                if not ctl or ctl[1] is None:
+                    return
+                self._set_collapsible_panel(
+                    body.objectName(),
+                    not bool(ctl[1].property("collapsed")),
+                    auto=False,
+                )
+                if event is not None and hasattr(event, "accept"):
+                    event.accept()
+            except Exception:
+                pass
+
+        for widget in widgets:
+            if widget is None:
+                continue
+            try:
+                widget.setCursor(Qt.CursorShape.PointingHandCursor)
+                widget.mousePressEvent = _toggle_from_header
+            except Exception:
+                pass
+
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -426,21 +458,15 @@ def build_main_layout(window):
 
         if body_widget is not None:
             caret = _caret_button(20)
+            caret.setVisible(False)
+            caret.setFixedSize(0, 0)
             self._panel_collapse_controls[body_widget.objectName()] = (body_widget, caret)
-            caret.clicked.connect(
-                lambda checked=False, body=body_widget: self._set_collapsible_panel(
-                    body.objectName(),
-                    not bool(self._panel_collapse_controls[body.objectName()][1].property("collapsed")),
-                    auto=False,
-                )
-            )
+            _wire_collapsible_header_click(body_widget, (left_balance, title_wrap, ico, lbl))
             row.addWidget(caret)
         else:
-            caret = QLabel("^")
-            caret.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            caret.setFixedSize(20, 20)
-            caret.setStyleSheet(f"color: {C['text_dim']}; font-size: 12px; background: transparent;")
-            row.addWidget(caret)
+            right_balance = QWidget()
+            right_balance.setFixedSize(0, 0)
+            row.addWidget(right_balance)
         return row
 
     def form_label(text):
@@ -527,21 +553,10 @@ def build_main_layout(window):
         head.addWidget(title_wrap, stretch=1)
 
         caret = _caret_button(18)
-        caret.setStyleSheet(
-            f"QPushButton#panel_caret_btn {{ color: {C['text_dim']}; background: transparent; "
-            f"border: 1px solid transparent; border-radius: 5px; padding: 0; "
-            "font-size: 11px; font-weight: 900; }}"
-            f"QPushButton#panel_caret_btn:hover {{ color: {C['text']}; "
-            f"background-color: {C['bg_hover']}; border-color: {C['border']}; }}"
-        )
+        caret.setVisible(False)
+        caret.setFixedSize(0, 0)
         self._panel_collapse_controls[body.objectName()] = (body, caret)
-        caret.clicked.connect(
-            lambda checked=False, body=body: self._set_collapsible_panel(
-                body.objectName(),
-                not bool(self._panel_collapse_controls[body.objectName()][1].property("collapsed")),
-                auto=False,
-            )
-        )
+        _wire_collapsible_header_click(body, (left_balance, title_wrap, ico, lbl))
         head.addWidget(caret)
         lo.addLayout(head)
         lo.addWidget(body)
@@ -619,7 +634,7 @@ def build_main_layout(window):
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
-    sidebar.setFixedWidth(270)
+    sidebar.setFixedWidth(255)
     sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
@@ -969,8 +984,6 @@ def build_main_layout(window):
     except Exception:
         self.ii_image_settings_body = None
 
-    image_flat_lo.addLayout(flat_section_title("Image Template", "image", C["image"]))
-
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
     preview.setFixedHeight(150)
@@ -1175,7 +1188,7 @@ def build_main_layout(window):
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
     self._bottom_panel_locked = False
-    self._side_panel_expanded_width = 270
+    self._side_panel_expanded_width = 255
     self._side_panel_collapsed_width = 22
     self._side_panel_expand_restore_window_width = 920
     self._side_panel_auto_collapse_width = 910
@@ -1532,6 +1545,8 @@ def build_main_layout(window):
 
     self.update_top_btn = header_icon_button("update_top_btn", "update", C["accent"], "Check for updates", self._check_update_manual, width=38)
     dock_lo.addWidget(self.update_top_btn)
+    self.settings_top_btn = header_icon_button("settings_top_btn", "settings", C["text_dim"], "Settings", self.open_settings_dialog, width=38)
+    dock_lo.addWidget(self.settings_top_btn)
 
     dock_lo.addStretch(1)
 
@@ -1662,11 +1677,19 @@ def build_main_layout(window):
 
     self.mode_filter_btn.clicked.connect(_show_mode_filter_menu)
 
-    self.tl_search_menu = QMenu(self)
-    self.tl_search_menu.setObjectName("timeline_search_menu")
-    self.tl_search_menu.setStyleSheet(toolbar_menu_style)
-    search_action = QWidgetAction(self.tl_search_menu)
-    search_wrap = QFrame()
+    self.tl_search_popup = QFrame(self)
+    self.tl_search_popup.setObjectName("timeline_search_popup")
+    self.tl_search_popup.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+    self.tl_search_popup.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    self.tl_search_popup.setVisible(False)
+    self.tl_search_popup.setStyleSheet(
+        f"QFrame#timeline_search_popup {{ background-color: #020A13; border: 1px solid {C['border']}; "
+        "border-radius: 10px; }}"
+    )
+    popup_lo = QVBoxLayout(self.tl_search_popup)
+    popup_lo.setContentsMargins(0, 0, 0, 0)
+    popup_lo.setSpacing(0)
+    search_wrap = QFrame(self.tl_search_popup)
     search_wrap.setObjectName("timeline_search_wrap")
     search_wrap.setStyleSheet(
         "QFrame#timeline_search_wrap { background: transparent; border: none; }"
@@ -1705,15 +1728,12 @@ def build_main_layout(window):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         return btn
 
-    self.tl_search_prev_btn = _mini_search_btn("Prev", "Previous search result")
-    self.tl_search_next_btn = _mini_search_btn("Next", "Next search result")
+    self.tl_search_prev_btn = None
+    self.tl_search_next_btn = None
     self.tl_search_clear_btn = _mini_search_btn("Clear", "Clear search")
-    search_controls.addWidget(self.tl_search_prev_btn)
-    search_controls.addWidget(self.tl_search_next_btn)
     search_controls.addWidget(self.tl_search_clear_btn)
     search_lo.addLayout(search_controls)
-    search_action.setDefaultWidget(search_wrap)
-    self.tl_search_menu.addAction(search_action)
+    popup_lo.addWidget(search_wrap)
 
     def _refresh_timeline_search_feedback(push_status=False):
         text = self.tl_search.text().strip() if hasattr(self, "tl_search") else ""
@@ -1779,12 +1799,20 @@ def build_main_layout(window):
 
     self.tl_search.textChanged.connect(_timeline_search_changed)
     self.tl_search.returnPressed.connect(lambda: _jump_timeline_search(1))
-    self.tl_search_prev_btn.clicked.connect(lambda checked=False: _jump_timeline_search(-1))
-    self.tl_search_next_btn.clicked.connect(lambda checked=False: _jump_timeline_search(1))
     self.tl_search_clear_btn.clicked.connect(lambda checked=False: _clear_timeline_search())
 
     def _show_timeline_search_popup():
-        self.tl_search_menu.popup(self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft()))
+        try:
+            if self.tl_search_popup.isVisible():
+                self.tl_search_popup.hide()
+                return
+            self.tl_search_popup.adjustSize()
+            pos = self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft())
+            self.tl_search_popup.move(pos)
+            self.tl_search_popup.show()
+            self.tl_search_popup.raise_()
+        except Exception:
+            pass
         QTimer.singleShot(0, self.tl_search.setFocus)
         QTimer.singleShot(0, self.tl_search.selectAll)
         QTimer.singleShot(0, lambda: _refresh_timeline_search_feedback(push_status=False))
