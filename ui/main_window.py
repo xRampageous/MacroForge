@@ -129,6 +129,8 @@ class MainWindow(QMainWindow):
         self._selection_reveal_clear_timer.setSingleShot(True)
         self._selection_reveal_clear_timer.timeout.connect(self._clear_selection_reveal_from_click)
         self._image_preview_pixmap = QPixmap()
+        self._pending_update_manifest = None
+        self._update_available = False
         self._update_check_timer = QTimer(self)
         self._update_check_timer.setInterval(60 * 1000)
         self._update_check_timer.timeout.connect(self._check_update_silent)
@@ -291,15 +293,11 @@ class MainWindow(QMainWindow):
             if owner is not None and self._widget_is_inside(widget, owner):
                 return
 
-        allowed_background_names = {
-            "root", "mf3_content", "header_dock", "toolbar_group",
-            "status_pill", "runtime_log_panel", "add_action_card",
-            "add_action_body", "recorder_card", "recorder_body",
-            "macroforge_brand_box",
-        }
-        name = widget.objectName() if hasattr(widget, "objectName") else ""
-        if name in allowed_background_names or isinstance(widget, QLabel):
-            self._deselect_timeline()
+        # Do not clear the active action from global background clicks.
+        # TimelineView owns its own empty-space deselect gesture; clicks inside
+        # the side panel/Inspector or general UI chrome should never interrupt
+        # the current inspected action.
+        return
 
     def eventFilter(self, obj, event):
         try:
@@ -935,7 +933,7 @@ class MainWindow(QMainWindow):
                 "inspector_group_condition_settings_body",
             ):
                 if body_name in controls:
-                    setter(body_name, False, auto=True)
+                    setter(body_name, False, auto=False)
             if hasattr(self, "_autosize_inspector_panel"):
                 self._autosize_inspector_panel()
             try:
@@ -4793,6 +4791,47 @@ class MainWindow(QMainWindow):
         self.update_statistics(immediate=True)
         self.status("Statistics reset")
 
+    def _set_update_button_available(self, available=False, checking=False):
+        """Refresh the top update/download icon state without showing popups."""
+        try:
+            btn = getattr(self, "update_top_btn", None)
+            if btn is None:
+                return
+            if checking:
+                color = COLORS["text_dim"]
+                tip = "Checking for updates…"
+            elif available:
+                color = COLORS["success"]
+                manifest = getattr(self, "_pending_update_manifest", None) or {}
+                remote = manifest.get("version", "new version") if isinstance(manifest, dict) else "new version"
+                tip = f"Update available: {remote} — click to download"
+            else:
+                color = COLORS["accent"]
+                tip = "Check for updates"
+            btn.setIcon(icon("download", 18, color))
+            btn.setToolTip(tip)
+            btn.setProperty("update_available", bool(available))
+            btn.setProperty("checking", bool(checking))
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            btn.update()
+        except Exception:
+            pass
+
+    def _mark_update_available(self, manifest):
+        """Store an available update and turn the download icon green."""
+        try:
+            self._pending_update_manifest = dict(manifest or {})
+        except Exception:
+            self._pending_update_manifest = manifest
+        self._update_available = True
+        self._set_update_button_available(available=True)
+        try:
+            remote = (manifest or {}).get("version", "new version") if isinstance(manifest, dict) else "new version"
+            self.status(f"Update available: {remote} — click the download icon")
+        except Exception:
+            pass
+
     # ═══════════════════════════════════════════════════════
     #  UPDATE CHECKING
     # ═══════════════════════════════════════════════════════
@@ -4811,14 +4850,20 @@ class MainWindow(QMainWindow):
     def _on_update_found(self, manifest):
         """Slot for _update_found signal — always runs on main thread."""
         self._set_update_done()
-        self._prompt_update(manifest)
+        # No popup on discovery: the toolbar download icon turns green and the
+        # user can click it when ready to open the download window.
+        self._mark_update_available(manifest)
 
     def _on_update_not_found(self):
         self._set_update_done()
+        self._pending_update_manifest = None
+        self._update_available = False
+        self._set_update_button_available(available=False)
         self.status("No updates found")
 
     def _on_update_error(self, error_msg):
         self._set_update_done()
+        self._set_update_button_available(available=bool(getattr(self, "_update_available", False)))
         self._on_close_update_dlg()
         QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error_msg}")
 
@@ -4844,13 +4889,19 @@ class MainWindow(QMainWindow):
 
     def _set_update_done(self):
         self._update_checking = False
+        if not bool(getattr(self, "_update_available", False)):
+            self._set_update_button_available(available=False)
 
     def _check_update_manual(self):
+        if bool(getattr(self, "_update_available", False)) and getattr(self, "_pending_update_manifest", None):
+            self._start_update_download(self._pending_update_manifest)
+            return
         if getattr(self, "_update_checking", False):
             self.status("Already checking for updates")
             return
         self._update_checking = True
-        self._update_prompt_shown = False  # allow re-prompt on fresh check
+        self._update_prompt_shown = False
+        self._set_update_button_available(checking=True)
         self.status("Checking for updates…")
 
         def _bg():
@@ -4873,32 +4924,16 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(30000, lambda: self._set_update_done() if getattr(self, "_update_checking", False) else None)
 
     def _prompt_update(self, manifest):
+        """Backwards-compatible discovery handler: mark available, no popup."""
+        self._mark_update_available(manifest)
+
+    def _start_update_download(self, manifest):
         try:
-            # Allow re-prompting on a fresh check (flag is reset when check starts)
-            if getattr(self, "_update_prompt_shown", False):
-                logger.info("Update prompt already shown, skipping duplicate")
+            if not manifest:
+                self.status("No update is ready to download")
                 return
-            self._update_prompt_shown = True
-            logger.info("Showing update prompt")
-
-            remote_ver = manifest.get("version", "unknown")
-            notes = manifest.get("notes", "")
-            msg = f"A new version of MacroForge is available.\n\nCurrent: {VERSION}\nLatest: {remote_ver}"
-            if notes:
-                msg += f"\n\nRelease notes:\n{notes}"
-            msg += "\n\nDownload and install now?"
-
-            box = QMessageBox(self)
-            box.setWindowTitle("Update Available")
-            box.setText(msg)
-            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            box.setDefaultButton(QMessageBox.StandardButton.Yes)
-            box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-            reply = box.exec()
-            logger.info(f"Update prompt result: {reply}")
-
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+            remote_ver = manifest.get("version", "unknown") if isinstance(manifest, dict) else "unknown"
+            logger.info(f"Opening update download window for {remote_ver}")
 
             # Progress dialog
             self._update_dlg = QDialog(self)
@@ -4920,6 +4955,7 @@ class MainWindow(QMainWindow):
             self._update_dlg.raise_()
             self._update_dlg.activateWindow()
             self._update_dlg.update()
+            self._set_update_button_available(checking=True)
             QApplication.processEvents()
 
             # Store refs for signal-based updates (thread-safe)

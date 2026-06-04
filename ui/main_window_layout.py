@@ -574,13 +574,13 @@ def build_main_layout(window):
         )
         return inp
 
-    def inspector_field_row(label_text, widget, width=134, unit_text=None):
+    def inspector_field_row(label_text, widget, width=102, unit_text=None):
         """Aligned Inspector row with labels left and edit controls right."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(7)
+        row.setSpacing(5)
         lbl = form_label(label_text)
-        lbl.setMinimumWidth(82)
+        lbl.setMinimumWidth(68)
         row.addWidget(lbl)
         row.addStretch(1)
 
@@ -590,7 +590,7 @@ def build_main_layout(window):
         value_lo.setContentsMargins(0, 0, 0, 0)
         value_lo.setSpacing(5)
         value_lo.addStretch(1)
-        value_width = int(width) + (25 if unit_text else 0)
+        value_width = int(width) + (22 if unit_text else 0)
         value_area.setFixedWidth(value_width)
         value_area.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
@@ -612,7 +612,7 @@ def build_main_layout(window):
         if unit_text:
             unit = QLabel(unit_text)
             unit.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-            unit.setFixedWidth(20)
+            unit.setFixedWidth(17)
             unit.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent;")
             value_lo.addWidget(unit)
 
@@ -622,9 +622,9 @@ def build_main_layout(window):
     def inspector_check_row(label_text, checkbox):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(7)
+        row.setSpacing(5)
         lbl = form_label(label_text)
-        lbl.setMinimumWidth(82)
+        lbl.setMinimumWidth(68)
         row.addWidget(lbl)
         row.addStretch(1)
         checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -744,7 +744,7 @@ def build_main_layout(window):
 
     rec_card = panel_frame("recorder_card")
     rec_lo = QVBoxLayout(rec_card)
-    rec_lo.setContentsMargins(12, 10, 12, 12)
+    rec_lo.setContentsMargins(10, 10, 10, 12)
     rec_lo.setSpacing(9)
     rec_body = QWidget(rec_card)
     rec_body.setObjectName("recorder_body")
@@ -777,7 +777,7 @@ def build_main_layout(window):
     rec_state.addWidget(self.rec_actions)
     rec_body_lo.addLayout(rec_state)
     rec_buttons = QHBoxLayout()
-    rec_buttons.setSpacing(7)
+    rec_buttons.setSpacing(5)
     rec_buttons.setContentsMargins(0, 0, 0, 0)
     self.rec_btn = QPushButton()
     self.rec_btn.setObjectName("rec_round_btn")
@@ -786,9 +786,9 @@ def build_main_layout(window):
     self.rec_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
     # Keep the icon-only recorder button but make it the requested wide
     # recording-control size.  Colors remain controlled by the existing theme.
-    self.rec_btn.setFixedSize(97, 45)
-    self.rec_btn.setMinimumSize(97, 45)
-    self.rec_btn.setMaximumSize(97, 45)
+    self.rec_btn.setFixedSize(91, 44)
+    self.rec_btn.setMinimumSize(91, 44)
+    self.rec_btn.setMaximumSize(91, 44)
     self.rec_btn.setToolTip("Record (F7)")
     self.rec_btn.clicked.connect(self._toggle_record)
     self.rec_pause_btn = QPushButton("Pause")
@@ -796,9 +796,9 @@ def build_main_layout(window):
     self.rec_pause_btn.setIcon(icon("pause", 16, C["text_dim"]))
     self.rec_pause_btn.setIconSize(QSize(16, 16))
     self.rec_pause_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-    self.rec_pause_btn.setFixedSize(97, 45)
-    self.rec_pause_btn.setMinimumSize(97, 45)
-    self.rec_pause_btn.setMaximumSize(97, 45)
+    self.rec_pause_btn.setFixedSize(91, 44)
+    self.rec_pause_btn.setMinimumSize(91, 44)
+    self.rec_pause_btn.setMaximumSize(91, 44)
     self.rec_pause_btn.setToolTip("Pause")
     self.rec_pause_btn.setEnabled(False)
     self.rec_pause_btn.clicked.connect(self._toggle_record_pause)
@@ -943,7 +943,7 @@ def build_main_layout(window):
     self.ic_rand = form_input("rand")
     self.ic_repeat = form_input("repeat", "1")
     self.ic_label = form_input("label")
-    ic_lo.addLayout(inspector_field_row("X / Y", xy))
+    ic_lo.addLayout(inspector_field_row("X / Y", xy, width=102))
     ic_lo.addLayout(inspector_field_row("Button", self.ic_btn))
     ic_lo.addLayout(inspector_field_row("Randomness", self.ic_rand))
     ic_lo.addLayout(inspector_field_row("Repeat", self.ic_repeat))
@@ -1554,7 +1554,7 @@ def build_main_layout(window):
     self.search_top_btn = header_icon_button("search_top_btn", "search", C["text_dim"], "Search timeline actions", None, width=38)
     dock_lo.addWidget(self.search_top_btn)
 
-    self.update_top_btn = header_icon_button("update_top_btn", "update", C["accent"], "Check for updates", self._check_update_manual, width=38)
+    self.update_top_btn = header_icon_button("update_top_btn", "download", C["accent"], "Check for updates", self._check_update_manual, width=38)
     dock_lo.addWidget(self.update_top_btn)
     self.settings_top_btn = header_icon_button("settings_top_btn", "settings", C["text_dim"], "Settings", self.open_settings_dialog, width=38)
     dock_lo.addWidget(self.settings_top_btn)
@@ -1741,8 +1741,7 @@ def build_main_layout(window):
 
     self.tl_search_prev_btn = None
     self.tl_search_next_btn = None
-    self.tl_search_clear_btn = _mini_search_btn("Clear", "Clear search")
-    search_controls.addWidget(self.tl_search_clear_btn)
+    self.tl_search_clear_btn = None
     search_lo.addLayout(search_controls)
     popup_lo.addWidget(search_wrap)
 
@@ -1810,7 +1809,8 @@ def build_main_layout(window):
 
     self.tl_search.textChanged.connect(_timeline_search_changed)
     self.tl_search.returnPressed.connect(lambda: _jump_timeline_search(1))
-    self.tl_search_clear_btn.clicked.connect(lambda checked=False: _clear_timeline_search())
+    if self.tl_search_clear_btn is not None:
+        self.tl_search_clear_btn.clicked.connect(lambda checked=False: _clear_timeline_search())
 
     def _show_timeline_search_popup():
         try:
