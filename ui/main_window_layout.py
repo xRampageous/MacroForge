@@ -1025,10 +1025,10 @@ def build_main_layout(window):
     self._height_auto_playback_collapse = 1100
     self._height_auto_playback_expand = 1170
     # Side-panel auto-hide order while unlocked and resizing height:
-    # ADD ACTION -> RECORDER -> IMAGE -> MATCHING -> RETRY -> ON FAIL ->
-    # FAIL TARGET -> INSPECTOR.  The expand path restores the same set in
-    # reverse order so the main Inspector body comes back before its inner
-    # Image sections.
+    # FAIL TARGET -> ON FAIL -> RETRY -> MATCHING -> IMAGE -> RECORDER ->
+    # ADD ACTION -> INSPECTOR.  The expand path restores the same set in
+    # reverse order so the main Inspector body comes back before the larger
+    # top-level sections and Image groups.
     self._height_auto_add_collapse = 1060
     self._height_auto_add_expand = 1130
     self._height_auto_recorder_collapse = 1020
