@@ -426,7 +426,7 @@ class MainWindow(QMainWindow):
     def _update_responsive_height_panels(self):
         """Auto-collapse side-panel sections when the visible stack hits the bottom guard.
 
-        The side panel keeps its normal full-height layout.  A 10px invisible
+        The side panel keeps its normal full-height layout.  A 2px invisible
         bottom guard decides when the next section in the requested order should
         collapse, which avoids the earlier content-hug clamp that clipped the
         Inspector while panels were still expanded.
@@ -465,7 +465,7 @@ class MainWindow(QMainWindow):
                 ]
                 active_steps = [step for step in collapse_steps if bool(step[1])]
 
-                guard_px = max(0, int(getattr(self, "_side_panel_bottom_guard_px", 10)))
+                guard_px = max(0, int(getattr(self, "_side_panel_bottom_guard_px", 2)))
                 restore_margin = max(0, int(getattr(self, "_side_panel_bottom_guard_restore_margin", 28)))
 
                 def _visible_stack_height():
@@ -545,7 +545,7 @@ class MainWindow(QMainWindow):
                 hits_bottom_guard = stack_h >= collapse_limit
 
                 # Collapse one still-open section only when the visible stack
-                # reaches the 10px bottom guard.  This avoids fixed-height
+                # reaches the 2px bottom guard.  This avoids fixed-height
                 # threshold collapses that can happen before the panel actually
                 # runs out of room.
                 if hits_bottom_guard:
@@ -556,7 +556,7 @@ class MainWindow(QMainWindow):
                 else:
                     # Expand in reverse order, but only when the next section's
                     # estimated height can fit with a restore cushion beyond the
-                    # 10px guard.  This prevents rapid collapse/expand bouncing.
+                    # 2px guard.  This prevents rapid collapse/expand bouncing.
                     for body_name, _enabled in reversed(active_steps):
                         if _panel_collapsed(body_name):
                             delta_h = _estimated_expand_delta(body_name)

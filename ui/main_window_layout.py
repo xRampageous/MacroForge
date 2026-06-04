@@ -994,7 +994,7 @@ def build_main_layout(window):
     insp_body_lo.addLayout(self._insp_lo)
     insp_lo.addWidget(insp_body)
     sb_lo.addWidget(insp_card, stretch=0)
-    self._side_panel_bottom_guard_px = 10
+    self._side_panel_bottom_guard_px = 2
     self._side_panel_bottom_spacer = QWidget()
     self._side_panel_bottom_spacer.setObjectName("side_panel_bottom_spacer")
     self._side_panel_bottom_spacer.setMinimumHeight(0)
@@ -1002,7 +1002,7 @@ def build_main_layout(window):
     self._side_panel_bottom_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
     sb_lo.addWidget(self._side_panel_bottom_spacer, stretch=1)
 
-    # Invisible 10px bottom sentinel.  The side-panel stack keeps normal full-
+    # Invisible 2px bottom sentinel.  The side-panel stack keeps normal full-
     # height layout, but responsive height collapse starts when the visible card
     # stack reaches this guard instead of clamping/hugging the whole sidebar.
     self._side_panel_bottom_guard = QWidget()
@@ -1055,7 +1055,7 @@ def build_main_layout(window):
 
         The previous content-hug approach capped the whole sidebar height and
         caused expanded Inspector content to clip too early.  Keep the sidebar
-        in its normal full-height layout; the 10px bottom guard in the resize
+        in its normal full-height layout; the 2px bottom guard in the resize
         policy now decides when collapse/expand should happen.
         """
         try:
@@ -1070,7 +1070,7 @@ def build_main_layout(window):
                 spacer.updateGeometry()
             guard = getattr(self, "_side_panel_bottom_guard", None)
             if guard is not None:
-                guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 10)))
+                guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 2)))
                 guard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
                 guard.updateGeometry()
             layout = sidebar.layout()
@@ -1089,7 +1089,7 @@ def build_main_layout(window):
         Collapsing Add Action, Recorder, or Image Inspector sub-sections frees
         vertical space.  This helper restores the normal full-height sidebar
         layout, refreshes stale height clamps, and leaves collapse timing to the
-        10px bottom guard instead of clamping the whole side-panel frame.  It is
+        2px bottom guard instead of clamping the whole side-panel frame.  It is
         layout-only and does not change the user's manual collapsed state, lock
         state, or auto-collapse thresholds.
         """
@@ -1163,7 +1163,7 @@ def build_main_layout(window):
 
             guard = getattr(self, "_side_panel_bottom_guard", None)
             if guard is not None:
-                guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 10)))
+                guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 2)))
                 guard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
                 guard.updateGeometry()
 
@@ -1189,7 +1189,7 @@ def build_main_layout(window):
                 central_widget.layout().invalidate()
                 central_widget.layout().activate()
             # If an auto-collapse animation finished and the visible stack is
-            # still pressing into the 10px bottom guard, let the resize policy
+            # still pressing into the 2px bottom guard, let the resize policy
             # continue to the next section in the requested collapse order.
             if str(reason).endswith(".finished"):
                 responsive_height = getattr(self, "_update_responsive_height_panels", None)
