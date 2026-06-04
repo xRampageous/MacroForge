@@ -1,6 +1,6 @@
 {
-  "version": "3.5.42",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.42/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.42/MacroForge-v3.5.42.zip",
-  "notes": "v3.5.42: Apply inspector search sidepanel header polish patch - updated main_window.py and main_window_layout.py with inspector search sidepanel header polish."
+  "version": "3.5.43",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.43/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.43/MacroForge-v3.5.43.zip",
+  "notes": "v3.5.43: Apply side panel fit branding update polish patch - updated icons.py, main_window.py and main_window_layout.py with side panel fit branding update polish."
 }
