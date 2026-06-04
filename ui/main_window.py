@@ -117,12 +117,17 @@ class MainWindow(QMainWindow):
         self._save_session_timer.setInterval(500)
         self._save_session_timer.timeout.connect(self._do_save_session)
         self._inspector_loading = False
-        self._panel_resize_active = False
-        self._suppress_auto_panel_animations = False
         self._inspector_autosave_timer = QTimer(self)
         self._inspector_autosave_timer.setSingleShot(True)
         self._inspector_autosave_timer.setInterval(350)
         self._inspector_autosave_timer.timeout.connect(self._autosave_inspector_edits)
+        # One-shot unlocked selection reveal state.  Timeline clicks may briefly
+        # ask the side panel/Inspector to fit the newly clicked action, but a
+        # merely selected row must not keep fighting vertical window resize.
+        self._selection_reveal_from_click = False
+        self._selection_reveal_clear_timer = QTimer(self)
+        self._selection_reveal_clear_timer.setSingleShot(True)
+        self._selection_reveal_clear_timer.timeout.connect(self._clear_selection_reveal_from_click)
         self._image_preview_pixmap = QPixmap()
         self._update_check_timer = QTimer(self)
         self._update_check_timer.setInterval(60 * 1000)
@@ -279,151 +284,29 @@ class MainWindow(QMainWindow):
                 button = event.button() if hasattr(event, "button") else None
                 if button == Qt.MouseButton.LeftButton and hasattr(obj, "parentWidget"):
                     self._maybe_deselect_from_background_click(obj)
-            elif event.type() == QEvent.Type.Resize:
-                resize_targets = {
-                    self,
-                    getattr(self, "sidebar_frame", None),
-                    getattr(self, "centralWidget", lambda: None)(),
-                }
-                if obj in resize_targets and not bool(getattr(self, "_inside_responsive_resize_filter", False)):
-                    self._inside_responsive_resize_filter = True
-                    try:
-                        self._suppress_auto_panel_animations = True
-                        self._panel_resize_active = True
-                        self._update_responsive_height_panels()
-                        self._autosize_inspector_panel()
-                    finally:
-                        self._inside_responsive_resize_filter = False
-                    QTimer.singleShot(80, self._finalize_vertical_panel_resize)
         except Exception:
             pass
         return super().eventFilter(obj, event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        vertical_changed = True
         try:
-            old_size = event.oldSize()
-            new_size = event.size()
-            if old_size.isValid():
-                vertical_changed = old_size.height() != new_size.height()
-        except Exception:
-            vertical_changed = True
-
-        try:
-            if vertical_changed:
-                self._panel_resize_generation = int(getattr(self, "_panel_resize_generation", 0)) + 1
-                generation = self._panel_resize_generation
-                self._suppress_auto_panel_animations = True
-                self._panel_resize_active = True
-                settler = getattr(self, "_settle_active_collapse_animations", None)
-                if settler is not None:
-                    settler()
-            else:
-                generation = int(getattr(self, "_panel_resize_generation", 0))
-        except Exception:
-            generation = 0
-
-        # Width-based side-rail behavior stays immediate.  Height-based panel
-        # decisions also need an immediate pass; waiting until the resize settles
-        # made vertical drag feel like it was not collapsing/expanding at all.
-        self._update_responsive_side_panel()
-        if vertical_changed:
-            self._update_responsive_height_panels()
-        else:
-            self._update_responsive_height_panels()
-        self._autosize_inspector_panel()
-        self._apply_panel_size_locks()
-
-        try:
-            def _release_resize_animation_suppression(gen=generation, was_vertical=vertical_changed):
-                if int(getattr(self, "_panel_resize_generation", 0)) != int(gen):
-                    return
-                if was_vertical:
-                    self._finalize_vertical_panel_resize()
-                else:
-                    self._panel_resize_active = False
-                    self._suppress_auto_panel_animations = False
-                    self._autosize_inspector_panel()
-
-            QTimer.singleShot(90 if vertical_changed else 0, _release_resize_animation_suppression)
-        except Exception:
-            self._panel_resize_active = False
-            self._suppress_auto_panel_animations = False
-
-    def _finalize_vertical_panel_resize(self):
-        """Snap height-responsive panels after live vertical resizing settles."""
-        try:
-            self._suppress_auto_panel_animations = True
-            self._panel_resize_active = True
-            settler = getattr(self, "_settle_active_collapse_animations", None)
-            if settler is not None:
-                settler()
-            self._update_responsive_height_panels()
-            if settler is not None:
-                settler()
-            self._autosize_inspector_panel()
+            old_size = event.oldSize() if event is not None else None
+            new_size = event.size() if event is not None else None
+            if (
+                old_size is not None
+                and new_size is not None
+                and old_size.isValid()
+                and old_size.height() != new_size.height()
+                and not bool(getattr(self, "_side_panel_locked", False))
+                and not bool(getattr(self, "_bottom_panel_locked", False))
+            ):
+                self._clear_selection_reveal_from_click()
         except Exception:
             pass
-        finally:
-            self._panel_resize_active = False
-            self._suppress_auto_panel_animations = False
-            try:
-                self._autosize_inspector_panel()
-            except Exception:
-                pass
-
-    def _sidebar_height_pressure_px(self):
-        """Return positive pixels when the right-side stack is taller than its viewport."""
-        try:
-            sidebar = getattr(self, "sidebar_frame", None)
-            if sidebar is None or bool(getattr(self, "_side_panel_collapsed", False)):
-                return 0
-            sidebar.updateGeometry()
-            available = max(1, int(sidebar.height() or self.height()))
-            needed = max(int(sidebar.sizeHint().height()), int(sidebar.minimumSizeHint().height()))
-            return int(needed - available)
-        except Exception:
-            return 0
-
-    def _collapsed_panel_expand_extra_px(self, body_name):
-        """Approximate how much vertical room a collapsed body needs to reopen."""
-        try:
-            controls = getattr(self, "_panel_collapse_controls", {})
-            body_widget, caret = controls.get(body_name, (None, None))
-            if body_widget is None or caret is None or not bool(caret.property("collapsed")):
-                return 0
-            body_hint = max(
-                int(body_widget.property("expanded_height_hint") or 0),
-                int(body_widget.sizeHint().height()),
-                int(body_widget.minimumSizeHint().height()),
-                1,
-            )
-            parent = body_widget.parentWidget()
-            spacing = 6
-            try:
-                layout = parent.layout() if parent is not None else None
-                if layout is not None and int(layout.spacing()) >= 0:
-                    spacing = int(layout.spacing())
-            except Exception:
-                pass
-            return int(body_hint + max(0, spacing))
-        except Exception:
-            return 0
-
-    def _auto_expand_has_room(self, body_name, min_height):
-        """Decide if an auto-collapsed body can safely reopen at this height."""
-        try:
-            if int(self.height()) >= int(min_height):
-                return True
-            extra = self._collapsed_panel_expand_extra_px(body_name)
-            if extra <= 0:
-                return False
-            # Negative pressure is free space in the current collapsed stack.
-            free_space = -int(self._sidebar_height_pressure_px())
-            return free_space >= extra + 14
-        except Exception:
-            return False
+        self._update_responsive_panels()
+        self._autosize_inspector_panel()
+        self._apply_panel_size_locks()
 
     def _update_responsive_panels(self):
         """Auto-hide panels for both width and height pressure."""
@@ -455,152 +338,96 @@ class MainWindow(QMainWindow):
             pass
 
     def _update_responsive_height_panels(self):
-        """Collapse/expand side-stack panels from actual window height.
+        """Collapse from the bottom upward when vertical space gets tight.
 
-        This is intentionally deterministic during vertical resizing: animation
-        is suppressed and every threshold-crossed section is applied in one pass.
-        The old debounce-only approach could leave the UI looking unchanged while
-        the user dragged the top/bottom resize edge.
+        Panel locks are state-only.  When either panel lock is enabled, resize
+        pressure must not auto-collapse or auto-expand the side/Inspector/Image
+        sub-panel states.
         """
         try:
             height = int(self.height())
             side_locked = bool(getattr(self, "_side_panel_locked", False))
             bottom_locked = bool(getattr(self, "_bottom_panel_locked", False))
-            if side_locked or bottom_locked:
-                return
-
+            any_panel_locked = side_locked or bottom_locked
             set_panel = getattr(self, "_set_collapsible_panel", None)
-            controls = getattr(self, "_panel_collapse_controls", {})
-            suppress_anim = bool(getattr(self, "_suppress_auto_panel_animations", False)) or bool(getattr(self, "_panel_resize_active", False))
-            pressure_margin = 4
 
-            def _height_pressure() -> int:
-                return int(self._sidebar_height_pressure_px())
-
-            def _under_pressure() -> bool:
-                return _height_pressure() > pressure_margin
-
-            def _can_expand(body_name: str, expand_at: int) -> bool:
-                return self._auto_expand_has_room(body_name, int(expand_at))
-
-            def _after_state_change():
-                try:
-                    sidebar = getattr(self, "sidebar_frame", None)
-                    if sidebar is not None:
-                        sidebar.updateGeometry()
-                    if hasattr(self, "_autosize_inspector_panel"):
-                        self._autosize_inspector_panel()
-                except Exception:
-                    pass
-
-            def _panel_collapsed(body_name: str) -> bool:
-                ctl = controls.get(body_name)
-                return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
-
-            def _auto_panel(body_name: str, collapsed: bool) -> bool:
-                if set_panel is None:
-                    return False
-                try:
-                    changed = bool(set_panel(body_name, bool(collapsed), auto=True, animate=not suppress_anim))
-                except TypeError:
-                    # Backward compatibility if a user applies only this file on
-                    # top of an older layout helper that does not expose animate.
-                    changed = bool(set_panel(body_name, bool(collapsed), auto=True))
-                except Exception:
-                    changed = False
-                if changed:
-                    _after_state_change()
-                return changed
-
-            # Side rail hidden means its child cards are not visible; do not
-            # mutate child body states until the rail is open again.
-            side_rail_visible = not bool(getattr(self, "_side_panel_collapsed", False))
-
-            image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
-            image_steps = [
-                ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand"),
-                ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
-                ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
-                ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
-                ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
-            ]
-
-            # Image Inspector subsection order:
-            # shrink: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
-            # grow:   IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
-            # During resize, apply all crossed thresholds in that order so the UI
-            # visibly responds to the user's vertical drag instead of needing
-            # several separate resize-stop events.
-            image_sections_fully_collapsed = True
-            if set_panel is not None and side_rail_visible and image_visible and not _panel_collapsed("inspector_body"):
-                for body_name, collapse_attr, _expand_attr in image_steps:
-                    collapse_at = int(getattr(self, collapse_attr, 0))
-                    if height <= collapse_at or _under_pressure():
-                        if not _panel_collapsed(body_name):
-                            _auto_panel(body_name, True)
-                    elif not _panel_collapsed(body_name):
-                        image_sections_fully_collapsed = False
-
-                # Expand only from the top downward.  A lower section is not
-                # allowed to reopen before every section above it is already open
-                # or also qualifies for reopening in this same pass.
-                previous_sections_open = True
-                for body_name, _collapse_attr, expand_attr in image_steps:
-                    if not previous_sections_open:
-                        break
-                    if _panel_collapsed(body_name):
-                        expand_at = int(getattr(self, expand_attr, 16777215))
-                        if _can_expand(body_name, expand_at):
-                            _auto_panel(body_name, False)
-                        else:
-                            previous_sections_open = False
-                    if _panel_collapsed(body_name):
-                        image_sections_fully_collapsed = False
-
-                image_sections_fully_collapsed = all(_panel_collapsed(body_name) for body_name, _c, _e in image_steps)
-
-            # The bottom playback strip is outside the right-side stack, but it is
-            # still part of the compact-height policy and should react immediately
-            # while the user resizes vertically.
-            if hasattr(self, "playback_panel"):
-                if (
-                    height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
-                    and not bool(getattr(self, "_playback_collapsed", False))
-                ):
-                    self._set_playback_collapsed(True, auto=True)
-                elif (
-                    height >= int(getattr(self, "_height_auto_playback_expand", 1170))
-                    and bool(getattr(self, "_playback_auto_collapsed", False))
-                    and not bool(getattr(self, "_playback_user_collapsed", False))
-                ):
-                    self._set_playback_collapsed(False, auto=True)
-
-            if not side_rail_visible or set_panel is None:
+            if any_panel_locked:
                 return
 
-            # Main side-stack panels collapse only after the image sub-sections
-            # have yielded enough space; expansion follows thresholds normally.
-            allow_main_collapse = (not image_visible) or image_sections_fully_collapsed or _panel_collapsed("inspector_body")
+            # Image Inspector sub-panels collapse first while an Image action is
+            # selected. Order while shrinking: IMAGE -> MATCHING -> RETRY ->
+            # ON FAIL -> FAIL TARGET.  Collapse/expand is staged one section per
+            # resize pass so it feels smoother and never visually collapses into
+            # FAIL TARGET as the "main" table.
+            if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
+                image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
+                controls = getattr(self, "_panel_collapse_controls", {})
 
-            main_steps = [
-                ("inspector_body", "_height_auto_inspector_collapse", "_height_auto_inspector_expand"),
-                ("recorder_body", "_height_auto_recorder_collapse", "_height_auto_recorder_expand"),
-                ("add_action_body", "_height_auto_add_collapse", "_height_auto_add_expand"),
-            ]
-            for body_name, collapse_attr, expand_attr in main_steps:
-                collapse_at = int(getattr(self, collapse_attr, 0))
-                expand_at = int(getattr(self, expand_attr, 16777215))
-                if height <= collapse_at or _under_pressure():
-                    if allow_main_collapse and not _panel_collapsed(body_name):
-                        _auto_panel(body_name, True)
-                elif _can_expand(body_name, expand_at):
-                    if _panel_collapsed(body_name):
-                        _auto_panel(body_name, False)
+                def _panel_collapsed(body_name: str) -> bool:
+                    ctl = controls.get(body_name)
+                    return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-            if suppress_anim:
-                settler = getattr(self, "_settle_active_collapse_animations", None)
-                if settler is not None:
-                    QTimer.singleShot(0, settler)
+                inspector_collapsed = _panel_collapsed("inspector_body")
+                image_steps = [
+                    ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand"),
+                    ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
+                    ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand"),
+                    ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand"),
+                    ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand"),
+                ]
+
+                image_sequence_complete = True
+                if image_visible and not inspector_collapsed:
+                    # Shrinking: collapse the first still-open section whose
+                    # threshold has been crossed, then wait for the next resize
+                    # pass before collapsing the next one.
+                    for body_name, collapse_attr, _expand_attr in image_steps:
+                        if not _panel_collapsed(body_name):
+                            image_sequence_complete = False
+                            if height <= int(getattr(self, collapse_attr, 0)):
+                                set_panel(body_name, True, auto=True)
+                            break
+                    else:
+                        image_sequence_complete = True
+
+                    # Expanding: restore in the same order as collapse, one
+                    # section per pass: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
+                    for body_name, _collapse_attr, expand_attr in image_steps:
+                        if _panel_collapsed(body_name) and height >= int(getattr(self, expand_attr, 16777215)):
+                            set_panel(body_name, False, auto=True)
+                            image_sequence_complete = False
+                            break
+
+                # Main panel order starts only after all Image sub-panels are
+                # collapsed or a non-image action is selected.
+                if (not image_visible) or image_sequence_complete:
+                    if hasattr(self, "playback_panel"):
+                        if (
+                            height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
+                            and not bool(getattr(self, "_playback_collapsed", False))
+                        ):
+                            self._set_playback_collapsed(True, auto=True)
+                        elif (
+                            height >= int(getattr(self, "_height_auto_playback_expand", 1170))
+                            and bool(getattr(self, "_playback_auto_collapsed", False))
+                            and not bool(getattr(self, "_playback_user_collapsed", False))
+                        ):
+                            self._set_playback_collapsed(False, auto=True)
+
+                    if height <= int(getattr(self, "_height_auto_inspector_collapse", 760)):
+                        set_panel("inspector_body", True, auto=True)
+                    elif height >= int(getattr(self, "_height_auto_inspector_expand", 840)):
+                        set_panel("inspector_body", False, auto=True)
+
+                    if height <= int(getattr(self, "_height_auto_recorder_collapse", 650)):
+                        set_panel("recorder_body", True, auto=True)
+                    elif height >= int(getattr(self, "_height_auto_recorder_expand", 720)):
+                        set_panel("recorder_body", False, auto=True)
+
+                    if height <= int(getattr(self, "_height_auto_add_collapse", 540)):
+                        set_panel("add_action_body", True, auto=True)
+                    elif height >= int(getattr(self, "_height_auto_add_expand", 610)):
+                        set_panel("add_action_body", False, auto=True)
         except Exception:
             pass
 
@@ -746,51 +573,8 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _default_expanded_side_panel_height(self):
-        """Measure the side-panel stack for unlocked auto-grow without enabling a height lock."""
-        try:
-            sidebar = getattr(self, "sidebar_frame", None)
-            if sidebar is not None:
-                sidebar.updateGeometry()
-            self._autosize_inspector_panel()
-            if sidebar is not None:
-                sidebar.updateGeometry()
-                natural = max(int(sidebar.sizeHint().height()), int(sidebar.minimumSizeHint().height()))
-            else:
-                natural = 0
-            target_h = max(
-                int(getattr(self, "_base_min_height", 420)),
-                int(getattr(self, "_height_auto_recorder_expand", 720)),
-                int(getattr(self, "_height_auto_inspector_expand", 840)),
-                natural + 8,
-            )
-            return max(420, min(1800, int(target_h)))
-        except Exception:
-            return max(int(getattr(self, "_base_min_height", 420)), int(self.height()))
-
-    def _restore_auto_collapsed_side_sections(self):
-        """Reopen only panels that the height auto-collapser closed, preserving manual user collapses."""
-        try:
-            set_panel = getattr(self, "_set_collapsible_panel", None)
-            if set_panel is None:
-                return
-            image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
-            for body_name in ("add_action_body", "recorder_body", "inspector_body"):
-                set_panel(body_name, False, auto=True)
-            if image_visible:
-                for body_name in (
-                    "inspector_group_image_body",
-                    "inspector_group_matching_body",
-                    "inspector_group_retry_body",
-                    "inspector_group_on_fail_body",
-                    "inspector_group_fail_target_body",
-                ):
-                    set_panel(body_name, False, auto=True)
-        except Exception:
-            pass
-
     def _auto_grow_for_collapsed_side_panel(self):
-        """Keep collapsed side-rail transitions from trapping the window at the minimum height."""
+        """When unlocked and the side rail is collapsed at minimum height, grow back to a usable side-panel baseline."""
         try:
             if not bool(getattr(self, "_side_panel_collapsed", False)):
                 return
@@ -799,140 +583,81 @@ class MainWindow(QMainWindow):
             base_h = int(getattr(self, "_base_min_height", 420))
             if int(self.height()) > base_h + 28:
                 return
-            target_h = max(720, base_h, int(getattr(self, "_height_auto_recorder_expand", 720)))
+            target_h = max(
+                720,
+                base_h,
+                int(getattr(self, "_height_auto_recorder_expand", 720)),
+                int(getattr(self, "_height_auto_inspector_expand", 840)),
+            )
             if self.height() < target_h:
                 self.resize(self.width(), target_h)
         except Exception:
             pass
 
-    def _auto_grow_after_side_panel_expand(self):
-        """When the side panel is expanded at minimum height, grow to fit the default expanded stack.
-
-        This is a one-shot resize only.  It does not leave the window locked, so
-        normal manual resizing remains available immediately afterward.
-        """
+    def _begin_selection_reveal_from_click(self):
+        """Allow one short unlocked side-panel fit pass for an actual timeline click."""
         try:
-            if bool(getattr(self, "_side_panel_collapsed", False)):
-                return
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                self._selection_reveal_from_click = False
                 return
-            base_h = int(getattr(self, "_base_min_height", 420))
-            target_h = self._default_expanded_side_panel_height()
-            near_minimum = int(self.height()) <= base_h + 36
-            if near_minimum and int(self.height()) < target_h:
-                self.setMaximumHeight(16777215)
-                self.resize(self.width(), target_h)
-                self.setMinimumSize(int(getattr(self, "_base_min_width", 760)), base_h)
+            self._selection_reveal_from_click = True
+            timer = getattr(self, "_selection_reveal_clear_timer", None)
+            if timer is not None:
+                timer.stop()
         except Exception:
-            pass
+            self._selection_reveal_from_click = False
 
-    def _reveal_selection_panels(self, action_type=None):
-        """Open the side/Inspector path needed for the currently selected action.
+    def _clear_selection_reveal_from_click(self):
+        """Stop unlocked selection from holding the side-panel height after the click settles."""
+        try:
+            self._selection_reveal_from_click = False
+            timer = getattr(self, "_selection_reveal_clear_timer", None)
+            if timer is not None and timer.isActive():
+                timer.stop()
+        except Exception:
+            self._selection_reveal_from_click = False
 
-        Selecting a timeline row should always make the matching Inspector
-        visible, even if the side panel or Inspector sections were previously
-        collapsed by compact-height mode or by the user.  This reveal is
-        intentionally scoped to the selected Inspector path so Add Action and
-        Recorder user-collapse preferences are not stomped by every selection.
+    def _finish_selection_reveal_from_click(self):
+        """Clear one-shot reveal after Qt has processed the immediate layout updates."""
+        try:
+            timer = getattr(self, "_selection_reveal_clear_timer", None)
+            if timer is not None:
+                timer.start(90)
+            else:
+                QTimer.singleShot(90, self._clear_selection_reveal_from_click)
+        except Exception:
+            self._clear_selection_reveal_from_click()
+
+    def _select_from_timeline_click(self, index):
+        """Timeline click entry point.
+
+        Selecting a row updates Inspector content.  Only this click path gets a
+        short-lived reveal/fit pass while panels are unlocked; persistent selected
+        rows no longer force side-panel height during vertical resize.
         """
         try:
-            if int(getattr(self, "active_index", -1)) < 0:
-                return
-            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
-                return
-
-            # A timeline click is an explicit reveal request.  Use auto=False so
-            # a previously user-collapsed side rail or Inspector is reopened and
-            # its manual-collapsed flag is cleared for the selected action path.
-            side_setter = getattr(self, "_set_side_panel_collapsed", None)
-            if bool(getattr(self, "_side_panel_collapsed", False)) and side_setter is not None:
-                side_setter(False, auto=False)
-
-            set_panel = getattr(self, "_set_collapsible_panel", None)
-            if set_panel is None:
-                return
-
-            set_panel("inspector_body", False, auto=False)
-
-            body_for_type = {
-                "key": "inspector_group_key_action_body",
-                "pause": "inspector_group_delay_action_body",
-                "click": "inspector_group_click_action_body",
-                "group": "inspector_group_group_body",
-                "loop": "inspector_group_loop_body",
-                "condition": "inspector_group_condition_body",
-            }.get(str(action_type or "").lower())
-            if body_for_type:
-                set_panel(body_for_type, False, auto=False)
-
-            if str(action_type or "").lower() == "image":
-                for body_name in (
-                    "inspector_group_image_body",
-                    "inspector_group_matching_body",
-                    "inspector_group_retry_body",
-                    "inspector_group_on_fail_body",
-                    "inspector_group_fail_target_body",
-                ):
-                    set_panel(body_name, False, auto=False)
-
-            self._autosize_inspector_panel()
-            if hasattr(self, "sidebar_frame"):
-                self.sidebar_frame.updateGeometry()
-            QTimer.singleShot(0, self._autosize_inspector_panel)
-            QTimer.singleShot(35, self._refresh_unlocked_selection_height)
-        except Exception:
-            pass
-
-    def _timeline_action_selected(self, index):
-        """Handle timeline clicks, including clicks on the already-active row.
-
-        Qt's currentChanged signal does not fire when the user clicks the row
-        that is already selected.  The timeline still emits action_clicked, so
-        route it here to re-open collapsed side/Inspector panels every time the
-        user deliberately clicks an action.
-        """
-        try:
-            self.select(index)
-            if index is None or index < 0 or index >= self.action_model.rowCount():
-                return
-            action = self.action_model.get(index)
-            action_type = getattr(action, "action_type", None)
-            self._reveal_selection_panels(action_type)
-            QTimer.singleShot(0, lambda kind=action_type: self._reveal_selection_panels(kind))
-            QTimer.singleShot(45, lambda kind=action_type: self._reveal_selection_panels(kind))
-            self._refresh_unlocked_selection_height()
-            QTimer.singleShot(90, self._refresh_unlocked_selection_height)
-        except Exception:
-            try:
+            if index is None or int(index) < 0:
+                self._clear_selection_reveal_from_click()
                 self.select(index)
-            except Exception:
-                pass
-
-    def _auto_grow_for_active_selection(self):
-        """Unlocked selection should reveal the selected Inspector instead of leaving it clipped."""
-        try:
-            if bool(getattr(self, "_side_panel_collapsed", False)):
                 return
-            if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
-                return
-            if int(getattr(self, "active_index", -1)) < 0:
-                return
-            target_h = self._default_expanded_side_panel_height()
-            base_h = int(getattr(self, "_base_min_height", 420))
-            # Grow when the user is effectively at the compact/minimum layout or
-            # when the selected Inspector would still be visibly clipped.
-            should_grow = int(self.height()) <= base_h + 48 or int(self.height()) + 18 < target_h
-            if should_grow and int(self.height()) < target_h:
-                self.setMaximumHeight(16777215)
-                self.resize(self.width(), target_h)
-                self.setMinimumSize(int(getattr(self, "_base_min_width", 760)), base_h)
-        except Exception:
-            pass
+            self._begin_selection_reveal_from_click()
+            self.select(index)
+        finally:
+            if not (bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False))):
+                self._finish_selection_reveal_from_click()
 
     def _refresh_unlocked_selection_height(self):
-        """Recalculate side-panel/Inspector height after selection changes while unlocked."""
+        """Run the one-shot unlocked side-panel fit pass after an explicit click.
+
+        In unlocked mode, a selected row should not continuously hold the
+        side-panel/Inspector height.  The fit/reveal pass is intentionally allowed
+        only while ``_selection_reveal_from_click`` is true; vertical window resize
+        clears that flag so resize-driven collapse/expand can take control.
+        """
         try:
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
+                return
+            if not bool(getattr(self, "_selection_reveal_from_click", False)):
                 return
             self._autosize_inspector_panel()
             if hasattr(self, "sidebar_frame"):
@@ -940,11 +665,8 @@ class MainWindow(QMainWindow):
             if bool(getattr(self, "_side_panel_collapsed", False)):
                 self._auto_grow_for_collapsed_side_panel()
             else:
-                self._restore_auto_collapsed_side_sections()
-                self._autosize_inspector_panel()
-                self._auto_grow_for_active_selection()
-                # Selection changes can change the Inspector's natural height,
-                # so run the responsive height pass even when no lock is active.
+                # Explicit clicks may reveal/fit once, then the reveal flag clears
+                # and normal vertical resizing owns the side-panel state again.
                 self._update_responsive_height_panels()
         except Exception:
             pass
@@ -1469,7 +1191,7 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _setup_timeline_connections(self):
-        self.timeline.action_clicked.connect(self._timeline_action_selected)
+        self.timeline.action_clicked.connect(self._select_from_timeline_click)
         self.timeline.action_double_clicked.connect(self._open_active_dialog)
         self.timeline.action_dragged.connect(self.move_action_to)
         if hasattr(self.timeline, "action_dragged_many"):
@@ -1595,7 +1317,7 @@ class MainWindow(QMainWindow):
                     action.group_name = name
                     changed = True
                 if getattr(action, "label", "") != name:
-                    action.label = name
+                    action.label = inspector_label_text or name
                     changed = True
                 if getattr(action, "block_depth", 0) != 0:
                     action.block_depth = 0
@@ -2157,7 +1879,6 @@ class MainWindow(QMainWindow):
 
     def select(self, index):
         self._inspector_loading = True
-        selected_action_type = None
         try:
             if index is None or index < 0 or index >= self.action_model.rowCount():
                 self.active_index = -1
@@ -2192,7 +1913,6 @@ class MainWindow(QMainWindow):
                 self.timeline.selected_indices.clear()
                 self.timeline.set_active(index)
             action = self.action_model.get(index)
-            selected_action_type = getattr(action, "action_type", None)
             self._update_timeline_links(index)
             self.inspector_selector.clear()
             if action.action_type == "image":
@@ -2296,13 +2016,9 @@ class MainWindow(QMainWindow):
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
                 QTimer.singleShot(0, self._apply_panel_size_locks)
                 QTimer.singleShot(35, self._apply_panel_size_locks)
-            else:
-                if selected_action_type is not None and int(getattr(self, "active_index", -1)) >= 0:
-                    self._reveal_selection_panels(selected_action_type)
-                    QTimer.singleShot(0, lambda kind=selected_action_type: self._reveal_selection_panels(kind))
+            elif bool(getattr(self, "_selection_reveal_from_click", False)):
                 self._refresh_unlocked_selection_height()
                 QTimer.singleShot(35, self._refresh_unlocked_selection_height)
-                QTimer.singleShot(90, self._refresh_unlocked_selection_height)
 
     def _apply_inspector(self, autosave=False):
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
@@ -2744,37 +2460,18 @@ class MainWindow(QMainWindow):
 
         if getattr(actions[index], "action_type", "") == "group":
             block_rows = self._contiguous_group_block(index)
-            if not block_rows:
-                return
             if target_index in block_rows:
                 self.status("Group is already there")
                 return
             block = [actions[r] for r in block_rows]
-            block_set = set(block_rows)
-            remaining = [a for i, a in enumerate(actions) if i not in block_set]
-
-            if target_index < index:
-                # Moving upward: target_index is the desired header row after removal.
-                insert_at = target_index
-            elif target_index > block_rows[-1]:
-                # Moving downward: target_index refers to the row to land after in
-                # the original list.  Add one after subtracting the moved block so
-                # dragging or menu-moving down by one row actually advances.
-                insert_at = target_index - len(block_rows) + 1
-            else:
-                self.status("Group is already there")
-                return
-            insert_at = max(0, min(insert_at, len(remaining)))
-
+            remaining = [a for i, a in enumerate(actions) if i not in set(block_rows)]
+            removed_before_target = sum(1 for r in block_rows if r < target_index)
+            insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
             new_actions = remaining[:insert_at] + block + remaining[insert_at:]
-            new_index_by_id = {id(a): i for i, a in enumerate(new_actions)}
-            row_map = {old_i: new_index_by_id.get(id(a), old_i) for old_i, a in enumerate(actions)}
             self.action_model.set_actions(new_actions)
-            self._apply_row_reference_map(row_map)
-            self._normalize_groups()
             new_index = insert_at
             self.active_index = new_index
-            new_rows = list(range(new_index, new_index + len(block)))
+            self.timeline.selected_indices = set(range(new_index, new_index + len(block)))
             msg = "Moved group"
         else:
             self.action_model.move_action(index, target_index)
@@ -2785,10 +2482,7 @@ class MainWindow(QMainWindow):
             msg = "Moved action"
 
         self.refresh()
-        if 'new_rows' in locals():
-            self._select_moved_rows(new_rows, active=new_index)
-        else:
-            self.timeline.set_active(new_index)
+        self.timeline.set_active(new_index)
         self.timeline.restore_scroll_position(scroll_position)
         self.timeline.flash_drop(new_index)
         self.update_statistics(immediate=True)
