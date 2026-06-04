@@ -1,6 +1,6 @@
 {
-  "version": "3.5.44",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.44/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.44/MacroForge-v3.5.44.zip",
-  "notes": "v3.5.44: Apply side panel header 255 fit unlocked reveal stability patch - updated main_window.py and main_window_layout.py with side panel header 255 fit unlocked reveal stability."
+  "version": "3.5.45",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.45/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.45/MacroForge-v3.5.45.zip",
+  "notes": "v3.5.45: Apply side panel 255 interaction inspector fit update patch - updated icons.py, main_window.py and main_window_layout.py with side panel 255 interaction inspector fit update."
 }
