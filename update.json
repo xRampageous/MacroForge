@@ -1,6 +1,6 @@
 {
-  "version": "3.5.20",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.20/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.20/MacroForge-v3.5.20.zip",
-  "notes": "v3.5.20: Apply status pill black box fix patch - updated main_window_layout.py with status pill black box fix."
+  "version": "3.5.21",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.21/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.21/MacroForge-v3.5.21.zip",
+  "notes": "v3.5.21: Apply top toolbar functional polish patch - updated main_window.py, main_window_layout.py and timeline.py with top toolbar functional polish."
 }
