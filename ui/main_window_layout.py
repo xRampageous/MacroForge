@@ -916,6 +916,7 @@ def build_main_layout(window):
     self._bottom_panel_locked = False
     self._side_panel_expanded_width = 270
     self._side_panel_collapsed_width = 22
+    self._side_panel_expand_restore_window_width = 920
     self._side_panel_auto_collapse_width = 910
     self._side_panel_auto_expand_width = 1040
     self._height_auto_playback_collapse = 1100
@@ -971,8 +972,24 @@ def build_main_layout(window):
         if collapsed and not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
             if hasattr(self, "_auto_grow_for_collapsed_side_panel"):
                 self._auto_grow_for_collapsed_side_panel()
+        elif not collapsed:
+            try:
+                restore_w = int(getattr(self, "_side_panel_expand_restore_window_width", 920))
+                if int(self.width()) < restore_w:
+                    # Expanding the side panel from the narrow rail should return
+                    # the whole window to the compact usable width instead of
+                    # stealing space from the center/top toolbar. This is a
+                    # one-shot resize only; normal manual resizing remains free.
+                    self.resize(restore_w, self.height())
+            except Exception:
+                pass
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
+        if hasattr(self, "_update_toolbar_containment"):
+            try:
+                QTimer.singleShot(0, self._update_toolbar_containment)
+            except Exception:
+                pass
 
     self._set_side_panel_collapsed = _set_side_panel_collapsed
     self.sidebar_collapse_btn.clicked.connect(
@@ -1113,7 +1130,9 @@ def build_main_layout(window):
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
     status_pill.setMinimumWidth(260)
-    status_pill.setMaximumWidth(430)
+    # Top-panel containment pass: trim the large status pill by 40px
+    # while keeping its existing minimum readable width.
+    status_pill.setMaximumWidth(390)
     status_pill.setFixedHeight(38)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setAutoFillBackground(False)
