@@ -14,9 +14,6 @@ from ui.theme import COLORS, TYPE_COLORS
 from models import ActionListModel
 
 
-SHOW_TIMELINE_INFO_MARKERS = False
-
-
 def _safe_float(value, default=0.0):
     try:
         if value is None or value == "":
@@ -96,8 +93,9 @@ def _action_text(action):
         return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
 
     if kind == "image":
+        conf = _safe_float(getattr(action, "similarity", 0.95), 0.95) * 100
         timeout = _safe_float(getattr(action, "wait_timeout", 0.0), 0.0)
-        detail = "Template.png"
+        detail = f"Template.png · confidence ≥ {conf:.0f}%"
         if timeout > 0:
             detail += f" · wait {timeout:.1f}s"
         return label or "Image", detail
@@ -347,7 +345,7 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setBrush(QColor(type_color))
             painter.drawRoundedRect(stripe, 1.5, 1.5)
 
-            if SHOW_TIMELINE_INFO_MARKERS and group_badge and kind != "group":
+            if group_badge and kind != "group":
                 rail = QRectF(outer.left() + 5, outer.top() + 5, 2.0, outer.height() - 10)
                 rail_col = QColor(group_badge.get("color") or type_color)
                 rail_col.setAlpha(150)
@@ -380,7 +378,7 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 9 if compact else 10, QFont.Weight.DemiBold))
             painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, str(row + 1))
 
-            if SHOW_TIMELINE_INFO_MARKERS and group_badge and kind != "group":
+            if group_badge and kind != "group":
                 gb_rect = QRectF(num_rect.left() - 2, outer.center().y() + 9, num_rect.width() + 4, 14)
                 gb_col = QColor(group_badge.get("color") or type_color)
                 gb_bg = QColor(COLORS["bg"])
@@ -450,7 +448,7 @@ class TimelineDelegate(QStyledItemDelegate):
             fm = painter.fontMetrics()
             painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
-            if SHOW_TIMELINE_INFO_MARKERS and kind == "group":
+            if kind == "group":
                 tri = "▶" if bool(getattr(action, "group_collapsed", False)) else "▼"
                 badge = group_badge.get("badge", "G") if group_badge else "G"
                 gcol = QColor(group_badge.get("color") if group_badge else type_color)
@@ -460,7 +458,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.Black))
                 painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, f"{tri} {badge}")
 
-            if SHOW_TIMELINE_INFO_MARKERS and kind == "image":
+            if kind == "image":
                 match_state = getattr(view, "image_states", {}).get(row, "")
                 if match_state:
                     match_col = {
@@ -484,21 +482,21 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                 painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
 
-            if SHOW_TIMELINE_INFO_MARKERS and linked_target and kind != "group":
+            if linked_target and kind != "group":
                 link_rect = QRectF(text_x, outer.center().y() + 7, 46 if compact else 54, 14)
                 self._rounded_rect(painter, link_rect, 4, COLORS["bg"], COLORS.get("accent", type_color), 1)
                 painter.setPen(QColor(COLORS.get("accent", type_color)))
                 painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                 painter.drawText(link_rect, Qt.AlignmentFlag.AlignCenter, "TARGET")
 
-            if SHOW_TIMELINE_INFO_MARKERS and traced and not playing and not linked_target:
+            if traced and not playing and not linked_target:
                 done_rect = QRectF(text_x, outer.center().y() + 7, 42 if compact else 50, 14)
                 self._rounded_rect(painter, done_rect, 4, COLORS["bg"], COLORS.get("success", type_color), 1)
                 painter.setPen(QColor(COLORS.get("success", type_color)))
                 painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                 painter.drawText(done_rect, Qt.AlignmentFlag.AlignCenter, "TRACE")
 
-            if SHOW_TIMELINE_INFO_MARKERS and not enabled:
+            if not enabled:
                 disabled_rect = QRectF(text_x, outer.center().y() + 7, 54 if compact else 64, 14)
                 self._rounded_rect(painter, disabled_rect, 4, COLORS["bg"], COLORS["text_dark"], 1)
                 painter.setPen(QColor(COLORS["text_dark"]))
@@ -596,13 +594,12 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.drawEllipse(QRectF(line_left - 4, line_y - 4, 8, 8))
                 painter.drawEllipse(QRectF(line_right - 4, line_y - 4, 8, 8))
 
-                if SHOW_TIMELINE_INFO_MARKERS:
-                    tag_rect = QRectF(line_left + 12, line_y - 10, 82, 20)
-                    painter.setBrush(QColor(0, 10, 18, 224))
-                    painter.drawRoundedRect(tag_rect, 7, 7)
-                    painter.setPen(accent)
-                    painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Black))
-                    painter.drawText(tag_rect, Qt.AlignmentFlag.AlignCenter, "INSERT HERE")
+                tag_rect = QRectF(line_left + 12, line_y - 10, 82, 20)
+                painter.setBrush(QColor(0, 10, 18, 224))
+                painter.drawRoundedRect(tag_rect, 7, 7)
+                painter.setPen(accent)
+                painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Black))
+                painter.drawText(tag_rect, Qt.AlignmentFlag.AlignCenter, "INSERT HERE")
         except Exception as e:
             painter.setBrush(QColor(COLORS.get("bg_secondary", "#202020")))
             painter.setPen(Qt.PenStyle.NoPen)
@@ -635,7 +632,7 @@ class TimelineView(QListView):
     action_dropped_into_group = pyqtSignal(int, int)
     action_dropped_many_into_group = pyqtSignal(list, int)
     group_toggle_requested = pyqtSignal(int)
-    selection_changed = pyqtSignal(list, int)
+    selection_summary_changed = pyqtSignal(list)
 
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
@@ -644,6 +641,7 @@ class TimelineView(QListView):
         # row scale while preserving Ctrl+wheel zoom.
         self.zoom = 1.0
         self.selected_indices = set()
+        self._selection_anchor_row = -1
         self.playing_index = -1
         self.next_index = -1
         self.active_group_id = ""
@@ -655,7 +653,6 @@ class TimelineView(QListView):
         self._drag_allowed = False
         self.drag_source_row = -1
         self.drag_source_rows = []
-        self._preserved_drag_rows = []
         self.drop_insert_row = -1
         self.drop_group_row = -1
         self.drop_feedback_label = ""
@@ -672,9 +669,6 @@ class TimelineView(QListView):
         self._playing_started = 0.0
         self._playing_duration = 0.0
         self._frozen_progress = 0.0
-        self._selection_emit_pending = False
-        self._last_emitted_selection = tuple()
-        self._last_emitted_current = -1
 
         self._progress_timer = QTimer(self)
         self._progress_timer.setInterval(33)
@@ -714,7 +708,6 @@ class TimelineView(QListView):
         sel = self.selectionModel()
         if sel is not None:
             sel.currentChanged.connect(self._on_current_changed)
-            sel.selectionChanged.connect(self._on_selection_changed)
 
     def _actions(self):
         model = self.model()
@@ -804,12 +797,59 @@ class TimelineView(QListView):
     def selected_rows(self):
         return sorted(int(r) for r in self.sync_selection())
 
+    def _is_row_selectable(self, row: int) -> bool:
+        if self.model() is None or row < 0 or row >= self.model().rowCount():
+            return False
+        if self.is_row_collapsed_hidden(row):
+            return False
+        if hasattr(self, "is_row_filtered_hidden") and self.is_row_filtered_hidden(row):
+            return False
+        return True
+
+    def _visible_range_rows(self, first: int, last: int):
+        lo, hi = sorted((int(first), int(last)))
+        return [r for r in range(lo, hi + 1) if self._is_row_selectable(r)]
+
+    def _contiguous_group_block_rows(self, header_row: int):
+        actions = self._actions()
+        if header_row < 0 or header_row >= len(actions):
+            return []
+        header = actions[header_row]
+        if getattr(header, "action_type", "") != "group":
+            return []
+        gid = getattr(header, "group_id", "")
+        rows = [header_row]
+        for r in range(header_row + 1, len(actions)):
+            action = actions[r]
+            if getattr(action, "action_type", "") == "group":
+                break
+            if gid and getattr(action, "group_id", "") == gid:
+                rows.append(r)
+                continue
+            break
+        return rows
+
+    def expand_rows_for_group_blocks(self, rows):
+        """Expand selected group headers into their contiguous child blocks.
+
+        This keeps timeline block drags safe: dragging a selected group header
+        moves the folder and its visible/hidden children together, while normal
+        action-only selections continue to move only those selected actions.
+        """
+        count = self.model().rowCount() if self.model() is not None else 0
+        expanded = set()
+        for raw in sorted({int(r) for r in (rows or []) if 0 <= int(r) < count}):
+            if self._row_kind(raw) == "group":
+                expanded.update(self._contiguous_group_block_rows(raw) or [raw])
+            elif not self.is_row_collapsed_hidden(raw):
+                expanded.add(raw)
+        return sorted(r for r in expanded if 0 <= r < count)
+
     def drag_rows(self):
         rows = list(getattr(self, "drag_source_rows", []) or [])
         if not rows and self.drag_source_row >= 0:
             rows = [self.drag_source_row]
-        count = self.model().rowCount() if self.model() is not None else 0
-        return sorted({r for r in rows if 0 <= r < count and not self.is_row_collapsed_hidden(r)})
+        return self.expand_rows_for_group_blocks(rows)
 
     def set_selected_rows(self, rows, active=None):
         rows = sorted({int(r) for r in (rows or []) if self.model() is not None and 0 <= int(r) < self.model().rowCount()})
@@ -822,11 +862,16 @@ class TimelineView(QListView):
                 sel.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
         if rows:
             active = rows[0] if active is None or int(active) not in rows else int(active)
+            self._selection_anchor_row = int(active)
             self.setCurrentIndex(self.model().index(active, 0))
         else:
+            self._selection_anchor_row = -1
             self.setCurrentIndex(QModelIndex())
-        self._schedule_selection_emit()
         self.viewport().update()
+        try:
+            self.selection_summary_changed.emit(list(rows))
+        except Exception:
+            pass
         return rows
 
     def clear_trace(self):
@@ -935,32 +980,12 @@ class TimelineView(QListView):
             return ""
         return getattr(actions[row], "action_type", "") or "key"
 
-    def _schedule_selection_emit(self):
-        if self._selection_emit_pending:
-            return
-        self._selection_emit_pending = True
-        QTimer.singleShot(0, self._emit_selection_changed)
-
-    def _emit_selection_changed(self):
-        self._selection_emit_pending = False
-        rows = tuple(sorted(self.sync_selection()))
-        current = self.currentIndex().row() if self.currentIndex().isValid() else -1
-        if rows == self._last_emitted_selection and current == self._last_emitted_current:
-            return
-        self._last_emitted_selection = rows
-        self._last_emitted_current = current
-        self.selection_changed.emit(list(rows), current)
-
-    def _on_selection_changed(self, selected=None, deselected=None):
-        self._schedule_selection_emit()
-
     def _on_current_changed(self, current, previous):
         self.sync_selection()
         if current.isValid() and self.is_row_collapsed_hidden(current.row()):
             header = self.group_header_for_row(current.row())
             if header:
                 self.setCurrentIndex(self.model().index(header[0], 0))
-        self._schedule_selection_emit()
         self.viewport().update()
 
     def _on_clicked(self, index):
@@ -968,7 +993,11 @@ class TimelineView(QListView):
             self.sync_selection()
             if not self.selected_indices:
                 self.selected_indices = {index.row()}
-            self._schedule_selection_emit()
+            self._selection_anchor_row = index.row()
+            try:
+                self.selection_summary_changed.emit(self.selected_rows())
+            except Exception:
+                pass
             self.action_clicked.emit(index.row())
 
     def _on_double_clicked(self, index):
@@ -979,6 +1008,39 @@ class TimelineView(QListView):
         index = self.indexAt(pos)
         row = index.row() if index.isValid() else -1
         self.action_context_menu.emit(row, self.viewport().mapToGlobal(pos))
+
+    def _apply_modifier_click_selection(self, row: int, modifiers) -> bool:
+        if row < 0 or self.model() is None or not self._is_row_selectable(row):
+            return False
+        ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+        shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+        if not (ctrl or shift):
+            return False
+
+        if shift:
+            anchor = self._selection_anchor_row
+            if anchor < 0 or anchor >= self.model().rowCount() or not self._is_row_selectable(anchor):
+                anchor = row
+            rows = self._visible_range_rows(anchor, row)
+            if ctrl:
+                rows = sorted(set(self.selected_indices).union(rows))
+            active = row
+        else:
+            rows = set(self.sync_selection())
+            if row in rows:
+                rows.remove(row)
+            else:
+                rows.add(row)
+            rows = sorted(r for r in rows if self._is_row_selectable(r))
+            active = row if row in rows else (rows[-1] if rows else -1)
+            self._selection_anchor_row = row
+
+        self.set_selected_rows(rows, active=active if active >= 0 else None)
+        if active >= 0:
+            self.action_clicked.emit(active)
+        else:
+            self.action_clicked.emit(-1)
+        return True
 
     def mousePressEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
@@ -1000,6 +1062,11 @@ class TimelineView(QListView):
             self.clearSelection()
             self.setCurrentIndex(QModelIndex())
             self.selected_indices.clear()
+            self._selection_anchor_row = -1
+            try:
+                self.selection_summary_changed.emit([])
+            except Exception:
+                pass
             self.action_clicked.emit(-1)
             self.viewport().update()
             event.accept()
@@ -1010,48 +1077,50 @@ class TimelineView(QListView):
                 self.group_toggle_requested.emit(row)
                 event.accept()
                 return
+            if self._apply_modifier_click_selection(row, event.modifiers()):
+                event.accept()
+                return
             if self._is_drag_grip_hit(row, pos) and self.playing_index < 0:
-                # Preserve an existing multi-selection when the drag starts from
-                # the grip on one selected row. Qt's default press handling can
-                # otherwise collapse the selection before startDrag() reads it.
-                try:
-                    current_rows = sorted(self.sync_selection())
-                except Exception:
-                    current_rows = sorted(getattr(self, "selected_indices", set()))
-                if row in current_rows and len(current_rows) > 1:
-                    self._preserved_drag_rows = current_rows
-                else:
-                    self._preserved_drag_rows = [row]
                 self._drag_start_row = row
                 self._drag_allowed = True
                 self.setDragEnabled(True)
             else:
                 # Dragging is deliberately disabled unless the press began on
                 # the far-left grid dots. This keeps selection/collapse stable.
-                self._preserved_drag_rows = []
                 self.setDragEnabled(False)
 
         if event.button() == Qt.MouseButton.RightButton and idx.isValid() and row in self.selected_indices:
             return
         super().mousePressEvent(event)
         self.sync_selection()
-        if self._drag_allowed and self._preserved_drag_rows:
-            self.set_selected_rows(self._preserved_drag_rows, active=row)
+        if idx.isValid() and event.button() == Qt.MouseButton.LeftButton:
+            self._selection_anchor_row = row
+            try:
+                self.selection_summary_changed.emit(self.selected_rows())
+            except Exception:
+                pass
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        if self.drag_source_row < 0:
+        dragging = self.drag_source_row >= 0
+        selected_count = len(getattr(self, "selected_indices", set()) or set())
+        if not dragging and selected_count <= 1:
             return
         label = getattr(self, "drop_feedback_label", "") or "Drag row"
         kind = getattr(self, "drop_feedback_kind", "")
         valid = bool(getattr(self, "drop_feedback_valid", False))
+        if not dragging:
+            label = f"{selected_count} actions selected"
+            kind = "selection"
+            valid = True
         try:
             painter = QPainter(self.viewport())
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             vw = self.viewport().width()
             accent_key = "success" if kind == "group" else ("accent" if valid else "error")
             accent = QColor(COLORS.get(accent_key, COLORS.get("accent", "#45c8ff")))
-            shell = QRectF(max(12, vw // 2 - 154), 10, min(308, vw - 24), 30)
+            width = min(308, max(176, painter.fontMetrics().horizontalAdvance(label) + 52), vw - 24)
+            shell = QRectF(max(12, vw // 2 - int(width / 2)), 10, width, 30)
 
             glow = QColor(accent)
             glow.setAlpha(55)
@@ -1095,11 +1164,13 @@ class TimelineView(QListView):
     def startDrag(self, supported_actions):
         if self.playing_index >= 0 or not self._drag_allowed or self._drag_start_row < 0:
             return
-        selected = sorted(self._preserved_drag_rows or self.selected_rows())
+        selected = self.selected_rows()
         if self._drag_start_row in selected and len(selected) > 1:
-            self.drag_source_rows = selected
+            self.drag_source_rows = self.expand_rows_for_group_blocks(selected)
         else:
-            self.drag_source_rows = [self._drag_start_row]
+            self.drag_source_rows = self.expand_rows_for_group_blocks([self._drag_start_row])
+        if set(self.drag_source_rows) != set(selected):
+            self.set_selected_rows(self.drag_source_rows, active=self._drag_start_row)
         self.drag_source_row = self._drag_start_row
         self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
         self.viewport().update()
@@ -1201,7 +1272,6 @@ class TimelineView(QListView):
         self._drag_allowed = False
         self.drag_source_row = -1
         self.drag_source_rows = []
-        self._preserved_drag_rows = []
         self.drop_insert_row = -1
         self.drop_group_row = -1
         self.drop_feedback_label = ""
@@ -1250,6 +1320,11 @@ class TimelineView(QListView):
             row = header[0]
             idx = self.model().index(row, 0)
         if self._row_kind(row) != "group":
+            return -1
+        drag_rows = set(self.drag_rows())
+        if row in drag_rows:
+            return -1
+        if any(self._row_kind(r) == "group" for r in drag_rows):
             return -1
 
         # Use the centre of the header card as the intentional "drop into" zone.
@@ -1337,6 +1412,7 @@ class TimelineView(QListView):
             m._actions = list(actions or [])
             m.endResetModel()
         self.selected_indices.clear()
+        self._selection_anchor_row = -1
         self.viewport().update()
 
     def set_active(self, index):
@@ -1348,11 +1424,17 @@ class TimelineView(QListView):
             if sel is not None:
                 sel.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
             self.selected_indices = {index}
+            self._selection_anchor_row = index
         else:
             self.clearSelection()
             self.setCurrentIndex(QModelIndex())
             self.selected_indices.clear()
+            self._selection_anchor_row = -1
         self.viewport().update()
+        try:
+            self.selection_summary_changed.emit(sorted(self.selected_indices))
+        except Exception:
+            pass
 
     def set_playing(self, index, duration=0.0):
         self.playing_index = index

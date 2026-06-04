@@ -642,6 +642,12 @@ class MainWindow(QMainWindow):
                 return
             self._begin_selection_reveal_from_click()
             self.select(index)
+            try:
+                rows = self._selected_rows(index)
+                if len(rows) > 1:
+                    self.status(f"{len(rows)} actions selected")
+            except Exception:
+                pass
         finally:
             if not (bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False))):
                 self._finish_selection_reveal_from_click()
@@ -1146,6 +1152,11 @@ class MainWindow(QMainWindow):
     def _deselect(self):
         self.select(-1)
         self.timeline.selected_indices.clear()
+        try:
+            if hasattr(self.timeline, "selection_summary_changed"):
+                self.timeline.selection_summary_changed.emit([])
+        except Exception:
+            pass
         if hasattr(self.timeline, "set_link_targets"):
             self.timeline.set_link_targets(-1, [])
         self.timeline.refresh()
@@ -1166,12 +1177,18 @@ class MainWindow(QMainWindow):
             self.start()
 
     def _select_all_actions(self):
-        rows = set(range(self.action_model.rowCount()))
-        self.timeline.selected_indices = rows
-        try:
-            self.timeline.selectAll()
-        except Exception:
-            pass
+        if hasattr(self.timeline, "_is_row_selectable"):
+            rows = [r for r in range(self.action_model.rowCount()) if self.timeline._is_row_selectable(r)]
+        else:
+            rows = list(range(self.action_model.rowCount()))
+        if hasattr(self.timeline, "set_selected_rows"):
+            self.timeline.set_selected_rows(rows, active=self.active_index if self.active_index in rows else (rows[0] if rows else None))
+        else:
+            self.timeline.selected_indices = set(rows)
+            try:
+                self.timeline.selectAll()
+            except Exception:
+                pass
         self.status(f"Selected {len(rows)} row(s)")
 
     def _ungroup_selected(self):
@@ -1202,6 +1219,28 @@ class MainWindow(QMainWindow):
             self.timeline.action_dropped_many_into_group.connect(self.move_actions_into_group)
         self.timeline.action_context_menu.connect(self._timeline_context_menu)
         self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
+        if hasattr(self.timeline, "selection_summary_changed"):
+            self.timeline.selection_summary_changed.connect(self._timeline_selection_summary_changed)
+
+    def _timeline_selection_summary_changed(self, rows):
+        try:
+            count = len(rows or [])
+        except Exception:
+            count = 0
+        if count > 1:
+            self.status(f"{count} actions selected")
+
+    def _expand_rows_for_group_blocks(self, rows):
+        """Expand selected group headers into their contiguous group blocks."""
+        actions = self.action_model.actions()
+        count = len(actions)
+        expanded = set()
+        for raw in sorted({int(r) for r in (rows or []) if 0 <= int(r) < count}):
+            if getattr(actions[raw], "action_type", "") == "group":
+                expanded.update(self._contiguous_group_block(raw) or [raw])
+            else:
+                expanded.add(raw)
+        return sorted(r for r in expanded if 0 <= r < count)
 
     def _selected_rows(self, fallback=None):
         """Return current timeline multi-selection as stable source-model rows."""
@@ -2320,27 +2359,31 @@ class MainWindow(QMainWindow):
         self.active_index = active if active is not None else (rows[0] if rows else -1)
 
     def move_actions_to(self, rows, target_index):
-        """Move multiple selected non-group rows as one ordered block."""
+        """Move multiple selected rows as one ordered block.
+
+        Group headers are expanded to include their contiguous children before
+        moving, so a selected folder behaves like a single safe timeline block.
+        Normal action-only selections still move only the selected action rows.
+        """
         if self.engine.running or self.timeline.playing_index >= 0:
             self.status("Stop playback before reordering actions")
             return
         actions_before = list(self.action_model.actions())
         count = len(actions_before)
-        rows = sorted({int(r) for r in (rows or []) if 0 <= int(r) < count})
+        rows = self._expand_rows_for_group_blocks(rows)
+        rows = sorted({int(r) for r in rows if 0 <= int(r) < count})
         if not rows:
             return
         if len(rows) == 1:
             return self.move_action_to(rows[0], target_index)
 
-        group_rows = [r for r in rows if getattr(actions_before[r], "action_type", "") == "group"]
-        if group_rows:
-            self.status("Multi-drag skips group headers; drag a group header by itself")
-            rows = [r for r in rows if r not in set(group_rows)]
-            if not rows:
-                return
-
         target_index = max(0, min(int(target_index), count))
         row_set = set(rows)
+        if target_index in row_set or target_index == max(rows) + 1:
+            self.status("Selection is already there")
+            self._select_moved_rows(rows, active=rows[0])
+            return
+
         scroll_position = self.timeline.scroll_position()
         self.history.push(self.action_model.actions(), self._timeline_history_state())
 
@@ -2350,12 +2393,29 @@ class MainWindow(QMainWindow):
         insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
 
         new_actions = remaining[:insert_at] + moved + remaining[insert_at:]
+        if [id(a) for a in new_actions] == [id(a) for a in actions_before]:
+            self.status("Selection is already there")
+            self._select_moved_rows(rows, active=rows[0])
+            return
+
         new_index_by_id = {id(a): i for i, a in enumerate(new_actions)}
         row_map = {old_i: new_index_by_id.get(id(a), old_i) for old_i, a in enumerate(actions_before)}
 
         self.action_model.set_actions(new_actions)
         self._apply_row_reference_map(row_map)
+
+        # Standalone moved actions should adopt the destination group context.
+        # Children of a moved selected group block keep their original group id.
+        moved_group_ids = {
+            getattr(a, "group_id", "") for a in moved
+            if getattr(a, "action_type", "") == "group" and getattr(a, "group_id", "")
+        }
         for row in range(insert_at, insert_at + len(moved)):
+            action = self.action_model.get(row)
+            if getattr(action, "action_type", "") == "group":
+                continue
+            if getattr(action, "group_id", "") in moved_group_ids:
+                continue
             self._assign_group_from_position(row)
         self._normalize_groups()
 
