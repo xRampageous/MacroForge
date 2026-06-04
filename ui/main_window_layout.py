@@ -110,6 +110,39 @@ def build_main_layout(window):
             except Exception:
                 pass
 
+        def _body_anim_children():
+            try:
+                return body_widget.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)
+            except Exception:
+                return []
+
+        def _hide_body_anim_children(capture=True):
+            """Hide direct body children during height animation to prevent paint artifacts.
+
+            The animated widget becomes very short while collapsing/expanding.
+            Hiding the content until the motion finishes prevents controls from
+            squashing, drawing through the next card, or briefly overlapping
+            neighbouring Image Inspector sub-panels.
+            """
+            for child in _body_anim_children():
+                try:
+                    if capture:
+                        child.setProperty("_mf_collapse_anim_was_hidden", bool(child.isHidden()))
+                    child.setVisible(False)
+                except Exception:
+                    pass
+
+        def _restore_body_anim_children(clear=True):
+            for child in _body_anim_children():
+                try:
+                    was_hidden = child.property("_mf_collapse_anim_was_hidden")
+                    child.setVisible(False if bool(was_hidden) else True)
+                    if clear:
+                        child.setProperty("_mf_collapse_anim_was_hidden", None)
+                    child.updateGeometry()
+                except Exception:
+                    pass
+
         def _queue_side_panel_rebalance(reason="collapse", delays=(0, 45, 95, 165)):
             """Let the side-panel stack settle into space freed by a collapse/expand.
 
@@ -188,13 +221,19 @@ def build_main_layout(window):
                     inspector_card.setMaximumHeight(16777215)
                     inspector_card.updateGeometry()
 
+            # Measure while content is available, then hide direct child content
+            # for the duration of the height animation.  This keeps all side
+            # panels on the same path and avoids the visual overlap/squash that
+            # can happen when Qt tries to relayout controls into a 0-20px body.
             if collapsed:
                 start_h = max(body_widget.height(), body_widget.sizeHint().height(), 1)
                 end_h = 0
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(start_h)
+                _hide_body_anim_children(capture=True)
             else:
                 body_widget.setVisible(True)
+                _restore_body_anim_children(clear=False)
                 start_h = max(0, body_widget.height())
                 if start_h <= 1:
                     start_h = 0
@@ -203,10 +242,16 @@ def build_main_layout(window):
                 if parent is not None:
                     parent.updateGeometry()
                 end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
+                _hide_body_anim_children(capture=False)
                 body_widget.setMaximumHeight(start_h)
 
+            try:
+                body_widget.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+            except Exception:
+                pass
+
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            anim.setDuration(130 if is_image_inspector_body else 145)
+            anim.setDuration(120 if is_image_inspector_body else 135)
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             anim.setStartValue(start_h)
             anim.setEndValue(end_h)
@@ -218,6 +263,7 @@ def build_main_layout(window):
                 else:
                     body_widget.setVisible(True)
                     body_widget.setMaximumHeight(16777215)
+                    _restore_body_anim_children()
                 _finish_parent()
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
@@ -233,11 +279,13 @@ def build_main_layout(window):
             anim.start()
         except Exception:
             if collapsed:
+                _hide_body_anim_children(capture=True)
                 body_widget.setMaximumHeight(0)
                 body_widget.setVisible(False)
             else:
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
+                _restore_body_anim_children()
             _finish_parent()
             _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 45, 120))
         body_widget.updateGeometry()
@@ -994,7 +1042,7 @@ def build_main_layout(window):
     insp_body_lo.addLayout(self._insp_lo)
     insp_lo.addWidget(insp_body)
     sb_lo.addWidget(insp_card, stretch=0)
-    self._side_panel_bottom_guard_px = 2
+    self._side_panel_bottom_restore_margin = 32
     self._side_panel_bottom_spacer = QWidget()
     self._side_panel_bottom_spacer.setObjectName("side_panel_bottom_spacer")
     self._side_panel_bottom_spacer.setMinimumHeight(0)
@@ -1002,15 +1050,6 @@ def build_main_layout(window):
     self._side_panel_bottom_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
     sb_lo.addWidget(self._side_panel_bottom_spacer, stretch=1)
 
-    # Invisible 2px bottom sentinel.  The side-panel stack keeps normal full-
-    # height layout, but responsive height collapse starts when the visible card
-    # stack reaches this guard instead of clamping/hugging the whole sidebar.
-    self._side_panel_bottom_guard = QWidget()
-    self._side_panel_bottom_guard.setObjectName("side_panel_bottom_guard")
-    self._side_panel_bottom_guard.setFixedHeight(self._side_panel_bottom_guard_px)
-    self._side_panel_bottom_guard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-    self._side_panel_bottom_guard.setStyleSheet("QWidget#side_panel_bottom_guard { background: transparent; border: none; }")
-    sb_lo.addWidget(self._side_panel_bottom_guard, stretch=0)
 
     self._side_panel_collapsed = False
     self._side_panel_auto_collapsed = False
@@ -1055,8 +1094,8 @@ def build_main_layout(window):
 
         The previous content-hug approach capped the whole sidebar height and
         caused expanded Inspector content to clip too early.  Keep the sidebar
-        in its normal full-height layout; the 2px bottom guard in the resize
-        policy now decides when collapse/expand should happen.
+        in its normal full-height layout; the responsive height policy now
+        collapses only when the visible stack reaches the actual app bottom.
         """
         try:
             sidebar.setMinimumHeight(0)
@@ -1068,11 +1107,6 @@ def build_main_layout(window):
                 spacer.setMaximumHeight(16777215)
                 spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
                 spacer.updateGeometry()
-            guard = getattr(self, "_side_panel_bottom_guard", None)
-            if guard is not None:
-                guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 2)))
-                guard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-                guard.updateGeometry()
             layout = sidebar.layout()
             if layout is not None:
                 layout.invalidate()
@@ -1089,7 +1123,7 @@ def build_main_layout(window):
         Collapsing Add Action, Recorder, or Image Inspector sub-sections frees
         vertical space.  This helper restores the normal full-height sidebar
         layout, refreshes stale height clamps, and leaves collapse timing to the
-        2px bottom guard instead of clamping the whole side-panel frame.  It is
+        actual application bottom instead of clamping the whole side-panel frame.  It is
         layout-only and does not change the user's manual collapsed state, lock
         state, or auto-collapse thresholds.
         """
@@ -1161,11 +1195,6 @@ def build_main_layout(window):
                 spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
                 spacer.updateGeometry()
 
-            guard = getattr(self, "_side_panel_bottom_guard", None)
-            if guard is not None:
-                guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 2)))
-                guard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-                guard.updateGeometry()
 
             if hasattr(self, "_autosize_inspector_panel"):
                 # Inspector content may have just gained/returned height.  Run
@@ -1189,7 +1218,7 @@ def build_main_layout(window):
                 central_widget.layout().invalidate()
                 central_widget.layout().activate()
             # If an auto-collapse animation finished and the visible stack is
-            # still pressing into the 2px bottom guard, let the resize policy
+            # still pressing into the application bottom, let the resize policy
             # continue to the next section in the requested collapse order.
             if str(reason).endswith(".finished"):
                 responsive_height = getattr(self, "_update_responsive_height_panels", None)

@@ -424,12 +424,13 @@ class MainWindow(QMainWindow):
             pass
 
     def _update_responsive_height_panels(self):
-        """Auto-collapse side-panel sections when the visible stack hits the bottom guard.
+        """Auto-collapse side-panel sections when the visible stack reaches the app bottom.
 
-        The side panel keeps its normal full-height layout.  A 2px invisible
-        bottom guard decides when the next section in the requested order should
-        collapse, which avoids the earlier content-hug clamp that clipped the
-        Inspector while panels were still expanded.
+        The side panel keeps its normal full-height layout.  There is no
+        artificial guard widget or pixel margin; collapse starts when the
+        measured visible side-panel stack reaches the actual application content
+        bottom.  Expansion still requires a restore cushion so the UI does not
+        bounce between collapse/expand on the same pixel.
         """
         try:
             height = int(self.height())
@@ -465,11 +466,10 @@ class MainWindow(QMainWindow):
                 ]
                 active_steps = [step for step in collapse_steps if bool(step[1])]
 
-                guard_px = max(0, int(getattr(self, "_side_panel_bottom_guard_px", 2)))
-                restore_margin = max(0, int(getattr(self, "_side_panel_bottom_guard_restore_margin", 28)))
+                restore_margin = max(0, int(getattr(self, "_side_panel_bottom_restore_margin", 32)))
 
                 def _visible_stack_height():
-                    """Return natural visible sidebar stack height and available sidebar height."""
+                    """Return natural visible sidebar stack height and app-bottom available height."""
                     sidebar = getattr(self, "sidebar_frame", None)
                     if sidebar is None:
                         return 0, height
@@ -485,11 +485,10 @@ class MainWindow(QMainWindow):
                     margins = layout.contentsMargins()
                     visible_widgets = []
                     spacer = getattr(self, "_side_panel_bottom_spacer", None)
-                    guard = getattr(self, "_side_panel_bottom_guard", None)
                     for i in range(layout.count()):
                         item = layout.itemAt(i)
                         widget = item.widget() if item is not None else None
-                        if widget is None or widget is spacer or widget is guard:
+                        if widget is None or widget is spacer:
                             continue
                         if not widget.isVisible():
                             continue
@@ -513,11 +512,10 @@ class MainWindow(QMainWindow):
                             min_hint_h = 0
                         natural_h += max(0, current_h, hint_h, min_hint_h)
 
-                    # Measure against the actual program content bottom, not just the
-                    # sidebar widget's internal height.  Sidebar margins/padding can make
-                    # the old sidebar-local guard fire a little early/late; mapping the
-                    # sidebar top into the central widget gives a guard anchored to the
-                    # real bottom edge of the app window.
+                    # Measure against the actual program content bottom, not the
+                    # sidebar widget's internal height.  Collapse triggers when
+                    # the visible stack reaches this line exactly; no invisible
+                    # guard/margin is subtracted from the content box.
                     try:
                         central = self.centralWidget()
                     except Exception:
@@ -559,26 +557,26 @@ class MainWindow(QMainWindow):
                     return max(24, hint_h, min_hint_h)
 
                 stack_h, available_h = _visible_stack_height()
-                collapse_limit = max(0, available_h - guard_px)
-                hits_bottom_guard = stack_h >= collapse_limit
+                hits_app_bottom = stack_h >= max(0, available_h)
 
                 # Collapse one still-open section only when the visible stack
-                # reaches the 2px bottom guard.  This avoids fixed-height
-                # threshold collapses that can happen before the panel actually
-                # runs out of room.
-                if hits_bottom_guard:
+                # reaches the actual application content bottom.  This avoids
+                # fixed-height threshold collapses and removes the old 2px
+                # invisible guard margin.
+                if hits_app_bottom:
                     for body_name, _enabled in active_steps:
                         if not _panel_collapsed(body_name):
                             set_panel(body_name, True, auto=True)
                             break
                 else:
                     # Expand in reverse order, but only when the next section's
-                    # estimated height can fit with a restore cushion beyond the
-                    # 2px guard.  This prevents rapid collapse/expand bouncing.
+                    # estimated height can fit with a restore cushion below the
+                    # actual application bottom.  The cushion prevents rapid
+                    # collapse/expand bouncing on the same pixel.
                     for body_name, _enabled in reversed(active_steps):
                         if _panel_collapsed(body_name):
                             delta_h = _estimated_expand_delta(body_name)
-                            if stack_h + delta_h <= max(0, available_h - guard_px - restore_margin):
+                            if stack_h + delta_h <= max(0, available_h - restore_margin):
                                 set_panel(body_name, False, auto=True)
                             break
 
