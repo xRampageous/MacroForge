@@ -79,13 +79,34 @@ def build_main_layout(window):
         caret.setText("v" if collapsed else "^")
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
 
+        body_name = body_widget.objectName() or ""
+        image_inspector_bodies = {
+            "inspector_group_image_body",
+            "inspector_group_matching_body",
+            "inspector_group_retry_body",
+            "inspector_group_on_fail_body",
+            "inspector_group_fail_target_body",
+        }
+        is_image_inspector_body = body_name in image_inspector_bodies
+
         parent = body_widget.parentWidget()
         parent_name = parent.objectName() if parent is not None else ""
-        anim_key = body_widget.objectName() or str(id(body_widget))
+        anim_key = body_name or str(id(body_widget))
         previous_anim = self._collapse_animations.get(anim_key)
         if previous_anim is not None:
             try:
                 previous_anim.stop()
+            except Exception:
+                pass
+
+        def _refresh_inspector_size(delay_ms=0):
+            if not hasattr(self, "_autosize_inspector_panel"):
+                return
+            try:
+                if delay_ms > 0:
+                    QTimer.singleShot(delay_ms, self._autosize_inspector_panel)
+                else:
+                    self._autosize_inspector_panel()
             except Exception:
                 pass
 
@@ -104,11 +125,31 @@ def build_main_layout(window):
                 else:
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
-            if parent_name == "inspector_card" and hasattr(self, "_autosize_inspector_panel"):
-                self._autosize_inspector_panel()
+            if parent_name == "inspector_card" or is_image_inspector_body:
+                _refresh_inspector_size()
+                if is_image_inspector_body:
+                    _refresh_inspector_size(0)
+                    _refresh_inspector_size(80)
 
         try:
             body_widget.setMinimumHeight(0)
+            if is_image_inspector_body:
+                # Image Inspector sub-panels sit inside an Inspector card that is
+                # height-clamped to its selected content. Release the parent/card
+                # clamps before measuring, otherwise expand can calculate against
+                # the old collapsed height and leave controls half-visible.
+                body_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                if parent is not None:
+                    parent.setMinimumHeight(0)
+                    parent.setMaximumHeight(16777215)
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                    parent.updateGeometry()
+                inspector_card = getattr(self, "insp_card", None)
+                if inspector_card is not None:
+                    inspector_card.setMinimumHeight(0)
+                    inspector_card.setMaximumHeight(16777215)
+                    inspector_card.updateGeometry()
+
             if collapsed:
                 start_h = max(body_widget.height(), body_widget.sizeHint().height(), 1)
                 end_h = 0
@@ -121,11 +162,13 @@ def build_main_layout(window):
                     start_h = 0
                 body_widget.setMaximumHeight(16777215)
                 body_widget.updateGeometry()
+                if parent is not None:
+                    parent.updateGeometry()
                 end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
                 body_widget.setMaximumHeight(start_h)
 
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            anim.setDuration(145)
+            anim.setDuration(130 if is_image_inspector_body else 145)
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             anim.setStartValue(start_h)
             anim.setEndValue(end_h)
