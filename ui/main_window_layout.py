@@ -272,8 +272,99 @@ def build_main_layout(window):
                     _refresh_inspector_size(0)
                     _refresh_inspector_size(80)
 
+        def _snap_image_settings_body(collapsed_state):
+            # Stable snap path for the flat Image Settings body.
+            #
+            # The Image Settings panel contains a fixed preview/tool strip plus
+            # several form sections. Animating the inner maximumHeight can make Qt
+            # recalculate against a partially clipped preview, which leaves the
+            # Browse/Capture/Test row and Matching section visually broken.  For
+            # this one body, release all clamps first and snap the whole body open
+            # or closed as a single unit, then run delayed Inspector/sidebar
+            # settle passes.
+            if not is_image_inspector_body:
+                return False
+
+            updates_disabled = False
+            try:
+                body_widget.setUpdatesEnabled(False)
+                updates_disabled = True
+
+                preview_frame = getattr(self, "ii_preview_frame", None)
+                if preview_frame is not None:
+                    preview_frame.setFixedHeight(166)
+                    preview_frame.setMinimumHeight(166)
+                    preview_frame.setMaximumHeight(166)
+                    preview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+                    preview_frame.updateGeometry()
+
+                for owner in (
+                    body_widget,
+                    parent,
+                    getattr(self, "ii_image_card", None),
+                    getattr(self, "insp_image", None),
+                    getattr(self, "insp_body", None),
+                    getattr(self, "insp_card", None),
+                ):
+                    if owner is None:
+                        continue
+                    try:
+                        owner.setMinimumHeight(0)
+                        owner.setMaximumHeight(16777215)
+                        owner.updateGeometry()
+                    except Exception:
+                        pass
+
+                if collapsed_state:
+                    body_widget.setMaximumHeight(0)
+                    body_widget.setVisible(False)
+                else:
+                    body_widget.setVisible(True)
+                    body_widget.setMaximumHeight(16777215)
+                    body_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                    try:
+                        layout = body_widget.layout()
+                        if layout is not None:
+                            layout.invalidate()
+                            layout.activate()
+                    except Exception:
+                        pass
+
+                try:
+                    body_widget.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+                except Exception:
+                    pass
+
+                if updates_disabled:
+                    body_widget.setUpdatesEnabled(True)
+                    updates_disabled = False
+
+                _finish_parent()
+                body_widget.updateGeometry()
+                _side_panel_animation_tick()
+                self._collapse_animations.pop(anim_key, None)
+
+                _queue_side_panel_rebalance(
+                    reason=f"{body_name}.snap",
+                    delays=(0, 24, 55, 95, 140),
+                )
+                _refresh_inspector_size()
+                _refresh_inspector_size(35)
+                _refresh_inspector_size(90)
+                return True
+            except Exception:
+                return False
+            finally:
+                if updates_disabled:
+                    try:
+                        body_widget.setUpdatesEnabled(True)
+                    except Exception:
+                        pass
+
         try:
             body_widget.setMinimumHeight(0)
+            if is_image_inspector_body and _snap_image_settings_body(collapsed):
+                return
             if is_image_inspector_body:
                 # Image Inspector sub-panels sit inside an Inspector card that is
                 # height-clamped to its selected content. Release the parent/card
@@ -999,7 +1090,11 @@ def build_main_layout(window):
 
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
+    self.ii_preview_frame = preview
     preview.setFixedHeight(166)
+    preview.setMinimumHeight(166)
+    preview.setMaximumHeight(166)
+    preview.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     preview.setStyleSheet(
         f"QFrame#image_inspector_preview {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #07182A, stop:1 #020A13); border: 1px solid {C['border']}; "
@@ -1010,6 +1105,7 @@ def build_main_layout(window):
     preview_lo.setSpacing(6)
     art = QFrame()
     art.setObjectName("image_preview_art")
+    self.ii_preview_art = art
     art.setStyleSheet(
         f"QFrame#image_preview_art {{ background-color: #071525; "
         f"border: 1px solid {C['border']}; border-radius: 7px; }}"
