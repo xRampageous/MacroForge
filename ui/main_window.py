@@ -424,11 +424,12 @@ class MainWindow(QMainWindow):
             pass
 
     def _update_responsive_height_panels(self):
-        """Auto-collapse side-panel sections in the requested top-to-bottom order.
+        """Auto-collapse side-panel sections when the visible stack hits the bottom guard.
 
-        Panel locks are state-only.  When either panel lock is enabled, resize
-        pressure must not auto-collapse or auto-expand the side/Inspector/Image
-        sub-panel states.
+        The side panel keeps its normal full-height layout.  A 10px invisible
+        bottom guard decides when the next section in the requested order should
+        collapse, which avoids the earlier content-hug clamp that clipped the
+        Inspector while panels were still expanded.
         """
         try:
             height = int(self.height())
@@ -453,33 +454,115 @@ class MainWindow(QMainWindow):
                 # ON FAIL -> FAIL TARGET -> INSPECTOR.
                 # Image-specific rows are skipped when a non-image action is selected.
                 collapse_steps = [
-                    ("add_action_body", "_height_auto_add_collapse", "_height_auto_add_expand", True),
-                    ("recorder_body", "_height_auto_recorder_collapse", "_height_auto_recorder_expand", True),
-                    ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand", image_visible),
-                    ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand", image_visible),
-                    ("inspector_group_retry_body", "_height_auto_image_retry_collapse", "_height_auto_image_retry_expand", image_visible),
-                    ("inspector_group_on_fail_body", "_height_auto_image_on_fail_collapse", "_height_auto_image_on_fail_expand", image_visible),
-                    ("inspector_group_fail_target_body", "_height_auto_image_fail_target_collapse", "_height_auto_image_fail_target_expand", image_visible),
-                    ("inspector_body", "_height_auto_inspector_collapse", "_height_auto_inspector_expand", True),
+                    ("add_action_body", True),
+                    ("recorder_body", True),
+                    ("inspector_group_image_body", image_visible),
+                    ("inspector_group_matching_body", image_visible),
+                    ("inspector_group_retry_body", image_visible),
+                    ("inspector_group_on_fail_body", image_visible),
+                    ("inspector_group_fail_target_body", image_visible),
+                    ("inspector_body", True),
                 ]
-                active_steps = [step for step in collapse_steps if bool(step[3])]
+                active_steps = [step for step in collapse_steps if bool(step[1])]
 
-                # Collapse one still-open section per resize pass, using the
-                # ordered thresholds.  This keeps resize feedback predictable and
-                # prevents lower Inspector sections from closing before Add/Recorder.
-                for body_name, collapse_attr, _expand_attr, _enabled in active_steps:
-                    if not _panel_collapsed(body_name):
-                        if height <= int(getattr(self, collapse_attr, 0)):
+                guard_px = max(0, int(getattr(self, "_side_panel_bottom_guard_px", 10)))
+                restore_margin = max(0, int(getattr(self, "_side_panel_bottom_guard_restore_margin", 28)))
+
+                def _visible_stack_height():
+                    """Return natural visible sidebar stack height and available sidebar height."""
+                    sidebar = getattr(self, "sidebar_frame", None)
+                    if sidebar is None:
+                        return 0, height
+                    layout = sidebar.layout()
+                    if layout is None:
+                        return max(0, sidebar.sizeHint().height()), max(0, sidebar.height() or height)
+
+                    try:
+                        layout.invalidate()
+                    except Exception:
+                        pass
+
+                    margins = layout.contentsMargins()
+                    visible_widgets = []
+                    spacer = getattr(self, "_side_panel_bottom_spacer", None)
+                    guard = getattr(self, "_side_panel_bottom_guard", None)
+                    for i in range(layout.count()):
+                        item = layout.itemAt(i)
+                        widget = item.widget() if item is not None else None
+                        if widget is None or widget is spacer or widget is guard:
+                            continue
+                        if not widget.isVisible():
+                            continue
+                        visible_widgets.append(widget)
+
+                    natural_h = margins.top() + margins.bottom()
+                    if visible_widgets:
+                        natural_h += max(0, layout.spacing()) * max(0, len(visible_widgets) - 1)
+                    for widget in visible_widgets:
+                        try:
+                            current_h = int(widget.height())
+                        except Exception:
+                            current_h = 0
+                        try:
+                            hint_h = int(widget.sizeHint().height())
+                        except Exception:
+                            hint_h = 0
+                        try:
+                            min_hint_h = int(widget.minimumSizeHint().height())
+                        except Exception:
+                            min_hint_h = 0
+                        natural_h += max(0, current_h, hint_h, min_hint_h)
+
+                    try:
+                        available_h = int(sidebar.height())
+                    except Exception:
+                        available_h = height
+                    if available_h <= 0:
+                        available_h = height
+                    return max(0, natural_h), max(0, available_h)
+
+                def _estimated_expand_delta(body_name: str) -> int:
+                    ctl = controls.get(body_name)
+                    if not ctl:
+                        return 0
+                    body, _caret = ctl
+                    if body is None:
+                        return 0
+                    try:
+                        hint_h = int(body.sizeHint().height())
+                    except Exception:
+                        hint_h = 0
+                    try:
+                        min_hint_h = int(body.minimumSizeHint().height())
+                    except Exception:
+                        min_hint_h = 0
+                    # A small floor avoids reopening a panel when there is only
+                    # a few pixels of slack, which would cause resize flicker.
+                    return max(24, hint_h, min_hint_h)
+
+                stack_h, available_h = _visible_stack_height()
+                collapse_limit = max(0, available_h - guard_px)
+                hits_bottom_guard = stack_h >= collapse_limit
+
+                # Collapse one still-open section only when the visible stack
+                # reaches the 10px bottom guard.  This avoids fixed-height
+                # threshold collapses that can happen before the panel actually
+                # runs out of room.
+                if hits_bottom_guard:
+                    for body_name, _enabled in active_steps:
+                        if not _panel_collapsed(body_name):
                             set_panel(body_name, True, auto=True)
-                        break
-
-                # Expand in the opposite order so the container returns before
-                # top utility sections reopen: INSPECTOR -> FAIL TARGET -> ON FAIL
-                # -> RETRY -> MATCHING -> IMAGE -> RECORDER -> ADD ACTION.
-                for body_name, _collapse_attr, expand_attr, _enabled in reversed(active_steps):
-                    if _panel_collapsed(body_name) and height >= int(getattr(self, expand_attr, 16777215)):
-                        set_panel(body_name, False, auto=True)
-                        break
+                            break
+                else:
+                    # Expand in reverse order, but only when the next section's
+                    # estimated height can fit with a restore cushion beyond the
+                    # 10px guard.  This prevents rapid collapse/expand bouncing.
+                    for body_name, _enabled in reversed(active_steps):
+                        if _panel_collapsed(body_name):
+                            delta_h = _estimated_expand_delta(body_name)
+                            if stack_h + delta_h <= max(0, available_h - guard_px - restore_margin):
+                                set_panel(body_name, False, auto=True)
+                            break
 
             if hasattr(self, "playback_panel"):
                 if (
@@ -4747,10 +4830,10 @@ class MainWindow(QMainWindow):
             try:
                 text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
                 icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(260, min(430, text_w + icon_w + 38))
+                target_w = max(260, min(390, text_w + icon_w + 38))
                 if hasattr(self, "status_pill"):
                     self.status_pill.setMinimumWidth(target_w)
-                    self.status_pill.setMaximumWidth(430)
+                    self.status_pill.setMaximumWidth(390)
                 self._update_toolbar_containment()
             except Exception:
                 pass
