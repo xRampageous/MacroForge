@@ -71,11 +71,74 @@ def build_main_layout(window):
     self._panel_collapse_controls = {}
     self._collapse_animations = {}
 
-    def _toggle_collapsible_body(body_widget, caret):
+    def _settle_collapsible_body(body_widget, caret):
+        """Apply the caret's collapsed state immediately and clear stale clamps."""
+        if body_widget is None or caret is None:
+            return
+        try:
+            collapsed = bool(caret.property("collapsed"))
+            parent = body_widget.parentWidget()
+            parent_name = parent.objectName() if parent is not None else ""
+            body_widget.setMinimumHeight(0)
+            if collapsed:
+                current_hint = max(
+                    int(body_widget.height()),
+                    int(body_widget.sizeHint().height()),
+                    int(body_widget.minimumSizeHint().height()),
+                    int(body_widget.property("expanded_height_hint") or 0),
+                    1,
+                )
+                body_widget.setProperty("expanded_height_hint", current_hint)
+                body_widget.setMaximumHeight(0)
+                body_widget.setVisible(False)
+            else:
+                body_widget.setVisible(True)
+                body_widget.setMaximumHeight(16777215)
+
+            if parent is not None:
+                parent.setMinimumHeight(0)
+                if collapsed:
+                    parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
+                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                else:
+                    parent.setMaximumHeight(16777215)
+                    if parent_name == "inspector_card":
+                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                    else:
+                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                parent.updateGeometry()
+            body_widget.updateGeometry()
+        except Exception:
+            pass
+
+    def _settle_active_collapse_animations():
+        """Stop active panel animations and snap each panel to its requested state.
+
+        This is used only during live window resizing so the resize handle is not
+        fighting QPropertyAnimation updates on maximumHeight.
+        """
+        try:
+            for anim in list(self._collapse_animations.values()):
+                try:
+                    anim.stop()
+                except Exception:
+                    pass
+            self._collapse_animations.clear()
+            for body_widget, caret in list(self._panel_collapse_controls.values()):
+                _settle_collapsible_body(body_widget, caret)
+            if hasattr(self, "_autosize_inspector_panel"):
+                self._autosize_inspector_panel()
+        except Exception:
+            pass
+
+    self._settle_active_collapse_animations = _settle_active_collapse_animations
+
+    def _toggle_collapsible_body(body_widget, caret, animate=True):
         collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
         caret.setText("v" if collapsed else "^")
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
+        animate = bool(animate) and not bool(getattr(self, "_suppress_auto_panel_animations", False))
 
         parent = body_widget.parentWidget()
         parent_name = parent.objectName() if parent is not None else ""
@@ -157,6 +220,12 @@ def build_main_layout(window):
                 body_widget.setMaximumHeight(start_h)
                 body_widget.updateGeometry()
 
+            if not animate:
+                _settle_collapsible_body(body_widget, caret)
+                _finish_parent()
+                body_widget.updateGeometry()
+                return
+
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
             anim.setDuration(105 if collapsed else 115)
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -189,7 +258,7 @@ def build_main_layout(window):
             _finish_parent()
         body_widget.updateGeometry()
 
-    def _set_collapsible_panel(body_name, collapsed, auto=False):
+    def _set_collapsible_panel(body_name, collapsed, auto=False, animate=None):
         body_widget, caret = self._panel_collapse_controls.get(body_name, (None, None))
         if body_widget is None or caret is None:
             return False
@@ -198,6 +267,8 @@ def build_main_layout(window):
         user_collapsed = bool(body_widget.property("user_collapsed"))
         auto_collapsed = bool(body_widget.property("auto_collapsed"))
         current = bool(caret.property("collapsed"))
+        if animate is None:
+            animate = not (auto and bool(getattr(self, "_suppress_auto_panel_animations", False)))
 
         if auto:
             # Auto-height recovery must not reopen a panel the user explicitly
@@ -212,7 +283,9 @@ def build_main_layout(window):
             body_widget.setProperty("auto_collapsed", False)
 
         if current != collapsed:
-            _toggle_collapsible_body(body_widget, caret)
+            _toggle_collapsible_body(body_widget, caret, animate=animate)
+        elif not bool(animate):
+            _settle_collapsible_body(body_widget, caret)
         return True
 
     self._set_collapsible_panel = _set_collapsible_panel
@@ -1002,16 +1075,28 @@ def build_main_layout(window):
     self._height_auto_image_on_fail_expand = 970
     self._height_auto_image_fail_target_collapse = 840
     self._height_auto_image_fail_target_expand = 910
-    self._height_auto_inspector_collapse = 760
-    self._height_auto_inspector_expand = 840
-    self._height_auto_recorder_collapse = 650
-    self._height_auto_recorder_expand = 720
-    self._height_auto_add_collapse = 540
-    self._height_auto_add_expand = 610
+    # Main right-stack panels must react during normal vertical resize ranges,
+    # not only near the absolute minimum height.  These values give the user
+    # visible feedback while shrinking from the default 1100px window height,
+    # with hysteresis so sections do not chatter while dragging.
+    self._height_auto_inspector_collapse = 1000
+    self._height_auto_inspector_expand = 1080
+    self._height_auto_recorder_collapse = 890
+    self._height_auto_recorder_expand = 970
+    self._height_auto_add_collapse = 780
+    self._height_auto_add_expand = 860
     self.sidebar_frame = sidebar
     self.add_action_body = add_body
     self.recorder_body = rec_body
     self.insp_card = insp_card
+    try:
+        # Some platforms send rapid resize notifications to child widgets before
+        # the QMainWindow settle pass.  Watch the sidebar/central widgets too so
+        # height-responsive panels react while the user is still dragging.
+        sidebar.installEventFilter(self)
+        central.installEventFilter(self)
+    except Exception:
+        pass
 
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
@@ -1036,6 +1121,9 @@ def build_main_layout(window):
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
+        settler = getattr(self, "_settle_active_collapse_animations", None)
+        if settler is not None:
+            QTimer.singleShot(0, settler)
         if not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
             if collapsed:
                 if hasattr(self, "_auto_grow_for_collapsed_side_panel"):

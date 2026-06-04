@@ -279,6 +279,22 @@ class MainWindow(QMainWindow):
                 button = event.button() if hasattr(event, "button") else None
                 if button == Qt.MouseButton.LeftButton and hasattr(obj, "parentWidget"):
                     self._maybe_deselect_from_background_click(obj)
+            elif event.type() == QEvent.Type.Resize:
+                resize_targets = {
+                    self,
+                    getattr(self, "sidebar_frame", None),
+                    getattr(self, "centralWidget", lambda: None)(),
+                }
+                if obj in resize_targets and not bool(getattr(self, "_inside_responsive_resize_filter", False)):
+                    self._inside_responsive_resize_filter = True
+                    try:
+                        self._suppress_auto_panel_animations = True
+                        self._panel_resize_active = True
+                        self._update_responsive_height_panels()
+                        self._autosize_inspector_panel()
+                    finally:
+                        self._inside_responsive_resize_filter = False
+                    QTimer.singleShot(80, self._finalize_vertical_panel_resize)
         except Exception:
             pass
         return super().eventFilter(obj, event)
@@ -323,26 +339,91 @@ class MainWindow(QMainWindow):
             def _release_resize_animation_suppression(gen=generation, was_vertical=vertical_changed):
                 if int(getattr(self, "_panel_resize_generation", 0)) != int(gen):
                     return
-                settler = getattr(self, "_settle_active_collapse_animations", None)
-                if settler is not None:
-                    settler()
                 if was_vertical:
-                    # Final deterministic pass after the resize event storm.
-                    # Keep animations suppressed for this pass so sections snap
-                    # to their final state instead of getting stuck half open.
-                    self._suppress_auto_panel_animations = True
-                    self._update_responsive_height_panels()
-                    if settler is not None:
-                        settler()
+                    self._finalize_vertical_panel_resize()
+                else:
+                    self._panel_resize_active = False
+                    self._suppress_auto_panel_animations = False
                     self._autosize_inspector_panel()
-                self._panel_resize_active = False
-                self._suppress_auto_panel_animations = False
-                self._autosize_inspector_panel()
 
-            QTimer.singleShot(120 if vertical_changed else 0, _release_resize_animation_suppression)
+            QTimer.singleShot(90 if vertical_changed else 0, _release_resize_animation_suppression)
         except Exception:
             self._panel_resize_active = False
             self._suppress_auto_panel_animations = False
+
+    def _finalize_vertical_panel_resize(self):
+        """Snap height-responsive panels after live vertical resizing settles."""
+        try:
+            self._suppress_auto_panel_animations = True
+            self._panel_resize_active = True
+            settler = getattr(self, "_settle_active_collapse_animations", None)
+            if settler is not None:
+                settler()
+            self._update_responsive_height_panels()
+            if settler is not None:
+                settler()
+            self._autosize_inspector_panel()
+        except Exception:
+            pass
+        finally:
+            self._panel_resize_active = False
+            self._suppress_auto_panel_animations = False
+            try:
+                self._autosize_inspector_panel()
+            except Exception:
+                pass
+
+    def _sidebar_height_pressure_px(self):
+        """Return positive pixels when the right-side stack is taller than its viewport."""
+        try:
+            sidebar = getattr(self, "sidebar_frame", None)
+            if sidebar is None or bool(getattr(self, "_side_panel_collapsed", False)):
+                return 0
+            sidebar.updateGeometry()
+            available = max(1, int(sidebar.height() or self.height()))
+            needed = max(int(sidebar.sizeHint().height()), int(sidebar.minimumSizeHint().height()))
+            return int(needed - available)
+        except Exception:
+            return 0
+
+    def _collapsed_panel_expand_extra_px(self, body_name):
+        """Approximate how much vertical room a collapsed body needs to reopen."""
+        try:
+            controls = getattr(self, "_panel_collapse_controls", {})
+            body_widget, caret = controls.get(body_name, (None, None))
+            if body_widget is None or caret is None or not bool(caret.property("collapsed")):
+                return 0
+            body_hint = max(
+                int(body_widget.property("expanded_height_hint") or 0),
+                int(body_widget.sizeHint().height()),
+                int(body_widget.minimumSizeHint().height()),
+                1,
+            )
+            parent = body_widget.parentWidget()
+            spacing = 6
+            try:
+                layout = parent.layout() if parent is not None else None
+                if layout is not None and int(layout.spacing()) >= 0:
+                    spacing = int(layout.spacing())
+            except Exception:
+                pass
+            return int(body_hint + max(0, spacing))
+        except Exception:
+            return 0
+
+    def _auto_expand_has_room(self, body_name, min_height):
+        """Decide if an auto-collapsed body can safely reopen at this height."""
+        try:
+            if int(self.height()) >= int(min_height):
+                return True
+            extra = self._collapsed_panel_expand_extra_px(body_name)
+            if extra <= 0:
+                return False
+            # Negative pressure is free space in the current collapsed stack.
+            free_space = -int(self._sidebar_height_pressure_px())
+            return free_space >= extra + 14
+        except Exception:
+            return False
 
     def _update_responsive_panels(self):
         """Auto-hide panels for both width and height pressure."""
@@ -391,6 +472,26 @@ class MainWindow(QMainWindow):
             set_panel = getattr(self, "_set_collapsible_panel", None)
             controls = getattr(self, "_panel_collapse_controls", {})
             suppress_anim = bool(getattr(self, "_suppress_auto_panel_animations", False)) or bool(getattr(self, "_panel_resize_active", False))
+            pressure_margin = 4
+
+            def _height_pressure() -> int:
+                return int(self._sidebar_height_pressure_px())
+
+            def _under_pressure() -> bool:
+                return _height_pressure() > pressure_margin
+
+            def _can_expand(body_name: str, expand_at: int) -> bool:
+                return self._auto_expand_has_room(body_name, int(expand_at))
+
+            def _after_state_change():
+                try:
+                    sidebar = getattr(self, "sidebar_frame", None)
+                    if sidebar is not None:
+                        sidebar.updateGeometry()
+                    if hasattr(self, "_autosize_inspector_panel"):
+                        self._autosize_inspector_panel()
+                except Exception:
+                    pass
 
             def _panel_collapsed(body_name: str) -> bool:
                 ctl = controls.get(body_name)
@@ -400,13 +501,16 @@ class MainWindow(QMainWindow):
                 if set_panel is None:
                     return False
                 try:
-                    return bool(set_panel(body_name, bool(collapsed), auto=True, animate=not suppress_anim))
+                    changed = bool(set_panel(body_name, bool(collapsed), auto=True, animate=not suppress_anim))
                 except TypeError:
                     # Backward compatibility if a user applies only this file on
                     # top of an older layout helper that does not expose animate.
-                    return bool(set_panel(body_name, bool(collapsed), auto=True))
+                    changed = bool(set_panel(body_name, bool(collapsed), auto=True))
                 except Exception:
-                    return False
+                    changed = False
+                if changed:
+                    _after_state_change()
+                return changed
 
             # Side rail hidden means its child cards are not visible; do not
             # mutate child body states until the rail is open again.
@@ -430,7 +534,8 @@ class MainWindow(QMainWindow):
             image_sections_fully_collapsed = True
             if set_panel is not None and side_rail_visible and image_visible and not _panel_collapsed("inspector_body"):
                 for body_name, collapse_attr, _expand_attr in image_steps:
-                    if height <= int(getattr(self, collapse_attr, 0)):
+                    collapse_at = int(getattr(self, collapse_attr, 0))
+                    if height <= collapse_at or _under_pressure():
                         if not _panel_collapsed(body_name):
                             _auto_panel(body_name, True)
                     elif not _panel_collapsed(body_name):
@@ -444,7 +549,8 @@ class MainWindow(QMainWindow):
                     if not previous_sections_open:
                         break
                     if _panel_collapsed(body_name):
-                        if height >= int(getattr(self, expand_attr, 16777215)):
+                        expand_at = int(getattr(self, expand_attr, 16777215))
+                        if _can_expand(body_name, expand_at):
                             _auto_panel(body_name, False)
                         else:
                             previous_sections_open = False
@@ -482,10 +588,12 @@ class MainWindow(QMainWindow):
                 ("add_action_body", "_height_auto_add_collapse", "_height_auto_add_expand"),
             ]
             for body_name, collapse_attr, expand_attr in main_steps:
-                if height <= int(getattr(self, collapse_attr, 0)):
+                collapse_at = int(getattr(self, collapse_attr, 0))
+                expand_at = int(getattr(self, expand_attr, 16777215))
+                if height <= collapse_at or _under_pressure():
                     if allow_main_collapse and not _panel_collapsed(body_name):
                         _auto_panel(body_name, True)
-                elif height >= int(getattr(self, expand_attr, 16777215)):
+                elif _can_expand(body_name, expand_at):
                     if _panel_collapsed(body_name):
                         _auto_panel(body_name, False)
 
