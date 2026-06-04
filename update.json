@@ -1,6 +1,6 @@
 {
-  "version": "3.5.32",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.32/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.32/MacroForge-v3.5.32.zip",
-  "notes": "v3.5.32: Apply image subpanel standard logic restore patch - updated main_window.py and main_window_layout.py with image subpanel standard logic restore."
+  "version": "3.5.33",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.33/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.33/MacroForge-v3.5.33.zip",
+  "notes": "v3.5.33: Apply app bottom guard animation polish patch - updated main_window.py and main_window_layout.py with app bottom guard animation polish."
 }
