@@ -1,6 +1,6 @@
 """Main layout construction for MacroForge main window."""
 
-from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QSize, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -123,10 +123,22 @@ def build_main_layout(window):
                 body_widget.setMaximumHeight(start_h)
 
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            anim.setDuration(145)
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.setDuration(int(getattr(self, "_collapse_animation_ms", 82)))
+            anim.setEasingCurve(QEasingCurve.Type.OutQuad)
             anim.setStartValue(start_h)
             anim.setEndValue(end_h)
+
+            def _tick(_value=None):
+                try:
+                    body_widget.updateGeometry()
+                    if parent is not None:
+                        parent.updateGeometry()
+                    if hasattr(self, "sidebar_frame"):
+                        self.sidebar_frame.updateGeometry()
+                except Exception:
+                    pass
+
+            anim.valueChanged.connect(_tick)
 
             def _finished():
                 if collapsed:
@@ -912,6 +924,7 @@ def build_main_layout(window):
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
     self._bottom_panel_locked = False
+    self._collapse_animation_ms = 82
     self._side_panel_expanded_width = 270
     self._side_panel_collapsed_width = 22
     self._side_panel_auto_collapse_width = 910
@@ -946,6 +959,7 @@ def build_main_layout(window):
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
         auto = bool(auto)
+        was_collapsed = bool(getattr(self, "_side_panel_collapsed", False))
         if auto:
             self._side_panel_auto_collapsed = collapsed
         else:
@@ -966,9 +980,11 @@ def build_main_layout(window):
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
-        if collapsed and not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
-            if hasattr(self, "_auto_grow_for_collapsed_side_panel"):
-                self._auto_grow_for_collapsed_side_panel()
+        sidebar.updateGeometry()
+        if was_collapsed and not collapsed and hasattr(self, "_auto_grow_for_side_panel_expand"):
+            self._auto_grow_for_side_panel_expand()
+            QTimer.singleShot(0, self._auto_grow_for_side_panel_expand)
+            QTimer.singleShot(35, self._auto_grow_for_side_panel_expand)
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
 
