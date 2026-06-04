@@ -1,6 +1,6 @@
 {
-  "version": "3.5.29",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.29/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.29/MacroForge-v3.5.29.zip",
-  "notes": "v3.5.29: Apply side panel bottom guard 2px tuning patch - updated main_window.py and main_window_layout.py with side panel bottom guard 2px tuning."
+  "version": "3.5.30",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.30/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.30/MacroForge-v3.5.30.zip",
+  "notes": "v3.5.30: Apply side panel collapse order fail target first patch - updated main_window.py and main_window_layout.py with side panel collapse order fail target first."
 }
