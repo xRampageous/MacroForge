@@ -1,6 +1,6 @@
 {
-  "version": "3.5.30",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.30/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.30/MacroForge-v3.5.30.zip",
-  "notes": "v3.5.30: Apply side panel collapse order fail target first patch - updated main_window.py and main_window_layout.py with side panel collapse order fail target first."
+  "version": "3.5.31",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.31/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.31/MacroForge-v3.5.31.zip",
+  "notes": "v3.5.31: Apply side panel program bottom guard image overflow patch - updated main_window.py and main_window_layout.py with side panel program bottom guard image overflow."
 }
