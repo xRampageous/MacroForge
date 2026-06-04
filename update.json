@@ -1,6 +1,6 @@
 {
-  "version": "3.5.22",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.22/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.22/MacroForge-v3.5.22.zip",
-  "notes": "v3.5.22: Apply top panel containment alignment patch - updated main_window.py and main_window_layout.py with top panel containment alignment."
+  "version": "3.5.23",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.23/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.23/MacroForge-v3.5.23.zip",
+  "notes": "v3.5.23: Apply top toolbar status width side expand patch - updated main_window_layout.py with top toolbar status width side expand."
 }
