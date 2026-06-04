@@ -261,19 +261,12 @@ def build_main_layout(window):
     def _set_collapsible_panel(body_name, collapsed, auto=False, animate=None):
         body_widget, caret = self._panel_collapse_controls.get(body_name, (None, None))
         if body_widget is None or caret is None:
-            if hasattr(self, "_panel_debug"):
-                self._panel_debug("set-collapsible-panel", [f"{body_name}: missing body/caret collapsed={collapsed} auto={auto}"], force=True)
             return False
         collapsed = bool(collapsed)
         auto = bool(auto)
         user_collapsed = bool(body_widget.property("user_collapsed"))
         auto_collapsed = bool(body_widget.property("auto_collapsed"))
         current = bool(caret.property("collapsed"))
-        if hasattr(self, "_panel_debug"):
-            self._panel_debug(
-                "set-collapsible-panel.request",
-                [f"{body_name}: target={collapsed} auto={auto} current={current} user={user_collapsed} autoFlag={auto_collapsed} animate={animate}"],
-            )
         if animate is None:
             animate = not (auto and bool(getattr(self, "_suppress_auto_panel_animations", False)))
 
@@ -281,16 +274,8 @@ def build_main_layout(window):
             # Auto-height recovery must not reopen a panel the user explicitly
             # collapsed, and auto-collapse should avoid fighting manual locks.
             if collapsed and user_collapsed:
-                if hasattr(self, "_panel_debug"):
-                    self._panel_debug("set-collapsible-panel.blocked", [f"{body_name}: auto collapse blocked because user_collapsed=True"], force=True)
                 return False
             if not collapsed and (not auto_collapsed or user_collapsed):
-                if hasattr(self, "_panel_debug"):
-                    self._panel_debug(
-                        "set-collapsible-panel.blocked",
-                        [f"{body_name}: auto expand blocked auto_collapsed={auto_collapsed} user_collapsed={user_collapsed}"],
-                        force=True,
-                    )
                 return False
             body_widget.setProperty("auto_collapsed", collapsed)
         else:
@@ -299,15 +284,8 @@ def build_main_layout(window):
 
         if current != collapsed:
             _toggle_collapsible_body(body_widget, caret, animate=animate)
-            if hasattr(self, "_panel_debug"):
-                self._panel_debug("set-collapsible-panel.changed", [f"{body_name}: {current} -> {collapsed} auto={auto} animate={animate}"], force=True)
         elif not bool(animate):
             _settle_collapsible_body(body_widget, caret)
-            if hasattr(self, "_panel_debug"):
-                self._panel_debug("set-collapsible-panel.settled-nochange", [f"{body_name}: already {collapsed}; settled because animate=False"], force=True)
-        else:
-            if hasattr(self, "_panel_debug"):
-                self._panel_debug("set-collapsible-panel.nochange", [f"{body_name}: already {collapsed}; auto={auto}"], force=True)
         return True
 
     self._set_collapsible_panel = _set_collapsible_panel
@@ -570,20 +548,6 @@ def build_main_layout(window):
     self.sidebar_collapse_btn.setToolTip("Collapse side panel")
     brand_row.addWidget(self.sidebar_collapse_btn)
     sb_lo.addLayout(brand_row)
-
-    self.panel_debug_box = QPlainTextEdit()
-    self.panel_debug_box.setObjectName("panel_debug_box")
-    self.panel_debug_box.setReadOnly(True)
-    self.panel_debug_box.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-    self.panel_debug_box.setMaximumHeight(230)
-    self.panel_debug_box.setMinimumHeight(132)
-    self.panel_debug_box.setVisible(False)
-    self.panel_debug_box.setStyleSheet(
-        f"QPlainTextEdit#panel_debug_box {{ background-color: #03111D; color: {C['pause_cyan']}; "
-        f"border: 1px solid {C['accent_glow']}; border-radius: 8px; padding: 6px; "
-        "font-family: Consolas, monospace; font-size: 9px; }}"
-    )
-    sb_lo.addWidget(self.panel_debug_box, stretch=0)
 
     add_card = panel_frame("add_action_card")
     add_lo = QVBoxLayout(add_card)
@@ -1121,13 +1085,6 @@ def build_main_layout(window):
     self._height_auto_recorder_expand = 970
     self._height_auto_add_collapse = 780
     self._height_auto_add_expand = 860
-    # Fit-based vertical resize guard.  The debug log showed the side stack can
-    # hit its natural minimum around 1340px while the fixed collapse thresholds
-    # are still far below the current height.  During live vertical resize,
-    # treat this near-fit zone as pressure so one section collapses and releases
-    # the layout minimum; restore only after there is measured room again.
-    self._height_auto_sidebar_fit_margin = 72
-    self._height_auto_sidebar_restore_margin = 54
     self.sidebar_frame = sidebar
     self.add_action_body = add_body
     self.recorder_body = rec_body
@@ -1144,8 +1101,6 @@ def build_main_layout(window):
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
         auto = bool(auto)
-        if hasattr(self, "_panel_debug"):
-            self._panel_debug("side-panel.request", [f"target={collapsed} auto={auto}"], force=True)
         if auto:
             self._side_panel_auto_collapsed = collapsed
         else:
@@ -1160,8 +1115,6 @@ def build_main_layout(window):
         sb_lo.setContentsMargins(margin, 14, margin, 10)
         brand_box.setVisible(not collapsed)
         self.side_panel_lock_btn.setVisible(not collapsed)
-        if hasattr(self, "panel_debug_box"):
-            self.panel_debug_box.setVisible((not collapsed) and bool(getattr(self, "_panel_debug_enabled", False)))
         add_card.setVisible(not collapsed)
         rec_card.setVisible(not collapsed)
         insp_card.setVisible(not collapsed)
@@ -1181,8 +1134,6 @@ def build_main_layout(window):
                     QTimer.singleShot(35, self._auto_grow_after_side_panel_expand)
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
-        if hasattr(self, "_panel_debug"):
-            self._panel_debug("side-panel.applied", [f"collapsed={collapsed} auto={auto} width={target_width}"], force=True)
 
     self._set_side_panel_collapsed = _set_side_panel_collapsed
     self.sidebar_collapse_btn.clicked.connect(
@@ -1248,12 +1199,10 @@ def build_main_layout(window):
     self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report)
     self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel)
     self.runtime_log_btn.setCheckable(True)
-    self.panel_debug_btn = header_icon_button("panel_debug_btn", "target", C["image"], "Panel debug overlay/log (Ctrl+Shift+D)", self._toggle_panel_debug)
-    self.panel_debug_btn.setCheckable(True)
     self.compact_view_btn = header_icon_button("view_toggle", "menu", C["accent"], "Timeline list view", lambda: None)
     self.compact_view_btn.setCheckable(True)
     self.compact_view_btn.setChecked(True)
-    for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.panel_debug_btn, self.compact_view_btn):
+    for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.compact_view_btn):
         tools_lo.addWidget(btn)
     dock_lo.addWidget(tools)
 

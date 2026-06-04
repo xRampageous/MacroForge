@@ -119,11 +119,6 @@ class MainWindow(QMainWindow):
         self._inspector_loading = False
         self._panel_resize_active = False
         self._suppress_auto_panel_animations = False
-        self._panel_debug_enabled = False
-        self._panel_debug_lines = []
-        self._panel_debug_last_signature = ""
-        self._panel_debug_last_emit = 0.0
-        self._panel_debug_last_reason = "startup"
         self._inspector_autosave_timer = QTimer(self)
         self._inspector_autosave_timer.setSingleShot(True)
         self._inspector_autosave_timer.setInterval(350)
@@ -295,10 +290,6 @@ class MainWindow(QMainWindow):
                     try:
                         self._suppress_auto_panel_animations = True
                         self._panel_resize_active = True
-                        self._panel_debug(
-                            "eventFilter.resize",
-                            [f"obj={getattr(obj, 'objectName', lambda: type(obj).__name__)() or type(obj).__name__}"],
-                        )
                         self._update_responsive_height_panels()
                         self._autosize_inspector_panel()
                     finally:
@@ -332,11 +323,6 @@ class MainWindow(QMainWindow):
                 generation = int(getattr(self, "_panel_resize_generation", 0))
         except Exception:
             generation = 0
-
-        self._panel_debug(
-            "resizeEvent",
-            [f"vertical_changed={vertical_changed}", f"generation={generation}"],
-        )
 
         # Width-based side-rail behavior stays immediate.  Height-based panel
         # decisions also need an immediate pass; waiting until the resize settles
@@ -373,12 +359,10 @@ class MainWindow(QMainWindow):
             settler = getattr(self, "_settle_active_collapse_animations", None)
             if settler is not None:
                 settler()
-            self._panel_debug("finalize-resize.begin")
             self._update_responsive_height_panels()
             if settler is not None:
                 settler()
             self._autosize_inspector_panel()
-            self._panel_debug("finalize-resize.end", force=True)
         except Exception:
             pass
         finally:
@@ -389,202 +373,16 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-    def _toggle_panel_debug(self, checked=None):
-        """Enable/disable verbose panel resize diagnostics."""
-        try:
-            if checked is None:
-                enabled = not bool(getattr(self, "_panel_debug_enabled", False))
-            else:
-                enabled = bool(checked)
-            self._panel_debug_enabled = enabled
-            self._panel_debug_last_signature = ""
-            self._panel_debug_last_emit = 0.0
-
-            btn = getattr(self, "panel_debug_btn", None)
-            if btn is not None and bool(btn.isChecked()) != enabled:
-                btn.blockSignals(True)
-                btn.setChecked(enabled)
-                btn.blockSignals(False)
-
-            box = getattr(self, "panel_debug_box", None)
-            if box is not None:
-                box.setVisible(enabled and not bool(getattr(self, "_side_panel_collapsed", False)))
-
-            if enabled:
-                msg = "Panel debug enabled - resize vertically, then open Debug Log or read the sidebar box."
-                try:
-                    msg += f" Log: {logger.log_path}"
-                except Exception:
-                    pass
-                self.status(msg)
-                logger.info("Panel debug enabled")
-                self._panel_debug("toggle", ["enabled"], force=True)
-                try:
-                    self._update_responsive_height_panels()
-                except Exception:
-                    pass
-            else:
-                logger.info("Panel debug disabled")
-                self.status("Panel debug disabled")
-        except Exception:
-            logger.exception("Failed to toggle panel debug")
-
-    def _panel_debug_widget_state(self, body_name, controls=None):
-        """Return a compact state line for one collapsible body."""
-        try:
-            controls = controls if controls is not None else getattr(self, "_panel_collapse_controls", {})
-            body_widget, caret = controls.get(body_name, (None, None))
-            if body_widget is None:
-                return f"{body_name}: missing"
-            parent = body_widget.parentWidget()
-            parent_name = parent.objectName() if parent is not None else "-"
-            collapsed = bool(caret and caret.property("collapsed"))
-            return (
-                f"{body_name}: collapsed={collapsed} "
-                f"auto={bool(body_widget.property('auto_collapsed'))} "
-                f"user={bool(body_widget.property('user_collapsed'))} "
-                f"vis={bool(body_widget.isVisible())} "
-                f"h={int(body_widget.height())} max={int(body_widget.maximumHeight())} "
-                f"hint={int(body_widget.sizeHint().height())} minHint={int(body_widget.minimumSizeHint().height())} "
-                f"expandedHint={int(body_widget.property('expanded_height_hint') or 0)} "
-                f"parent={parent_name} parentH={int(parent.height()) if parent is not None else -1} "
-                f"parentMax={int(parent.maximumHeight()) if parent is not None else -1}"
-            )
-        except Exception as exc:
-            return f"{body_name}: debug-error={exc}"
-
-    def _sidebar_height_metrics(self):
-        """Measure the current right-side stack and its available viewport height."""
-        metrics = {
-            "available": 0,
-            "needed": 0,
-            "needed_hint": 0,
-            "needed_min_hint": 0,
-            "pressure": 0,
-            "sidebar_height": 0,
-            "sidebar_max": 0,
-            "sidebar_visible": False,
-            "side_collapsed": bool(getattr(self, "_side_panel_collapsed", False)),
-        }
-        try:
-            sidebar = getattr(self, "sidebar_frame", None)
-            if sidebar is None:
-                return metrics
-            sidebar.updateGeometry()
-            metrics["sidebar_visible"] = bool(sidebar.isVisible())
-            metrics["sidebar_height"] = int(sidebar.height())
-            metrics["sidebar_max"] = int(sidebar.maximumHeight())
-            available = max(1, int(sidebar.height() or self.height()))
-            needed_hint = int(sidebar.sizeHint().height())
-            needed_min = int(sidebar.minimumSizeHint().height())
-            needed = max(needed_hint, needed_min)
-            metrics.update({
-                "available": available,
-                "needed": needed,
-                "needed_hint": needed_hint,
-                "needed_min_hint": needed_min,
-                "pressure": int(needed - available),
-            })
-        except Exception:
-            pass
-        return metrics
-
-    def _panel_debug(self, context, details=None, decisions=None, force=False):
-        """Write a concise panel diagnostics snapshot to the debug log and overlay."""
-        if not bool(getattr(self, "_panel_debug_enabled", False)):
-            return
-        try:
-            controls = getattr(self, "_panel_collapse_controls", {})
-            metrics = self._sidebar_height_metrics()
-            details = list(details or [])
-            decisions = list(decisions or [])
-            now = time.monotonic()
-            active_index = int(getattr(self, "active_index", -1))
-            action_type = "-"
-            try:
-                actions = self.action_model.actions()
-                if 0 <= active_index < len(actions):
-                    action_type = str(getattr(actions[active_index], "type", "-"))
-            except Exception:
-                pass
-
-            watched = [
-                "add_action_body",
-                "recorder_body",
-                "inspector_body",
-                "inspector_group_image_body",
-                "inspector_group_matching_body",
-                "inspector_group_retry_body",
-                "inspector_group_on_fail_body",
-                "inspector_group_fail_target_body",
-            ]
-            state_lines = [self._panel_debug_widget_state(name, controls) for name in watched]
-            header = [
-                f"Panel debug: {context}",
-                f"window={int(self.width())}x{int(self.height())} active={active_index} type={action_type}",
-                f"sidebar visible={metrics['sidebar_visible']} collapsed={metrics['side_collapsed']} "
-                f"auto={bool(getattr(self, '_side_panel_auto_collapsed', False))} "
-                f"user={bool(getattr(self, '_side_panel_user_collapsed', False))} "
-                f"locked={bool(getattr(self, '_side_panel_locked', False))}",
-                f"sidebar height={metrics['sidebar_height']} available={metrics['available']} "
-                f"needed={metrics['needed']} hint={metrics['needed_hint']} minHint={metrics['needed_min_hint']} "
-                f"pressure={metrics['pressure']}",
-                f"resizeActive={bool(getattr(self, '_panel_resize_active', False))} "
-                f"suppressAnim={bool(getattr(self, '_suppress_auto_panel_animations', False))} "
-                f"bottomLocked={bool(getattr(self, '_bottom_panel_locked', False))}",
-                f"playback collapsed={bool(getattr(self, '_playback_collapsed', False))} "
-                f"auto={bool(getattr(self, '_playback_auto_collapsed', False))} "
-                f"user={bool(getattr(self, '_playback_user_collapsed', False))}",
-                "thresholds: "
-                f"playback {getattr(self, '_height_auto_playback_collapse', '-')}→{getattr(self, '_height_auto_playback_expand', '-')} | "
-                f"inspector {getattr(self, '_height_auto_inspector_collapse', '-')}→{getattr(self, '_height_auto_inspector_expand', '-')} | "
-                f"recorder {getattr(self, '_height_auto_recorder_collapse', '-')}→{getattr(self, '_height_auto_recorder_expand', '-')} | "
-                f"add {getattr(self, '_height_auto_add_collapse', '-')}→{getattr(self, '_height_auto_add_expand', '-')} | "
-                f"fit {getattr(self, '_height_auto_sidebar_fit_margin', '-')} restore {getattr(self, '_height_auto_sidebar_restore_margin', '-')}",
-            ]
-            if details:
-                header.append("details: " + " | ".join(str(d) for d in details))
-            if decisions:
-                header.append("decisions:")
-                header.extend(f"  - {d}" for d in decisions[-24:])
-
-            text = "\n".join(header + ["states:"] + [f"  {line}" for line in state_lines])
-            signature = "|".join([
-                context,
-                str(int(self.height())),
-                str(metrics.get("pressure", 0)),
-                str(bool(getattr(self, "_side_panel_collapsed", False))),
-                ";".join(state_lines),
-                ";".join(str(d) for d in decisions[-8:]),
-            ])
-            if not force and signature == getattr(self, "_panel_debug_last_signature", "") and (now - float(getattr(self, "_panel_debug_last_emit", 0.0))) < 0.20:
-                return
-            self._panel_debug_last_signature = signature
-            self._panel_debug_last_emit = now
-            self._panel_debug_lines = (getattr(self, "_panel_debug_lines", []) + [text])[-40:]
-
-            box = getattr(self, "panel_debug_box", None)
-            if box is not None:
-                box.setPlainText(text)
-                try:
-                    box.verticalScrollBar().setValue(0)
-                except Exception:
-                    pass
-                box.setVisible(not bool(getattr(self, "_side_panel_collapsed", False)))
-
-            logger.info("[PANEL DEBUG]\n" + text)
-        except Exception:
-            try:
-                logger.exception("Panel debug snapshot failed")
-            except Exception:
-                pass
-
     def _sidebar_height_pressure_px(self):
         """Return positive pixels when the right-side stack is taller than its viewport."""
         try:
-            if bool(getattr(self, "_side_panel_collapsed", False)):
+            sidebar = getattr(self, "sidebar_frame", None)
+            if sidebar is None or bool(getattr(self, "_side_panel_collapsed", False)):
                 return 0
-            return int(self._sidebar_height_metrics().get("pressure", 0))
+            sidebar.updateGeometry()
+            available = max(1, int(sidebar.height() or self.height()))
+            needed = max(int(sidebar.sizeHint().height()), int(sidebar.minimumSizeHint().height()))
+            return int(needed - available)
         except Exception:
             return 0
 
@@ -614,25 +412,16 @@ class MainWindow(QMainWindow):
             return 0
 
     def _auto_expand_has_room(self, body_name, min_height):
-        """Decide if an auto-collapsed body can safely reopen at this height.
-
-        Do not reopen solely because the window is above a fixed threshold.  The
-        debug pass showed the window can be stuck near the side-panel's natural
-        minimum height, where fixed thresholds are technically satisfied but the
-        full stack still has almost no breathing room.  Reopen only when the
-        current collapsed stack has enough measured free space for the body plus
-        a small restore margin.
-        """
+        """Decide if an auto-collapsed body can safely reopen at this height."""
         try:
-            if int(self.height()) < int(min_height):
-                return False
+            if int(self.height()) >= int(min_height):
+                return True
             extra = self._collapsed_panel_expand_extra_px(body_name)
             if extra <= 0:
                 return False
             # Negative pressure is free space in the current collapsed stack.
             free_space = -int(self._sidebar_height_pressure_px())
-            restore_margin = int(getattr(self, "_height_auto_sidebar_restore_margin", 54))
-            return free_space >= extra + restore_margin
+            return free_space >= extra + 14
         except Exception:
             return False
 
@@ -670,69 +459,29 @@ class MainWindow(QMainWindow):
 
         This is intentionally deterministic during vertical resizing: animation
         is suppressed and every threshold-crossed section is applied in one pass.
-        The panel debug path records every branch so resize failures can be
-        diagnosed from the on-screen box or debug.log.
+        The old debounce-only approach could leave the UI looking unchanged while
+        the user dragged the top/bottom resize edge.
         """
-        debug_decisions = []
-        debug_on = bool(getattr(self, "_panel_debug_enabled", False))
-
-        def _note(message):
-            if debug_on:
-                debug_decisions.append(str(message))
-
         try:
             height = int(self.height())
             side_locked = bool(getattr(self, "_side_panel_locked", False))
             bottom_locked = bool(getattr(self, "_bottom_panel_locked", False))
             if side_locked or bottom_locked:
-                _note(f"skip: side_locked={side_locked} bottom_locked={bottom_locked}")
-                self._panel_debug("height-pass.skip", decisions=debug_decisions, force=True)
                 return
 
             set_panel = getattr(self, "_set_collapsible_panel", None)
             controls = getattr(self, "_panel_collapse_controls", {})
             suppress_anim = bool(getattr(self, "_suppress_auto_panel_animations", False)) or bool(getattr(self, "_panel_resize_active", False))
-            resize_driven = bool(getattr(self, "_panel_resize_active", False)) or bool(getattr(self, "_suppress_auto_panel_animations", False))
             pressure_margin = 4
-            fit_margin = int(getattr(self, "_height_auto_sidebar_fit_margin", 72))
-            restore_margin = int(getattr(self, "_height_auto_sidebar_restore_margin", 54))
-            initial_pressure = int(self._sidebar_height_pressure_px())
-            _note(
-                f"start: height={height} pressure={initial_pressure} pressure_margin={pressure_margin} "
-                f"fit_margin={fit_margin} restore_margin={restore_margin} resize_driven={resize_driven} suppress_anim={suppress_anim}"
-            )
 
             def _height_pressure() -> int:
                 return int(self._sidebar_height_pressure_px())
 
             def _under_pressure() -> bool:
-                pressure = _height_pressure()
-                return pressure > pressure_margin
-
-            def _needs_fit_compaction() -> bool:
-                # While the user is actively dragging the window height, the Qt
-                # layout can stop shrinking at the current side-panel natural
-                # height.  Treat "almost no room left" as pressure so the first
-                # collapse can reduce the layout minimum and allow the window to
-                # keep shrinking.
-                pressure = _height_pressure()
-                return bool(resize_driven and pressure >= -fit_margin)
-
-            def _collapse_due_to_height_or_fit(collapse_at: int) -> bool:
-                pressure = _height_pressure()
-                return bool(height <= int(collapse_at) or pressure > pressure_margin or _needs_fit_compaction())
+                return _height_pressure() > pressure_margin
 
             def _can_expand(body_name: str, expand_at: int) -> bool:
-                compacting = _needs_fit_compaction()
-                has_room = False if compacting else bool(self._auto_expand_has_room(body_name, int(expand_at)))
-                if debug_on:
-                    extra = int(self._collapsed_panel_expand_extra_px(body_name))
-                    pressure = int(self._sidebar_height_pressure_px())
-                    _note(
-                        f"room-check {body_name}: height={height} expand_at={expand_at} pressure={pressure} "
-                        f"extra={extra} compacting={compacting} -> {has_room}"
-                    )
-                return has_room
+                return self._auto_expand_has_room(body_name, int(expand_at))
 
             def _after_state_change():
                 try:
@@ -748,35 +497,17 @@ class MainWindow(QMainWindow):
                 ctl = controls.get(body_name)
                 return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-            def _panel_flags(body_name: str):
-                body_widget, caret = controls.get(body_name, (None, None))
-                if body_widget is None:
-                    return "missing"
-                return (
-                    f"current={bool(caret and caret.property('collapsed'))} "
-                    f"auto={bool(body_widget.property('auto_collapsed'))} "
-                    f"user={bool(body_widget.property('user_collapsed'))}"
-                )
-
             def _auto_panel(body_name: str, collapsed: bool) -> bool:
                 if set_panel is None:
-                    _note(f"request {body_name} -> {'collapse' if collapsed else 'expand'} blocked: set_panel missing")
                     return False
-                before = _panel_collapsed(body_name)
                 try:
                     changed = bool(set_panel(body_name, bool(collapsed), auto=True, animate=not suppress_anim))
                 except TypeError:
                     # Backward compatibility if a user applies only this file on
                     # top of an older layout helper that does not expose animate.
                     changed = bool(set_panel(body_name, bool(collapsed), auto=True))
-                except Exception as exc:
+                except Exception:
                     changed = False
-                    _note(f"request {body_name} -> {'collapse' if collapsed else 'expand'} exception: {exc}")
-                after = _panel_collapsed(body_name)
-                _note(
-                    f"request {body_name} -> {'collapse' if collapsed else 'expand'}: "
-                    f"before={before} after={after} changed={changed} {_panel_flags(body_name)}"
-                )
                 if changed:
                     _after_state_change()
                 return changed
@@ -784,9 +515,8 @@ class MainWindow(QMainWindow):
             # Side rail hidden means its child cards are not visible; do not
             # mutate child body states until the rail is open again.
             side_rail_visible = not bool(getattr(self, "_side_panel_collapsed", False))
-            image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
-            _note(f"visibility: side_rail_visible={side_rail_visible} image_visible={image_visible} inspector_collapsed={_panel_collapsed('inspector_body')}")
 
+            image_visible = bool(getattr(getattr(self, "insp_image", None), "isVisible", lambda: False)())
             image_steps = [
                 ("inspector_group_image_body", "_height_auto_image_table_collapse", "_height_auto_image_table_expand"),
                 ("inspector_group_matching_body", "_height_auto_image_matching_collapse", "_height_auto_image_matching_expand"),
@@ -798,28 +528,18 @@ class MainWindow(QMainWindow):
             # Image Inspector subsection order:
             # shrink: IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
             # grow:   IMAGE -> MATCHING -> RETRY -> ON FAIL -> FAIL TARGET.
+            # During resize, apply all crossed thresholds in that order so the UI
+            # visibly responds to the user's vertical drag instead of needing
+            # several separate resize-stop events.
             image_sections_fully_collapsed = True
             if set_panel is not None and side_rail_visible and image_visible and not _panel_collapsed("inspector_body"):
                 for body_name, collapse_attr, _expand_attr in image_steps:
                     collapse_at = int(getattr(self, collapse_attr, 0))
-                    collapsed_now = _panel_collapsed(body_name)
-                    pressure_now = _height_pressure()
-                    should_collapse = _collapse_due_to_height_or_fit(collapse_at)
-                    if should_collapse:
-                        if not collapsed_now:
-                            _note(
-                                f"image collapse trigger {body_name}: height={height} collapse_at={collapse_at} "
-                                f"pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
-                            )
+                    if height <= collapse_at or _under_pressure():
+                        if not _panel_collapsed(body_name):
                             _auto_panel(body_name, True)
-                        else:
-                            _note(
-                                f"image collapse no-op {body_name}: already collapsed height={height} collapse_at={collapse_at} "
-                                f"pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
-                            )
-                    elif not collapsed_now:
+                    elif not _panel_collapsed(body_name):
                         image_sections_fully_collapsed = False
-                        _note(f"image stays open {body_name}: height={height} collapse_at={collapse_at} pressure={pressure_now}")
 
                 # Expand only from the top downward.  A lower section is not
                 # allowed to reopen before every section above it is already open
@@ -827,59 +547,40 @@ class MainWindow(QMainWindow):
                 previous_sections_open = True
                 for body_name, _collapse_attr, expand_attr in image_steps:
                     if not previous_sections_open:
-                        _note(f"image expand blocked {body_name}: previous section still collapsed")
                         break
                     if _panel_collapsed(body_name):
                         expand_at = int(getattr(self, expand_attr, 16777215))
                         if _can_expand(body_name, expand_at):
-                            _note(f"image expand trigger {body_name}: height={height} expand_at={expand_at}")
                             _auto_panel(body_name, False)
                         else:
-                            _note(f"image expand blocked {body_name}: no room or height below expand_at={expand_at}")
                             previous_sections_open = False
                     if _panel_collapsed(body_name):
                         image_sections_fully_collapsed = False
 
                 image_sections_fully_collapsed = all(_panel_collapsed(body_name) for body_name, _c, _e in image_steps)
-            else:
-                _note(
-                    "skip image sections: "
-                    f"set_panel={set_panel is not None} side_rail_visible={side_rail_visible} "
-                    f"image_visible={image_visible} inspector_collapsed={_panel_collapsed('inspector_body')}"
-                )
 
             # The bottom playback strip is outside the right-side stack, but it is
             # still part of the compact-height policy and should react immediately
             # while the user resizes vertically.
             if hasattr(self, "playback_panel"):
-                playback_collapse_at = int(getattr(self, "_height_auto_playback_collapse", 1100))
-                playback_expand_at = int(getattr(self, "_height_auto_playback_expand", 1170))
-                if height <= playback_collapse_at and not bool(getattr(self, "_playback_collapsed", False)):
-                    _note(f"playback collapse trigger: height={height} collapse_at={playback_collapse_at}")
+                if (
+                    height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
+                    and not bool(getattr(self, "_playback_collapsed", False))
+                ):
                     self._set_playback_collapsed(True, auto=True)
                 elif (
-                    height >= playback_expand_at
+                    height >= int(getattr(self, "_height_auto_playback_expand", 1170))
                     and bool(getattr(self, "_playback_auto_collapsed", False))
                     and not bool(getattr(self, "_playback_user_collapsed", False))
                 ):
-                    _note(f"playback expand trigger: height={height} expand_at={playback_expand_at}")
                     self._set_playback_collapsed(False, auto=True)
-                else:
-                    _note(
-                        f"playback no-op: height={height} collapsed={bool(getattr(self, '_playback_collapsed', False))} "
-                        f"auto={bool(getattr(self, '_playback_auto_collapsed', False))} user={bool(getattr(self, '_playback_user_collapsed', False))} "
-                        f"collapse_at={playback_collapse_at} expand_at={playback_expand_at}"
-                    )
 
             if not side_rail_visible or set_panel is None:
-                _note(f"skip main panels: side_rail_visible={side_rail_visible} set_panel={set_panel is not None}")
-                self._panel_debug("height-pass", decisions=debug_decisions, force=bool(debug_decisions))
                 return
 
             # Main side-stack panels collapse only after the image sub-sections
             # have yielded enough space; expansion follows thresholds normally.
             allow_main_collapse = (not image_visible) or image_sections_fully_collapsed or _panel_collapsed("inspector_body")
-            _note(f"main policy: allow_main_collapse={allow_main_collapse} image_sections_fully_collapsed={image_sections_fully_collapsed}")
 
             main_steps = [
                 ("inspector_body", "_height_auto_inspector_collapse", "_height_auto_inspector_expand"),
@@ -889,43 +590,19 @@ class MainWindow(QMainWindow):
             for body_name, collapse_attr, expand_attr in main_steps:
                 collapse_at = int(getattr(self, collapse_attr, 0))
                 expand_at = int(getattr(self, expand_attr, 16777215))
-                collapsed_now = _panel_collapsed(body_name)
-                pressure_now = _height_pressure()
-                should_collapse = _collapse_due_to_height_or_fit(collapse_at)
-                if should_collapse:
-                    if allow_main_collapse and not collapsed_now:
-                        _note(
-                            f"main collapse trigger {body_name}: height={height} collapse_at={collapse_at} "
-                            f"pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
-                        )
+                if height <= collapse_at or _under_pressure():
+                    if allow_main_collapse and not _panel_collapsed(body_name):
                         _auto_panel(body_name, True)
-                    else:
-                        _note(
-                            f"main collapse blocked/no-op {body_name}: allow={allow_main_collapse} collapsed={collapsed_now} "
-                            f"height={height} collapse_at={collapse_at} pressure={pressure_now} fit_compaction={_needs_fit_compaction()}"
-                        )
-                else:
-                    can_expand = _can_expand(body_name, expand_at)
-                    if can_expand and collapsed_now:
-                        _note(f"main expand trigger {body_name}: height={height} expand_at={expand_at}")
+                elif _can_expand(body_name, expand_at):
+                    if _panel_collapsed(body_name):
                         _auto_panel(body_name, False)
-                    else:
-                        _note(
-                            f"main no-op {body_name}: collapsed={collapsed_now} can_expand={can_expand} "
-                            f"height={height} collapse_at={collapse_at} expand_at={expand_at} pressure={pressure_now}"
-                        )
 
             if suppress_anim:
                 settler = getattr(self, "_settle_active_collapse_animations", None)
                 if settler is not None:
-                    _note("settle requested because animations are suppressed during resize")
                     QTimer.singleShot(0, settler)
-
-            self._panel_debug("height-pass", decisions=debug_decisions, force=bool(debug_decisions))
-        except Exception as exc:
-            _note(f"exception: {exc}")
-            self._panel_debug("height-pass.exception", decisions=debug_decisions, force=True)
-            logger.exception("Responsive height panel update failed")
+        except Exception:
+            pass
 
     def _expand_side_panel_for_lock(self):
         """Force the side-panel stack open before measuring a locked height."""
@@ -1737,7 +1414,6 @@ class MainWindow(QMainWindow):
         bind("record", "F7", self._toggle_record)
         bind("preflight", "Ctrl+Shift+P", self.open_preflight_report)
         bind("toggle_runtime_log", "Ctrl+Shift+L", self.toggle_runtime_log_panel)
-        bind("panel_debug", "Ctrl+Shift+D", self._toggle_panel_debug)
         bind("variables", "Ctrl+Alt+V", self.open_variables_dialog)
         bind("profile_library", "Ctrl+Alt+P", self.open_profile_library)
 
