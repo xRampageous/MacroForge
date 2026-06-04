@@ -1,6 +1,6 @@
 {
-  "version": "3.5.31",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.31/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.31/MacroForge-v3.5.31.zip",
-  "notes": "v3.5.31: Apply side panel program bottom guard image overflow patch - updated main_window.py and main_window_layout.py with side panel program bottom guard image overflow."
+  "version": "3.5.32",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.32/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.32/MacroForge-v3.5.32.zip",
+  "notes": "v3.5.32: Apply image subpanel standard logic restore patch - updated main_window.py and main_window_layout.py with image subpanel standard logic restore."
 }
