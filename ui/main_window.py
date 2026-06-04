@@ -452,7 +452,10 @@ class MainWindow(QMainWindow):
 
                 # Shrink order requested for the side stack:
                 # FAIL TARGET -> ON FAIL -> RETRY -> MATCHING -> IMAGE ->
-                # RECORDER -> ADD ACTION -> INSPECTOR.
+                # INSPECTOR -> RECORDER -> ADD ACTION.
+                # The expand path restores this in reverse order:
+                # ADD ACTION -> RECORDER -> INSPECTOR -> IMAGE -> MATCHING ->
+                # RETRY -> ON FAIL -> FAIL TARGET.
                 # Image-specific rows are skipped when a non-image action is selected.
                 collapse_steps = [
                     ("inspector_group_fail_target_body", image_visible),
@@ -460,9 +463,9 @@ class MainWindow(QMainWindow):
                     ("inspector_group_retry_body", image_visible),
                     ("inspector_group_matching_body", image_visible),
                     ("inspector_group_image_body", image_visible),
+                    ("inspector_body", True),
                     ("recorder_body", True),
                     ("add_action_body", True),
-                    ("inspector_body", True),
                 ]
                 active_steps = [step for step in collapse_steps if bool(step[1])]
 

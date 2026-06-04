@@ -110,7 +110,7 @@ def build_main_layout(window):
             except Exception:
                 pass
 
-        def _queue_side_panel_rebalance(reason="collapse", delays=(0, 45, 95, 165)):
+        def _queue_side_panel_rebalance(reason="collapse", delays=(0, 24, 55, 95)):
             """Let the side-panel stack settle into space freed by a collapse/expand.
 
             The rebalancer is intentionally passive: it does not add resize
@@ -221,8 +221,11 @@ def build_main_layout(window):
                 pass
 
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            anim.setDuration(120 if is_image_inspector_body else 135)
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            # Snappier side-panel motion: short enough to feel responsive,
+            # but still long enough to avoid abrupt layout jumps while Qt
+            # recalculates the nested Inspector stack.
+            anim.setDuration(78 if is_image_inspector_body else 92)
+            anim.setEasingCurve(QEasingCurve.Type.OutQuad)
             anim.setStartValue(start_h)
             anim.setEndValue(end_h)
 
@@ -236,7 +239,7 @@ def build_main_layout(window):
                 _finish_parent()
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
-                _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 45, 120))
+                _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 24, 65))
 
             try:
                 anim.valueChanged.connect(_side_panel_animation_tick)
@@ -244,7 +247,7 @@ def build_main_layout(window):
                 pass
             anim.finished.connect(_finished)
             self._collapse_animations[anim_key] = anim
-            _queue_side_panel_rebalance(reason=f"{body_name}.start", delays=(0, 35))
+            _queue_side_panel_rebalance(reason=f"{body_name}.start", delays=(0, 18))
             anim.start()
         except Exception:
             if collapsed:
@@ -254,7 +257,7 @@ def build_main_layout(window):
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
             _finish_parent()
-            _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 45, 120))
+            _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 24, 65))
         body_widget.updateGeometry()
         _side_panel_animation_tick()
 
