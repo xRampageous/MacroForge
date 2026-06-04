@@ -999,15 +999,15 @@ def build_main_layout(window):
 
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
-    preview.setFixedHeight(150)
+    preview.setFixedHeight(164)
     preview.setStyleSheet(
         f"QFrame#image_inspector_preview {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #07182A, stop:1 #020A13); border: 1px solid {C['border']}; "
         "border-radius: 8px; }}"
     )
     preview_lo = QVBoxLayout(preview)
-    preview_lo.setContentsMargins(7, 7, 7, 7)
-    preview_lo.setSpacing(5)
+    preview_lo.setContentsMargins(6, 6, 6, 6)
+    preview_lo.setSpacing(6)
     art = QFrame()
     art.setObjectName("image_preview_art")
     art.setStyleSheet(
@@ -1028,7 +1028,7 @@ def build_main_layout(window):
 
     image_actions = QHBoxLayout()
     image_actions.setContentsMargins(0, 0, 0, 0)
-    image_actions.setSpacing(5)
+    image_actions.setSpacing(4)
 
     def image_tool_btn(text, icon_name, tip, slot, width=64):
         btn = QPushButton(text)
@@ -1043,20 +1043,22 @@ def build_main_layout(window):
         btn.clicked.connect(slot)
         btn.setStyleSheet(
             f"QPushButton#image_inspector_tool_btn {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
-            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 8px; "
+            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 4px; "
             "font-size: 10px; font-weight: 750; }}"
             f"QPushButton#image_inspector_tool_btn:hover {{ border-color: {C['accent']}; color: {C['accent_hover']}; }}"
         )
         return btn
 
-    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 62)
-    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 64)
-    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 50)
+    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 61)
+    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 66)
+    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 48)
     image_actions.addWidget(self.ii_browse_btn)
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
     image_actions.addStretch()
-    image_flat_lo.addLayout(image_actions)
+    # Keep Browse / Capture / Test inside the image preview frame so Image Settings
+    # behaves as one visual panel instead of a separate floating button row.
+    preview_lo.addLayout(image_actions)
 
     image_flat_lo.addLayout(flat_section_title("Matching", "target", C["accent"]))
     self.ii_sim = inspector_value("0.85", 58)
@@ -1100,11 +1102,11 @@ def build_main_layout(window):
 
     image_flat_lo.addLayout(flat_section_title("On Fail", "condition", C["accent"]))
     self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Group"])
-    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=112))
+    image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=108))
 
     image_flat_lo.addLayout(flat_section_title("Fail Target", "target", C["accent"]))
     self.ii_fail_target = compact_combo()
-    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=112))
+    image_flat_lo.addLayout(inspector_field_row("Fail target", self.ii_fail_target, width=108))
 
     ii_lo.addWidget(image_flat_card)
 

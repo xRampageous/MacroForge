@@ -463,6 +463,9 @@ class MainWindow(QMainWindow):
             if any_panel_locked:
                 return
 
+            if bool(getattr(self, "_selection_reveal_from_click", False)):
+                return
+
             if set_panel is not None and not bool(getattr(self, "_side_panel_collapsed", False)):
                 controls = getattr(self, "_panel_collapse_controls", {})
 
@@ -903,9 +906,9 @@ class MainWindow(QMainWindow):
         try:
             timer = getattr(self, "_selection_reveal_clear_timer", None)
             if timer is not None:
-                timer.start(90)
+                timer.start(180)
             else:
-                QTimer.singleShot(90, self._clear_selection_reveal_from_click)
+                QTimer.singleShot(180, self._clear_selection_reveal_from_click)
         except Exception:
             self._clear_selection_reveal_from_click()
 
@@ -990,7 +993,7 @@ class MainWindow(QMainWindow):
             # collapse/expand animation. This gives re-clicked selected rows the
             # same one-click reveal as newly selected rows.
             _expand_once()
-            for delay in (18, 45, 92):
+            for delay in (0, 24, 60, 110):
                 try:
                     QTimer.singleShot(delay, _expand_once)
                 except Exception:
@@ -1015,16 +1018,9 @@ class MainWindow(QMainWindow):
             if not (bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False))):
                 self._expand_inspector_for_timeline_selection()
                 QTimer.singleShot(0, self._grow_window_for_unlocked_selection_content)
-                QTimer.singleShot(35, self._grow_window_for_unlocked_selection_content)
-                # Clicking an already-selected row may not produce a selection
-                # change, but it should still reopen the Inspector/action
-                # settings body.  Queue a couple of reveal passes after Qt has
-                # processed the click and layout updates so collapsed action
-                # settings expand reliably on repeated clicks.
-                QTimer.singleShot(0, self._expand_inspector_for_timeline_selection)
-                QTimer.singleShot(45, self._expand_inspector_for_timeline_selection)
-                QTimer.singleShot(45, self._grow_window_for_unlocked_selection_content)
-                QTimer.singleShot(90, self._refresh_unlocked_selection_height)
+                QTimer.singleShot(24, self._grow_window_for_unlocked_selection_content)
+                QTimer.singleShot(60, self._grow_window_for_unlocked_selection_content)
+                QTimer.singleShot(110, self._grow_window_for_unlocked_selection_content)
             try:
                 rows = self._selected_rows(index)
                 if len(rows) > 1:
@@ -4911,7 +4907,7 @@ class MainWindow(QMainWindow):
         self._set_update_button_available(available=True)
         try:
             remote = (manifest or {}).get("version", "new version") if isinstance(manifest, dict) else "new version"
-            self.status(f"Update available: {remote} — click the download icon")
+            self.status(f"Update available: {remote}")
         except Exception:
             pass
 
@@ -5130,14 +5126,17 @@ class MainWindow(QMainWindow):
             self._runtime_error_dialog_open = False
 
     def status(self, msg):
+        full_msg = str(msg or "")
+        max_chars = 43
+        visible_msg = full_msg if len(full_msg) <= max_chars else (full_msg[: max_chars - 1].rstrip() + "…")
         # Thread-safe: always marshal Qt widget access to main thread
         def _update():
-            self.status_text.setText(msg)
-            self.status_text.setToolTip(msg)
+            self.status_text.setText(visible_msg)
+            self.status_text.setToolTip(full_msg)
             # Keep the centered status capsule readable without letting it
             # crowd the profile/update/menu cluster on narrow windows.
             try:
-                text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
+                text_w = self.status_text.fontMetrics().horizontalAdvance(visible_msg)
                 icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
                 target_w = max(260, min(390, text_w + icon_w + 38))
                 if hasattr(self, "status_pill"):
@@ -5147,7 +5146,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             # Update status icon based on state
-            msg_lower = msg.lower()
+            msg_lower = full_msg.lower()
             C = COLORS
             if "ready" in msg_lower or "idle" in msg_lower:
                 self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
@@ -5176,9 +5175,9 @@ class MainWindow(QMainWindow):
             else:
                 self.status_icon.setVisible(False)
                 self.status_dot.set_color(C["text_dim"], glow=False)
-            self._maybe_show_runtime_error(msg)
+            self._maybe_show_runtime_error(full_msg)
         QTimer.singleShot(0, _update)
-        logger.info(msg)
+        logger.info(full_msg)
 
     def _invalidate_seq_dur(self):
         self._seq_dur_cache = sum(
