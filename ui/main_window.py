@@ -5225,13 +5225,15 @@ class MainWindow(QMainWindow):
             self.status_text.setToolTip(full_msg)
             # Keep the centered status capsule readable without letting it
             # crowd the profile/update/menu cluster on narrow windows.
-            try:
+            def _fit_status_pill_to_visible_text():
                 text_w = self.status_text.fontMetrics().horizontalAdvance(visible_msg)
-                icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(260, min(390, text_w + icon_w + 38))
+                chrome_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
+                target_w = max(112, min(390, text_w + chrome_w + 30))
+                self.status_pill.setMinimumWidth(target_w)
+                self.status_pill.setMaximumWidth(target_w)
+            try:
                 if hasattr(self, "status_pill"):
-                    self.status_pill.setMinimumWidth(target_w)
-                    self.status_pill.setMaximumWidth(390)
+                    _fit_status_pill_to_visible_text()
                 self._update_toolbar_containment()
             except Exception:
                 pass

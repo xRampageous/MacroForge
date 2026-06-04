@@ -273,45 +273,82 @@ def build_main_layout(window):
                     _refresh_inspector_size(80)
 
         def _snap_image_settings_body(collapsed_state):
-            # Stable snap path for the flat Image Settings body.
+            # Atomic snap path for the flat Image Settings body.
             #
-            # The Image Settings panel contains a fixed preview/tool strip plus
-            # several form sections. Animating the inner maximumHeight can make Qt
-            # recalculate against a partially clipped preview, which leaves the
-            # Browse/Capture/Test row and Matching section visually broken.  For
-            # this one body, release all clamps first and snap the whole body open
-            # or closed as a single unit, then run delayed Inspector/sidebar
-            # settle passes.
+            # Image Settings has a fixed preview/tool strip plus multiple form
+            # sections.  Letting Qt paint while the nested body is half-clamped can
+            # split the preview/buttons from Matching.  For this one body, hide
+            # updates for the entire image-settings ownership chain, apply the
+            # final open/closed state in one batch, then repaint and rebalance.
             if not is_image_inspector_body:
                 return False
 
-            updates_disabled = False
+            update_targets = []
+
+            def _disable_updates(owner):
+                if owner is None or owner in update_targets:
+                    return
+                try:
+                    owner.setUpdatesEnabled(False)
+                    update_targets.append(owner)
+                except Exception:
+                    pass
+
+            def _enable_updates():
+                for owner in reversed(update_targets):
+                    try:
+                        owner.setUpdatesEnabled(True)
+                        owner.update()
+                    except Exception:
+                        pass
+                update_targets.clear()
+
             try:
-                body_widget.setUpdatesEnabled(False)
-                updates_disabled = True
-
                 preview_frame = getattr(self, "ii_preview_frame", None)
-                if preview_frame is not None:
-                    preview_frame.setFixedHeight(166)
-                    preview_frame.setMinimumHeight(166)
-                    preview_frame.setMaximumHeight(166)
-                    preview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-                    preview_frame.updateGeometry()
+                toolbar_frame = getattr(self, "ii_preview_toolbar", None)
+                preview_art = getattr(self, "ii_preview_art", None)
+                image_card = getattr(self, "ii_image_card", None)
+                inspector_widgets = (
+                    body_widget, parent, image_card, preview_frame, toolbar_frame,
+                    preview_art, getattr(self, "insp_image", None),
+                    getattr(self, "insp_body", None), getattr(self, "insp_card", None),
+                    getattr(self, "sidebar_frame", None),
+                )
 
-                for owner in (
-                    body_widget,
-                    parent,
-                    getattr(self, "ii_image_card", None),
-                    getattr(self, "insp_image", None),
-                    getattr(self, "insp_body", None),
-                    getattr(self, "insp_card", None),
-                ):
+                for owner in inspector_widgets:
+                    _disable_updates(owner)
+
+                for owner in (body_widget, parent, image_card, getattr(self, "insp_image", None), getattr(self, "insp_body", None), getattr(self, "insp_card", None)):
                     if owner is None:
                         continue
                     try:
                         owner.setMinimumHeight(0)
                         owner.setMaximumHeight(16777215)
                         owner.updateGeometry()
+                    except Exception:
+                        pass
+
+                if preview_frame is not None:
+                    try:
+                        preview_frame.setVisible(True)
+                        preview_frame.setFixedHeight(166)
+                        preview_frame.setMinimumHeight(166)
+                        preview_frame.setMaximumHeight(166)
+                        preview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+                        preview_frame.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+                        preview_frame.updateGeometry()
+                    except Exception:
+                        pass
+
+                if toolbar_frame is not None:
+                    try:
+                        toolbar_frame.setVisible(True)
+                        toolbar_frame.setFixedHeight(27)
+                        toolbar_frame.setMinimumHeight(27)
+                        toolbar_frame.setMaximumHeight(27)
+                        toolbar_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+                        toolbar_frame.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+                        toolbar_frame.updateGeometry()
                     except Exception:
                         pass
 
@@ -335,31 +372,43 @@ def build_main_layout(window):
                 except Exception:
                     pass
 
-                if updates_disabled:
-                    body_widget.setUpdatesEnabled(True)
-                    updates_disabled = False
-
                 _finish_parent()
                 body_widget.updateGeometry()
+                if parent is not None:
+                    parent.updateGeometry()
                 _side_panel_animation_tick()
                 self._collapse_animations.pop(anim_key, None)
 
+                _enable_updates()
+
                 _queue_side_panel_rebalance(
-                    reason=f"{body_name}.snap",
+                    reason=f"{body_name}.atomic",
                     delays=(0, 24, 55, 95, 140),
                 )
                 _refresh_inspector_size()
                 _refresh_inspector_size(35)
                 _refresh_inspector_size(90)
-                return True
-            except Exception:
-                return False
-            finally:
-                if updates_disabled:
+
+                # One final queued repaint after the layout has settled prevents a
+                # transient toolbar/Matching overlap on slower paints.
+                def _final_image_settings_repaint():
                     try:
-                        body_widget.setUpdatesEnabled(True)
+                        for owner in (body_widget, parent, image_card, preview_frame, toolbar_frame):
+                            if owner is not None:
+                                owner.updateGeometry()
+                                owner.repaint()
+                        _side_panel_animation_tick()
                     except Exception:
                         pass
+
+                QTimer.singleShot(0, _final_image_settings_repaint)
+                QTimer.singleShot(45, _final_image_settings_repaint)
+                return True
+            except Exception:
+                _enable_updates()
+                return False
+            finally:
+                _enable_updates()
 
         try:
             body_widget.setMinimumHeight(0)
@@ -1100,6 +1149,10 @@ def build_main_layout(window):
         f"stop:0 #07182A, stop:1 #020A13); border: 1px solid {C['border']}; "
         "border-radius: 8px; }}"
     )
+    try:
+        preview.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+    except Exception:
+        pass
     preview_lo = QVBoxLayout(preview)
     preview_lo.setContentsMargins(6, 6, 6, 6)
     preview_lo.setSpacing(6)
@@ -1122,7 +1175,18 @@ def build_main_layout(window):
     preview_lo.addWidget(art, stretch=1)
     image_flat_lo.addWidget(preview)
 
-    image_actions = QHBoxLayout()
+    image_toolbar = QFrame(preview)
+    image_toolbar.setObjectName("image_preview_toolbar")
+    self.ii_preview_toolbar = image_toolbar
+    image_toolbar.setFixedHeight(27)
+    image_toolbar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+    image_toolbar.setStyleSheet("QFrame#image_preview_toolbar { background: transparent; border: none; }")
+    try:
+        image_toolbar.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+    except Exception:
+        pass
+
+    image_actions = QHBoxLayout(image_toolbar)
     image_actions.setContentsMargins(0, 0, 0, 0)
     image_actions.setSpacing(3)
 
@@ -1152,9 +1216,9 @@ def build_main_layout(window):
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
     image_actions.addStretch()
-    # Keep Browse / Capture / Test inside the image preview frame so Image Settings
-    # behaves as one visual panel instead of a separate floating button row.
-    preview_lo.addLayout(image_actions)
+    # Keep Browse / Capture / Test inside a real toolbar frame so Image Settings
+    # paints as one atomic visual panel during collapse/expand.
+    preview_lo.addWidget(image_toolbar)
 
     image_flat_lo.addLayout(flat_section_title("Matching", "target", C["accent"]))
     self.ii_sim = inspector_value("0.85", 58)
