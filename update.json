@@ -1,6 +1,6 @@
 {
-  "version": "3.5.33",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.33/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.33/MacroForge-v3.5.33.zip",
-  "notes": "v3.5.33: Apply app bottom guard animation polish patch - updated main_window.py and main_window_layout.py with app bottom guard animation polish."
+  "version": "3.5.34",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.34/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.34/MacroForge-v3.5.34.zip",
+  "notes": "v3.5.34: Apply side panel animation stability fix patch - updated main_window_layout.py with side panel animation stability fix."
 }
