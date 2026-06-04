@@ -1100,9 +1100,13 @@ def build_main_layout(window):
     status_pill.setMaximumWidth(520)
     status_pill.setFixedHeight(38)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+    status_pill.setAutoFillBackground(False)
+    status_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     status_pill.setStyleSheet(
         f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['border']}; border-radius: 13px; }}"
+        "QFrame#status_pill QLabel { background: transparent; border: none; }"
+        "QFrame#status_pill QWidget { background: transparent; border: none; }"
     )
     self.status_pill = status_pill
     sp_lo = QHBoxLayout(status_pill)
@@ -1111,15 +1115,23 @@ def build_main_layout(window):
     self.status_dot = StatusDot()
     self.status_dot.set_color(C["success"])
     self.status_dot.setFixedSize(13, 13)
+    self.status_dot.setAutoFillBackground(False)
+    self.status_dot.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     sp_lo.addWidget(self.status_dot)
     self.status_icon = QLabel()
     self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
     self.status_icon.setFixedSize(16, 16)
     self.status_icon.setScaledContents(True)
+    self.status_icon.setAutoFillBackground(False)
+    self.status_icon.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    self.status_icon.setStyleSheet("background: transparent; border: none;")
     self.status_icon.setVisible(False)
     sp_lo.addWidget(self.status_icon)
     self.status_text = QLabel("Ready")
-    self.status_text.setStyleSheet(f"color: {C['text']}; font-size: 11px; font-weight: 850;")
+    self.status_text.setObjectName("status_text")
+    self.status_text.setAutoFillBackground(False)
+    self.status_text.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    self.status_text.setStyleSheet(f"QLabel#status_text {{ background: transparent; border: none; color: {C['text']}; font-size: 11px; font-weight: 850; }}")
     self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     self.status_text.setWordWrap(False)
     sp_lo.addWidget(self.status_text, stretch=1)
