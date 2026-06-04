@@ -1,6 +1,6 @@
 {
-  "version": "3.5.12",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.12/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.12/MacroForge-v3.5.12.zip",
-  "notes": "v3.5.12: Apply multi select drag collapse polish patch - updated main_window.py, main_window_layout.py and timeline.py with multi select drag collapse polish."
+  "version": "3.5.13",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.13/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.13/MacroForge-v3.5.13.zip",
+  "notes": "v3.5.13: Apply selection expand group move followup patch - updated main_window.py and main_window_layout.py with selection expand group move followup."
 }
