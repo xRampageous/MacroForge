@@ -321,6 +321,7 @@ class MainWindow(QMainWindow):
                 and old_size.height() != new_size.height()
                 and not bool(getattr(self, "_side_panel_locked", False))
                 and not bool(getattr(self, "_bottom_panel_locked", False))
+                and not bool(getattr(self, "_programmatic_reveal_resize", False))
             ):
                 self._clear_selection_reveal_from_click()
         except Exception:
@@ -461,6 +462,13 @@ class MainWindow(QMainWindow):
             set_panel = getattr(self, "_set_collapsible_panel", None)
 
             if any_panel_locked:
+                return
+
+            try:
+                suppress_until = float(getattr(self, "_height_auto_collapse_suppressed_until", 0.0) or 0.0)
+            except Exception:
+                suppress_until = 0.0
+            if suppress_until > time.monotonic():
                 return
 
             if bool(getattr(self, "_selection_reveal_from_click", False)):
@@ -874,17 +882,33 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             if target_h > self.height():
-                self.resize(self.width(), target_h)
+                self._programmatic_reveal_resize = True
+                try:
+                    self.resize(self.width(), target_h)
+                finally:
+                    QTimer.singleShot(0, lambda: setattr(self, "_programmatic_reveal_resize", False))
         except Exception:
             pass
 
+    def _suppress_height_auto_collapse_for_reveal(self, duration_ms=720):
+        """Temporarily keep explicit timeline-click reveals from being auto-collapsed."""
+        try:
+            ms = max(0, int(duration_ms))
+        except Exception:
+            ms = 720
+        try:
+            self._height_auto_collapse_suppressed_until = time.monotonic() + (ms / 1000.0)
+        except Exception:
+            self._height_auto_collapse_suppressed_until = 0.0
+
     def _begin_selection_reveal_from_click(self):
-        """Allow one short unlocked side-panel fit pass for an actual timeline click."""
+        """Allow one unlocked side-panel fit pass for an actual timeline click."""
         try:
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
                 self._selection_reveal_from_click = False
                 return
             self._selection_reveal_from_click = True
+            self._suppress_height_auto_collapse_for_reveal(760)
             timer = getattr(self, "_selection_reveal_clear_timer", None)
             if timer is not None:
                 timer.stop()
@@ -906,26 +930,25 @@ class MainWindow(QMainWindow):
         try:
             timer = getattr(self, "_selection_reveal_clear_timer", None)
             if timer is not None:
-                timer.start(180)
+                timer.start(520)
             else:
-                QTimer.singleShot(180, self._clear_selection_reveal_from_click)
+                QTimer.singleShot(520, self._clear_selection_reveal_from_click)
         except Exception:
             self._clear_selection_reveal_from_click()
 
     def _expand_inspector_for_timeline_selection(self):
-        """Open the Inspector/action settings after any timeline row click.
+        """Open the full side-panel editor stack after any timeline row click.
 
-        Re-clicking the already-selected row must behave like the first click:
-        expand the Inspector and the selected action settings in one click, then
-        perform the same one-shot unlocked height reveal without holding the
-        window size afterward.
+        Re-clicking the already-selected row now behaves like the first click:
+        ADD ACTION, RECORDER, INSPECTOR, and the selected action settings body
+        are forced open as one batch before the height policy is allowed to run.
         """
         try:
-            setter = getattr(self, "_set_collapsible_panel", None)
-            if not callable(setter):
+            controls = getattr(self, "_panel_collapse_controls", {}) or {}
+            if not controls:
                 return
 
-            controls = getattr(self, "_panel_collapse_controls", {}) or {}
+            self._suppress_height_auto_collapse_for_reveal(820)
 
             def _current_action_kind():
                 try:
@@ -935,24 +958,21 @@ class MainWindow(QMainWindow):
                     pass
                 return ""
 
-            def _selected_body_names():
-                kind = _current_action_kind()
-                names = ["inspector_body"]
-                body_by_kind = {
-                    "key": "inspector_group_key_settings_body",
-                    "pause": "inspector_group_delay_settings_body",
-                    "click": "inspector_group_click_settings_body",
-                    "image": "inspector_group_image_settings_body",
-                    "group": "inspector_group_group_settings_body",
-                    "loop": "inspector_group_loop_settings_body",
-                    "condition": "inspector_group_condition_settings_body",
-                }
-                body_name = body_by_kind.get(kind)
-                if body_name:
-                    names.append(body_name)
-                # Keep a safe fallback for older/current flat Inspector builds:
-                # hidden panes are ignored by Qt, but clearing their collapsed flags
-                # prevents repeated clicks from opening only one nested body at a time.
+            body_by_kind = {
+                "key": "inspector_group_key_settings_body",
+                "pause": "inspector_group_delay_settings_body",
+                "click": "inspector_group_click_settings_body",
+                "image": "inspector_group_image_settings_body",
+                "group": "inspector_group_group_settings_body",
+                "loop": "inspector_group_loop_settings_body",
+                "condition": "inspector_group_condition_settings_body",
+            }
+
+            def _target_body_names():
+                names = ["add_action_body", "recorder_body", "inspector_body"]
+                selected_body = body_by_kind.get(_current_action_kind())
+                if selected_body:
+                    names.append(selected_body)
                 names.extend([
                     "inspector_group_key_settings_body",
                     "inspector_group_delay_settings_body",
@@ -970,36 +990,106 @@ class MainWindow(QMainWindow):
                         seen.add(name)
                 return ordered
 
-            def _expand_once():
+            def _stop_animation(body_name, body_widget):
                 try:
-                    for body_name in _selected_body_names():
-                        ctl = controls.get(body_name)
-                        body_widget = ctl[0] if ctl else None
-                        if body_widget is not None:
-                            body_widget.setProperty("user_collapsed", False)
-                            body_widget.setProperty("auto_collapsed", False)
-                        setter(body_name, False, auto=False)
+                    anim_key = body_name or str(id(body_widget))
+                    anim = getattr(self, "_collapse_animations", {}).pop(anim_key, None)
+                    if anim is not None:
+                        anim.stop()
+                except Exception:
+                    pass
 
+            def _release_parent_clamps(body_widget):
+                try:
+                    parent = body_widget.parentWidget()
+                except Exception:
+                    parent = None
+                while parent is not None:
+                    try:
+                        parent.setMinimumHeight(0)
+                        parent.setMaximumHeight(16777215)
+                        parent.updateGeometry()
+                    except Exception:
+                        pass
+                    try:
+                        if parent in (
+                            getattr(self, "add_card", None),
+                            getattr(self, "rec_card", None),
+                            getattr(self, "insp_card", None),
+                        ):
+                            break
+                    except Exception:
+                        pass
+                    try:
+                        parent = parent.parentWidget()
+                    except Exception:
+                        parent = None
+
+            def _force_open_body(body_name):
+                ctl = controls.get(body_name)
+                if not ctl:
+                    return False
+                body_widget, caret = ctl
+                if body_widget is None or caret is None:
+                    return False
+                _stop_animation(body_name, body_widget)
+                try:
+                    body_widget.setProperty("user_collapsed", False)
+                    body_widget.setProperty("auto_collapsed", False)
+                    caret.setProperty("collapsed", False)
+                    caret.setText("")
+                    caret.setToolTip("Collapse panel")
+                except Exception:
+                    pass
+                try:
+                    body_widget.setVisible(True)
+                    body_widget.setMinimumHeight(0)
+                    body_widget.setMaximumHeight(16777215)
+                    body_widget.updateGeometry()
+                except Exception:
+                    pass
+                _release_parent_clamps(body_widget)
+                return True
+
+            def _settle_full_reveal():
+                try:
+                    self._suppress_height_auto_collapse_for_reveal(820)
+                    for body_name in _target_body_names():
+                        _force_open_body(body_name)
                     autosize = getattr(self, "_autosize_inspector_panel", None)
                     if callable(autosize):
                         autosize()
+                    sidebar = getattr(self, "sidebar_frame", None)
+                    if sidebar is not None:
+                        try:
+                            layout = sidebar.layout()
+                            if layout is not None:
+                                layout.invalidate()
+                                layout.activate()
+                        except Exception:
+                            pass
+                        try:
+                            sidebar.updateGeometry()
+                        except Exception:
+                            pass
+                    rebalance = getattr(self, "_rebalance_side_panel_space", None)
+                    if callable(rebalance):
+                        rebalance(reason="timeline.full_reveal")
                     grow = getattr(self, "_grow_window_for_unlocked_selection_content", None)
                     if callable(grow):
                         grow()
                 except Exception:
                     pass
 
-            # Run immediately and then retry shortly while Qt finishes any
-            # collapse/expand animation. This gives re-clicked selected rows the
-            # same one-click reveal as newly selected rows.
-            _expand_once()
-            for delay in (0, 24, 60, 110):
+            _settle_full_reveal()
+            for delay in (0, 16, 40, 80, 140, 220):
                 try:
-                    QTimer.singleShot(delay, _expand_once)
+                    QTimer.singleShot(delay, _settle_full_reveal)
                 except Exception:
                     pass
         except Exception:
             pass
+
 
     def _select_from_timeline_click(self, index):
         """Timeline click entry point.

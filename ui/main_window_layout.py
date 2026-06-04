@@ -999,7 +999,7 @@ def build_main_layout(window):
 
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
-    preview.setFixedHeight(164)
+    preview.setFixedHeight(166)
     preview.setStyleSheet(
         f"QFrame#image_inspector_preview {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #07182A, stop:1 #020A13); border: 1px solid {C['border']}; "
@@ -1028,30 +1028,30 @@ def build_main_layout(window):
 
     image_actions = QHBoxLayout()
     image_actions.setContentsMargins(0, 0, 0, 0)
-    image_actions.setSpacing(4)
+    image_actions.setSpacing(3)
 
     def image_tool_btn(text, icon_name, tip, slot, width=64):
         btn = QPushButton(text)
         btn.setObjectName("image_inspector_tool_btn")
-        btn.setIcon(icon(icon_name, 13, C["text_dim"]))
-        btn.setIconSize(QSize(13, 13))
+        btn.setIcon(icon(icon_name, 12, C["text_dim"]))
+        btn.setIconSize(QSize(12, 12))
         btn.setToolTip(tip)
-        btn.setFixedSize(width, 28)
+        btn.setFixedSize(width, 27)
         btn.setMinimumWidth(width)
         btn.setMaximumWidth(width)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(slot)
         btn.setStyleSheet(
             f"QPushButton#image_inspector_tool_btn {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
-            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 3px 4px; "
-            "font-size: 10px; font-weight: 750; }}"
+            f"border: 1px solid {C['border']}; border-radius: 6px; padding: 2px 2px; "
+            "font-size: 9px; font-weight: 800; }}"
             f"QPushButton#image_inspector_tool_btn:hover {{ border-color: {C['accent']}; color: {C['accent_hover']}; }}"
         )
         return btn
 
-    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 61)
-    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 66)
-    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 48)
+    self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 60)
+    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 69)
+    self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 47)
     image_actions.addWidget(self.ii_browse_btn)
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
