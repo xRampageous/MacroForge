@@ -110,39 +110,6 @@ def build_main_layout(window):
             except Exception:
                 pass
 
-        def _body_anim_children():
-            try:
-                return body_widget.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)
-            except Exception:
-                return []
-
-        def _hide_body_anim_children(capture=True):
-            """Hide direct body children during height animation to prevent paint artifacts.
-
-            The animated widget becomes very short while collapsing/expanding.
-            Hiding the content until the motion finishes prevents controls from
-            squashing, drawing through the next card, or briefly overlapping
-            neighbouring Image Inspector sub-panels.
-            """
-            for child in _body_anim_children():
-                try:
-                    if capture:
-                        child.setProperty("_mf_collapse_anim_was_hidden", bool(child.isHidden()))
-                    child.setVisible(False)
-                except Exception:
-                    pass
-
-        def _restore_body_anim_children(clear=True):
-            for child in _body_anim_children():
-                try:
-                    was_hidden = child.property("_mf_collapse_anim_was_hidden")
-                    child.setVisible(False if bool(was_hidden) else True)
-                    if clear:
-                        child.setProperty("_mf_collapse_anim_was_hidden", None)
-                    child.updateGeometry()
-                except Exception:
-                    pass
-
         def _queue_side_panel_rebalance(reason="collapse", delays=(0, 45, 95, 165)):
             """Let the side-panel stack settle into space freed by a collapse/expand.
 
@@ -221,20 +188,24 @@ def build_main_layout(window):
                     inspector_card.setMaximumHeight(16777215)
                     inspector_card.updateGeometry()
 
-            # Measure while content is available, then hide direct child content
-            # for the duration of the height animation.  This keeps all side
-            # panels on the same path and avoids the visual overlap/squash that
-            # can happen when Qt tries to relayout controls into a 0-20px body.
+            # Measure once, then animate only the body container height.
+            # Do not hide/show child controls mid-animation: doing so makes Qt
+            # recalculate sizeHint() from an artificially empty body, which can
+            # cause wrong target heights, overlap, and broken expand/collapse
+            # states.  The body itself is hidden only after collapse finishes.
             if collapsed:
-                start_h = max(body_widget.height(), body_widget.sizeHint().height(), 1)
-                end_h = 0
                 body_widget.setVisible(True)
+                start_h = max(0, int(body_widget.height()))
+                if start_h <= 1:
+                    try:
+                        start_h = max(1, int(body_widget.sizeHint().height()))
+                    except Exception:
+                        start_h = 1
+                end_h = 0
                 body_widget.setMaximumHeight(start_h)
-                _hide_body_anim_children(capture=True)
             else:
                 body_widget.setVisible(True)
-                _restore_body_anim_children(clear=False)
-                start_h = max(0, body_widget.height())
+                start_h = max(0, int(body_widget.height()))
                 if start_h <= 1:
                     start_h = 0
                 body_widget.setMaximumHeight(16777215)
@@ -242,7 +213,6 @@ def build_main_layout(window):
                 if parent is not None:
                     parent.updateGeometry()
                 end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
-                _hide_body_anim_children(capture=False)
                 body_widget.setMaximumHeight(start_h)
 
             try:
@@ -263,7 +233,6 @@ def build_main_layout(window):
                 else:
                     body_widget.setVisible(True)
                     body_widget.setMaximumHeight(16777215)
-                    _restore_body_anim_children()
                 _finish_parent()
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
@@ -279,13 +248,11 @@ def build_main_layout(window):
             anim.start()
         except Exception:
             if collapsed:
-                _hide_body_anim_children(capture=True)
                 body_widget.setMaximumHeight(0)
                 body_widget.setVisible(False)
             else:
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
-                _restore_body_anim_children()
             _finish_parent()
             _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 45, 120))
         body_widget.updateGeometry()
