@@ -305,8 +305,94 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._update_responsive_panels()
+        self._update_toolbar_containment()
         self._autosize_inspector_panel()
         self._apply_panel_size_locks()
+
+    def _toolbar_profile_text(self):
+        """Return profile button text for the current toolbar width mode."""
+        try:
+            name = str(self.session_manager.active or "Default")
+        except Exception:
+            name = "Default"
+        mode = str(getattr(self, "_toolbar_profile_mode", "full"))
+        if mode == "tiny":
+            return "Profile  ▾"
+        if mode == "compact":
+            shown = name if len(name) <= 11 else f"{name[:10]}…"
+            return f"{shown}  ▾"
+        shown = name if len(name) <= 18 else f"{name[:15]}..."
+        return f"{shown}  ▾"
+
+    def _update_toolbar_containment(self):
+        """Keep the redesigned top toolbar contained in the visible header dock.
+
+        The main window width is not enough to determine toolbar fit because the
+        expanded side panel steals workspace width.  Use the header dock width
+        itself, then compact non-status controls first so the right status pill
+        stays inside the rounded top panel.
+        """
+        try:
+            dock = getattr(self, "header_dock", None)
+            profile = getattr(self, "profile_btn", None)
+            if dock is None or profile is None:
+                return
+            width = int(dock.width() or self.width())
+            if width <= 0:
+                return
+
+            if width < 760:
+                mode = "tiny"
+                profile_w = int(getattr(self, "_toolbar_profile_tiny_width", 116))
+                margins = (5, 5, 7, 5)
+                spacing = 2
+                separator_visible = False
+            elif width < 860:
+                mode = "compact"
+                profile_w = int(getattr(self, "_toolbar_profile_compact_width", 132))
+                margins = (6, 5, 8, 5)
+                spacing = 3
+                separator_visible = True
+            else:
+                mode = "full"
+                profile_w = int(getattr(self, "_toolbar_profile_full_width", 164))
+                margins = (7, 5, 9, 5)
+                spacing = 4
+                separator_visible = True
+
+            if getattr(self, "_toolbar_profile_mode", None) != mode:
+                self._toolbar_profile_mode = mode
+                profile.setText(self._toolbar_profile_text())
+
+            if profile.width() != profile_w:
+                profile.setFixedWidth(profile_w)
+
+            layout = dock.layout()
+            if layout is not None:
+                left, top, right, bottom = layout.contentsMargins().left(), layout.contentsMargins().top(), layout.contentsMargins().right(), layout.contentsMargins().bottom()
+                target_left, target_top, target_right, target_bottom = margins
+                if (left, top, right, bottom) != margins:
+                    layout.setContentsMargins(target_left, target_top, target_right, target_bottom)
+                if layout.spacing() != spacing:
+                    layout.setSpacing(spacing)
+
+            for sep in getattr(self, "toolbar_separators", []):
+                try:
+                    sep.setVisible(separator_visible)
+                    sep.setFixedWidth(1 if separator_visible else 0)
+                except Exception:
+                    pass
+
+            # Keep right-side status geometry inside the dock after any compact
+            # profile/separator change.  This is intentionally a layout refresh,
+            # not a status-pill resize.
+            try:
+                dock.updateGeometry()
+                dock.layout().activate() if dock.layout() is not None else None
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def _update_responsive_panels(self):
         """Auto-hide panels for both width and height pressure."""
@@ -1858,9 +1944,13 @@ class MainWindow(QMainWindow):
 
     def _refresh_profile_btn(self):
         if hasattr(self, "profile_btn"):
-            name = str(self.session_manager.active or "Default")
-            shown = name if len(name) <= 18 else f"{name[:15]}..."
-            self.profile_btn.setText(f"{shown}  \u25be")
+            try:
+                self.profile_btn.setText(self._toolbar_profile_text())
+                self._update_toolbar_containment()
+            except Exception:
+                name = str(self.session_manager.active or "Default")
+                shown = name if len(name) <= 18 else f"{name[:15]}..."
+                self.profile_btn.setText(f"{shown}  \u25be")
 
     def _show_profile_menu(self):
         from ui.main_window_menus import show_profile_menu
@@ -4682,6 +4772,7 @@ class MainWindow(QMainWindow):
                 if hasattr(self, "status_pill"):
                     self.status_pill.setMinimumWidth(target_w)
                     self.status_pill.setMaximumWidth(430)
+                self._update_toolbar_containment()
             except Exception:
                 pass
             # Update status icon based on state

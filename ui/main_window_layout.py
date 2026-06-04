@@ -1002,15 +1002,20 @@ def build_main_layout(window):
     shell_lo.setSpacing(0)
 
     header_dock = QFrame()
+    self.header_dock = header_dock
     header_dock.setObjectName("header_dock")
     header_dock.setStyleSheet(
         f"QFrame#header_dock {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #020A13, stop:0.55 #03101E, stop:1 #000309); "
         f"border: 1px solid {C['border']}; border-radius: 12px; }}"
     )
+    header_dock.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    header_dock.setMinimumWidth(0)
     dock_lo = QHBoxLayout(header_dock)
-    dock_lo.setContentsMargins(7, 6, 10, 6)
-    dock_lo.setSpacing(5)
+    dock_lo.setContentsMargins(7, 5, 9, 5)
+    dock_lo.setSpacing(4)
+
+    self.toolbar_separators = []
 
     def header_separator():
         sep = QFrame()
@@ -1020,15 +1025,16 @@ def build_main_layout(window):
             "QFrame#toolbar_separator { background-color: #0E2A40; "
             "border: none; border-radius: 1px; }"
         )
+        self.toolbar_separators.append(sep)
         return sep
 
-    def header_icon_button(obj, icon_name, color, tooltip, slot=None, width=38, grouped=False):
+    def header_icon_button(obj, icon_name, color, tooltip, slot=None, width=38, grouped=False, height=38):
         btn = QPushButton()
         btn.setObjectName(obj)
         btn.setIcon(icon(icon_name, 18, color))
         btn.setIconSize(QSize(18, 18))
         btn.setToolTip(tooltip)
-        btn.setFixedSize(width, 38)
+        btn.setFixedSize(width, height)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         radius = 9 if not grouped else 8
         border_color = "#15354D" if not grouped else "transparent"
@@ -1046,29 +1052,30 @@ def build_main_layout(window):
         return btn
 
     tools = QFrame()
+    self.toolbar_tools_group = tools
     tools.setObjectName("toolbar_group")
-    tools.setFixedHeight(42)
+    tools.setFixedHeight(38)
     tools.setStyleSheet(
         f"QFrame#toolbar_group {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
         f"stop:0 #07172A, stop:0.58 {C['bg_tertiary']}, stop:1 #020A13); "
         f"border: 1px solid {C['border']}; border-radius: 12px; }}"
     )
     tools_lo = QHBoxLayout(tools)
-    tools_lo.setContentsMargins(3, 2, 3, 2)
+    tools_lo.setContentsMargins(2, 2, 2, 2)
     tools_lo.setSpacing(1)
-    self.editor_mode_btn = header_icon_button("editor_mode_btn", "magic", C["accent"], "Open macro editor mode", self.open_macro_editor, grouped=True)
-    self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report, grouped=True)
-    self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel, grouped=True)
+    self.editor_mode_btn = header_icon_button("editor_mode_btn", "magic", C["accent"], "Open macro editor mode", self.open_macro_editor, width=35, height=34, grouped=True)
+    self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report, width=35, height=34, grouped=True)
+    self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel, width=35, height=34, grouped=True)
     self.runtime_log_btn.setCheckable(True)
-    self.mode_filter_btn = header_icon_button("mode_filter_btn", "menu", C["accent"], "Mode filters: All actions", None, width=46, grouped=True)
+    self.mode_filter_btn = header_icon_button("mode_filter_btn", "menu", C["accent"], "Mode filters: All actions", None, width=41, height=34, grouped=True)
     self.compact_view_btn = self.mode_filter_btn
     for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.mode_filter_btn):
         tools_lo.addWidget(btn)
     dock_lo.addWidget(tools)
 
-    dock_lo.addSpacing(5)
+    dock_lo.addSpacing(4)
     dock_lo.addWidget(header_separator())
-    dock_lo.addSpacing(5)
+    dock_lo.addSpacing(4)
 
     self.profile_btn = QPushButton("Default Profile  ▾")
     self.profile_btn.setObjectName("profile_switcher")
@@ -1077,6 +1084,9 @@ def build_main_layout(window):
     self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     self.profile_btn.setToolTip("Switch profile")
     self.profile_btn.setFixedSize(164, 38)
+    self._toolbar_profile_full_width = 164
+    self._toolbar_profile_compact_width = 132
+    self._toolbar_profile_tiny_width = 116
     self.profile_btn.clicked.connect(self._show_profile_menu)
     self.profile_btn.setStyleSheet(
         f"QPushButton#profile_switcher {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
@@ -1088,9 +1098,9 @@ def build_main_layout(window):
     )
     dock_lo.addWidget(self.profile_btn)
 
-    dock_lo.addSpacing(5)
+    dock_lo.addSpacing(4)
     dock_lo.addWidget(header_separator())
-    dock_lo.addSpacing(5)
+    dock_lo.addSpacing(4)
 
     self.search_top_btn = header_icon_button("search_top_btn", "search", C["text_dim"], "Search timeline actions", None, width=38)
     dock_lo.addWidget(self.search_top_btn)
@@ -1104,7 +1114,7 @@ def build_main_layout(window):
     status_pill.setObjectName("status_pill")
     status_pill.setMinimumWidth(260)
     status_pill.setMaximumWidth(430)
-    status_pill.setFixedHeight(36)
+    status_pill.setFixedHeight(38)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setAutoFillBackground(False)
     status_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -1155,7 +1165,12 @@ def build_main_layout(window):
     )
     self.autosave_label.setToolTip("Profile autosave state")
     self.autosave_label.setVisible(False)
-    dock_lo.addWidget(status_pill)
+    dock_lo.addWidget(status_pill, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+    try:
+        QTimer.singleShot(0, self._update_toolbar_containment)
+    except Exception:
+        pass
 
     toolbar_menu_style = (
         f"QMenu {{ background-color: #020A13; color: {C['text']}; "
