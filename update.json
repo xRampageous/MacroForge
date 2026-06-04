@@ -1,6 +1,6 @@
 {
-  "version": "3.5.16",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.16/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.16/MacroForge-v3.5.16.zip",
-  "notes": "v3.5.16: Apply vertical resize panel autofit fix patch - updated main_window.py and main_window_layout.py with vertical resize panel autofit fix."
+  "version": "3.5.17",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.17/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.17/MacroForge-v3.5.17.zip",
+  "notes": "v3.5.17: Apply panel debug diagnostics patch - updated main_window.py and main_window_layout.py with panel debug diagnostics."
 }
