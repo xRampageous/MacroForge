@@ -1,6 +1,6 @@
 {
-  "version": "3.5.38",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.38/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.38/MacroForge-v3.5.38.zip",
-  "notes": "v3.5.38: Apply flat inspector rework patch - updated main_window.py and main_window_layout.py with flat inspector rework."
+  "version": "3.5.39",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.39/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.39/MacroForge-v3.5.39.zip",
+  "notes": "v3.5.39: Apply inspector collapsible image aligned fields patch - updated main_window.py and main_window_layout.py with inspector collapsible image aligned fields."
 }
