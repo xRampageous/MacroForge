@@ -203,6 +203,9 @@ class TimelineDelegate(QStyledItemDelegate):
             traced = row in getattr(view, "trace_rows", set())
             linked_source = row == getattr(view, "link_source_row", -1)
             linked_target = row in getattr(view, "link_target_rows", set())
+            search_query = str(getattr(view, "_search", "") or "").strip()
+            search_match = bool(search_query and hasattr(view, "_row_matches_search") and view._row_matches_search(row))
+            current_search_match = bool(search_match and row == getattr(view, "_search_current_row", -1))
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
             if kind == "group" and hasattr(view, "group_progress"):
@@ -242,6 +245,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 bg = _mix(bg, type_color, 0.10)
             if linked_target and not playing:
                 bg = _mix(bg, COLORS.get("accent", type_color), 0.13)
+            if search_match and not playing:
+                bg = _mix(bg, COLORS.get("accent", type_color), 0.10 if not current_search_match else 0.18)
             if group_drop_target and kind == "group" and not playing:
                 bg = _mix(bg, COLORS.get("success", type_color), 0.18)
             if flashed:
@@ -258,6 +263,10 @@ class TimelineDelegate(QStyledItemDelegate):
                 border = _mix(COLORS["border_light"], type_color, 0.55)
             if linked_target:
                 border = COLORS.get("accent", type_color)
+            if search_match:
+                border = COLORS.get("accent", type_color)
+            if current_search_match:
+                border = COLORS.get("warning", COLORS.get("accent", type_color))
             if group_drop_target and kind == "group":
                 border = COLORS.get("success", type_color)
             if dragging or flashed:
@@ -309,13 +318,13 @@ class TimelineDelegate(QStyledItemDelegate):
                     self._rounded_rect(painter, shadow, 8, shadow_col.name(QColor.NameFormat.HexArgb))
                 self._rounded_rect(painter, outer, 8, bg, border, 1)
 
-            search_active = bool((getattr(view, "_search", "") or "").strip())
-            if search_active and hasattr(view, "_row_matches_search") and view._row_matches_search(row):
-                search_border = QColor(COLORS.get("accent", type_color))
-                search_border.setAlpha(145 if row == getattr(view, "_search_focus_row", -1) else 84)
-                painter.setPen(QPen(search_border, 1.4 if row == getattr(view, "_search_focus_row", -1) else 1.0))
+            if current_search_match and not playing:
+                glow_rect = QRectF(outer).adjusted(1.5, 1.5, -1.5, -1.5)
+                glow_col = QColor(COLORS.get("warning", COLORS.get("accent", type_color)))
+                glow_col.setAlpha(150)
+                painter.setPen(QPen(glow_col, 1.7))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(QRectF(outer).adjusted(1, 1, -1, -1), 8, 8)
+                painter.drawRoundedRect(glow_rect, 7, 7)
 
             # Compact-aware layout. Timeline metadata stays visible at every
             # supported window size; only the progress rail flexes horizontally.
@@ -657,7 +666,7 @@ class TimelineView(QListView):
         self.image_states = {}
         self._search = ""
         self._quick_filter = "all"
-        self._search_focus_row = -1
+        self._search_current_row = -1
         self._drag_start_row = -1
         self._drag_allowed = False
         self.drag_source_row = -1
@@ -1540,9 +1549,53 @@ class TimelineView(QListView):
             self.ensure_visible(index)
 
     def set_quick_filter(self, value: str):
-        self._quick_filter = (value or "all").strip().lower()
+        """Apply the toolbar mode filter and keep search navigation stable."""
+        self._quick_filter = (value or "all").strip().lower().replace("_", " ")
+        self._search_current_row = -1
+        matches = self.search_match_rows()
+        if matches and (self._search or self._quick_filter not in {"", "all"}):
+            self._search_current_row = matches[0] if self._search else -1
+            if self._search:
+                self.set_active(matches[0])
+                self.ensure_visible(matches[0])
         self.doItemsLayout()
         self.viewport().update()
+
+    def _searchable_text_for_row(self, row: int) -> str:
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return ""
+        action = actions[row]
+        meta = self.group_badge(row)
+        kind = getattr(action, "action_type", "key") or "key"
+        title, detail = _action_text(action)
+        values = [
+            str(row + 1), f"row {row + 1}", kind, title, detail,
+            getattr(action, "label", ""), getattr(action, "key", ""),
+            getattr(action, "group_name", ""), getattr(action, "condition_type", ""),
+            getattr(action, "condition_var_name", ""), getattr(action, "condition_var_value", ""),
+            getattr(action, "condition_color", ""), getattr(action, "click_button", ""),
+            getattr(action, "click_coord_mode", ""), getattr(action, "search_region", ""),
+            getattr(action, "fail_mode", ""), getattr(action, "on_fail", ""),
+            getattr(action, "action_type", ""),
+        ]
+        for attr in (
+            "click_x", "click_y", "click_rand_radius", "duration", "repeat_count",
+            "loop_count", "loop_target", "wait_timeout", "similarity",
+            "retry_count", "retry_delay", "condition_x", "condition_y",
+            "condition_jump_true", "condition_jump_false", "fail_target",
+        ):
+            try:
+                values.append(str(getattr(action, attr, "")))
+            except Exception:
+                pass
+        if meta:
+            values.extend([meta.get("badge", ""), meta.get("name", ""), meta.get("role", "")])
+        if not bool(getattr(action, "enabled", True)):
+            values.extend(["disabled", "off"])
+        if kind == "image" and not getattr(action, "image_data", ""):
+            values.extend(["warning", "missing", "template"])
+        return " ".join(str(v or "") for v in values).lower()
 
     def _row_matches_search(self, row: int) -> bool:
         query = (self._search or "").strip().lower()
@@ -1554,36 +1607,70 @@ class TimelineView(QListView):
         action = actions[row]
         meta = self.group_badge(row)
         kind = getattr(action, "action_type", "key") or "key"
-        haystack = " ".join(str(x or "") for x in (
-            getattr(action, "label", ""), getattr(action, "key", ""), kind,
-            getattr(action, "group_name", ""), getattr(action, "condition_type", ""),
-            meta.get("badge", "") if meta else "", meta.get("name", "") if meta else "",
-        )).lower()
+        haystack = self._searchable_text_for_row(row)
         tokens = [t for t in query.replace(",", " ").split() if t]
         for token in tokens:
             if ":" in token:
                 field, value = token.split(":", 1)
-                if field in {"type", "kind"} and kind != value:
-                    return False
+                field = field.strip().lower()
+                value = value.strip().lower()
+                if not value:
+                    continue
+                if field in {"type", "kind", "action"}:
+                    if kind != value:
+                        return False
+                    continue
+                if field in {"label", "name"}:
+                    if value not in str(getattr(action, "label", "")).lower() and value not in str(getattr(action, "group_name", "")).lower():
+                        return False
+                    continue
                 if field == "group":
                     g = ((meta.get("badge", "") + " " + meta.get("name", "")) if meta else "").lower()
                     if value not in g:
                         return False
-                if field == "status":
-                    if value == "disabled" and bool(getattr(action, "enabled", True)):
+                    continue
+                if field in {"status", "state"}:
+                    if value in {"disabled", "off"} and bool(getattr(action, "enabled", True)):
                         return False
-                    if value in {"warn", "warning", "error"} and bool(getattr(action, "enabled", True)) and not (kind == "image" and not getattr(action, "image_data", "")):
+                    if value in {"enabled", "on"} and not bool(getattr(action, "enabled", True)):
                         return False
+                    if value in {"warn", "warning", "missing", "error"} and not self._row_has_warning(row):
+                        return False
+                    continue
                 if field == "key" and value not in str(getattr(action, "key", "")).lower():
                     return False
-                if field == "image" and not (kind == "image" and value in "template image".lower()):
+                if field in {"row", "#"} and value != str(row + 1):
+                    return False
+                if field in {"image", "template"}:
+                    if kind != "image" or value not in haystack:
+                        return False
+                    continue
+                if f"{field}:{value}" not in haystack and value not in haystack:
                     return False
             elif token not in haystack:
                 return False
         return True
 
+    def _row_has_warning(self, row: int) -> bool:
+        actions = self._actions()
+        if row < 0 or row >= len(actions):
+            return False
+        action = actions[row]
+        kind = getattr(action, "action_type", "key") or "key"
+        if not bool(getattr(action, "enabled", True)):
+            return True
+        if kind == "image" and not getattr(action, "image_data", ""):
+            return True
+        if kind == "loop" and _safe_int(getattr(action, "loop_target", -1), -1) < 0:
+            return True
+        if kind == "condition":
+            ctype = getattr(action, "condition_type", "none") or "none"
+            if ctype in {"", "none"}:
+                return True
+        return False
+
     def _row_matches_quick_filter(self, row: int) -> bool:
-        filt = (self._quick_filter or "all").strip().lower()
+        filt = (self._quick_filter or "all").lower().replace("_", " ")
         if filt in {"", "all", "all actions"}:
             return True
         actions = self._actions()
@@ -1591,82 +1678,95 @@ class TimelineView(QListView):
             return False
         action = actions[row]
         kind = getattr(action, "action_type", "key") or "key"
-        if kind == "pause":
-            kind = "delay"
-        if filt in {"key", "keys"}:
-            return kind == "key"
-        if filt in {"click", "clicks"}:
-            return kind == "click"
-        if filt in {"delay", "delays", "pause", "pauses"}:
-            return kind in {"delay", "pause"}
-        if filt in {"image", "images", "image actions"}:
-            return kind == "image"
-        if filt in {"condition", "conditions"}:
-            return kind == "condition"
-        if filt in {"loop", "loops"}:
-            return kind == "loop"
-        if filt in {"group", "groups"}:
-            return kind == "group"
-        if filt in {"selected", "selected only"}:
+        aliases = {
+            "key actions": "key", "keys": "key",
+            "click actions": "click", "clicks": "click",
+            "delay actions": "delay", "delays": "delay", "pause": "pause", "pauses": "pause",
+            "image actions": "image", "images": "image",
+            "condition actions": "condition", "conditions": "condition",
+            "loop actions": "loop", "loops": "loop",
+            "group headers": "group", "groups": "group",
+        }
+        target = aliases.get(filt, filt)
+        if target == "delay":
+            return kind in {"pause", "delay"} or getattr(action, "key", "") in {"[PAUSE]", "[DELAY]"}
+        if target in {"key", "click", "image", "condition", "loop", "group", "pause"}:
+            return kind == target
+        if filt == "selected":
             return row in getattr(self, "selected_indices", set())
-        if filt in {"disabled", "disabled actions"}:
+        if filt == "disabled":
             return not bool(getattr(action, "enabled", True))
-        if filt in {"warnings", "warning", "errors", "error", "errors / warnings", "warnings / missing data"}:
-            return (not bool(getattr(action, "enabled", True))) or (kind == "image" and not getattr(action, "image_data", ""))
-        if filt in {"current group", "active group"}:
-            if not self.active_group_id:
+        if filt in {"warnings", "warnings / missing data", "missing", "errors"}:
+            return self._row_has_warning(row)
+        if filt == "current group":
+            target_gid = self.active_group_id
+            target_header_row = -1
+            if not target_gid:
+                try:
+                    active = self.currentIndex().row() if self.currentIndex().isValid() else -1
+                except Exception:
+                    active = -1
+                meta = self.group_badge(active) if active >= 0 else None
+                if meta:
+                    target_gid = meta.get("gid", "")
+                    target_header_row = int(meta.get("row", -1))
+            if not target_gid:
                 return True
-            return getattr(action, "group_id", "") == self.active_group_id
+            return getattr(action, "group_id", "") == target_gid or row == target_header_row
         return True
 
     def is_row_filtered_hidden(self, row: int) -> bool:
         return not (self._row_matches_search(row) and self._row_matches_quick_filter(row))
 
-    def search_match_rows(self):
-        if not (self._search or "").strip():
-            return []
-        rows = []
-        for row in range(self.model().rowCount()):
-            if self.is_row_collapsed_hidden(row):
-                continue
-            if self._row_matches_search(row) and self._row_matches_quick_filter(row):
-                rows.append(row)
-        return rows
+    def visible_match_rows(self):
+        return [
+            row for row in range(self.model().rowCount())
+            if not self.is_row_collapsed_hidden(row) and not self.is_row_filtered_hidden(row)
+        ]
 
-    def jump_to_search_match(self, direction: int = 1) -> int:
+    def search_match_rows(self):
+        # When a text search is active, this means actual text-search matches
+        # after the current mode filter.  With no text, it returns the rows
+        # visible under the current mode filter so the toolbar can show counts.
+        return self.visible_match_rows()
+
+    def current_search_match_position(self):
         rows = self.search_match_rows()
         if not rows:
-            self._search_focus_row = -1
+            return 0, 0
+        current = self._search_current_row if self._search_current_row in rows else rows[0]
+        return rows.index(current) + 1, len(rows)
+
+    def jump_to_search_match(self, direction=1):
+        rows = self.search_match_rows()
+        if not rows:
+            self._search_current_row = -1
             self.viewport().update()
             return -1
-        direction = 1 if int(direction or 1) >= 0 else -1
-        current = self.currentIndex().row() if self.currentIndex().isValid() else self._search_focus_row
+        direction = -1 if int(direction or 1) < 0 else 1
+        current = self._search_current_row
         if current not in rows:
-            if direction > 0:
-                chosen = next((r for r in rows if r > current), rows[0])
+            try:
+                active = int(getattr(self, "active_index", -1))
+            except Exception:
+                active = -1
+            if active in rows:
+                current = active
             else:
-                chosen = next((r for r in reversed(rows) if r < current), rows[-1])
-        else:
-            pos = rows.index(current)
-            chosen = rows[(pos + direction) % len(rows)]
-        self._search_focus_row = chosen
-        idx = self.model().index(chosen, 0)
-        self.setCurrentIndex(idx)
-        sel = self.selectionModel()
-        if sel is not None:
-            sel.select(idx, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
-        self.sync_selection()
-        try:
-            self.selection_summary_changed.emit(self.selected_rows())
-        except Exception:
-            pass
-        try:
-            self.action_clicked.emit(chosen)
-        except Exception:
-            pass
-        self.ensure_visible(chosen)
+                current = rows[-1] if direction < 0 else rows[0]
+                self._search_current_row = current
+                self.set_active(current)
+                self.ensure_visible(current)
+                self.viewport().update()
+                return current
+        idx = rows.index(current)
+        idx = (idx + direction) % len(rows)
+        row = rows[idx]
+        self._search_current_row = row
+        self.set_active(row)
+        self.ensure_visible(row)
         self.viewport().update()
-        return chosen
+        return row
 
     def drop_feedback_text(self, row: int) -> str:
         meta = self.group_badge(row)
@@ -1676,17 +1776,12 @@ class TimelineView(QListView):
 
     def set_search(self, text: str):
         self._search = (text or "").strip().lower()
-        first = -1
-        for row in range(self.model().rowCount()):
-            if not self.is_row_collapsed_hidden(row) and not self.is_row_filtered_hidden(row):
-                first = row
-                break
+        rows = self.search_match_rows()
+        first = rows[0] if rows else -1
+        self._search_current_row = first if self._search and first >= 0 else -1
         if first >= 0 and self._search:
-            self._search_focus_row = first
             self.set_active(first)
             self.ensure_visible(first)
-        elif not self._search:
-            self._search_focus_row = -1
         self.doItemsLayout()
         self.viewport().update()
 

@@ -1593,11 +1593,15 @@ def build_main_layout(window):
             action.setChecked(action_slug == slug)
         try:
             self.timeline.set_quick_filter(slug)
+            rows = self.timeline.search_match_rows()
+            visible_count = len(rows)
         except Exception:
-            pass
-        self.mode_filter_btn.setToolTip(f"Mode filters: {label}")
+            visible_count = 0
+        self.mode_filter_btn.setToolTip(f"Mode filters: {label} · {visible_count} visible")
         try:
-            self.status(f"Filter: {label}")
+            if hasattr(self, "tl_search") and self.tl_search.text().strip():
+                _refresh_timeline_search_feedback(push_status=False)
+            self.status(f"Filter: {label} · {visible_count} visible")
         except Exception:
             pass
 
@@ -1686,18 +1690,29 @@ def build_main_layout(window):
 
     def _refresh_timeline_search_feedback(push_status=False):
         text = self.tl_search.text().strip() if hasattr(self, "tl_search") else ""
-        if not text:
-            self.tl_search_result_label.setText("Type to search")
-            return
         try:
             matches = self.timeline.search_match_rows()
         except Exception:
             matches = []
         count = len(matches)
-        self.tl_search_result_label.setText("No matches" if count == 0 else f"{count} match" + ("" if count == 1 else "es"))
+        if not text:
+            current_filter = getattr(self, "_current_timeline_filter", "All actions")
+            self.tl_search_result_label.setText("Type to search" if current_filter == "All actions" else f"{count} visible")
+            return
+        try:
+            pos, total = self.timeline.current_search_match_position()
+        except Exception:
+            pos, total = (0, count)
+        if count == 0:
+            label = "No matches"
+        elif pos and total:
+            label = f"{pos}/{total} matches"
+        else:
+            label = f"{count} match" + ("" if count == 1 else "es")
+        self.tl_search_result_label.setText(label)
         if push_status:
             try:
-                self.status("Search: no matches" if count == 0 else f"Search: {count} match" + ("" if count == 1 else "es"))
+                self.status("Search: no matches" if count == 0 else f"Search: {label}")
             except Exception:
                 pass
 
@@ -1716,7 +1731,9 @@ def build_main_layout(window):
         _refresh_timeline_search_feedback(push_status=True)
         if row >= 0:
             try:
-                self.status(f"Search result: action {row + 1}")
+                pos, total = self.timeline.current_search_match_position()
+                suffix = f" ({pos}/{total})" if total else ""
+                self.status(f"Search result: action {row + 1}{suffix}")
             except Exception:
                 pass
 
@@ -1734,6 +1751,7 @@ def build_main_layout(window):
             pass
 
     self.tl_search.textChanged.connect(_timeline_search_changed)
+    self.tl_search.returnPressed.connect(lambda: _jump_timeline_search(1))
     self.tl_search_prev_btn.clicked.connect(lambda checked=False: _jump_timeline_search(-1))
     self.tl_search_next_btn.clicked.connect(lambda checked=False: _jump_timeline_search(1))
     self.tl_search_clear_btn.clicked.connect(lambda checked=False: _clear_timeline_search())
