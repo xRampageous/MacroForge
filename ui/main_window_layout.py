@@ -1,6 +1,6 @@
 """Main layout construction for MacroForge main window."""
 
-from PyQt6.QtCore import Qt, QSize, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QMenu,
+    QWidgetAction,
     QSlider,
     QSpinBox,
     QSizePolicy,
@@ -71,74 +73,11 @@ def build_main_layout(window):
     self._panel_collapse_controls = {}
     self._collapse_animations = {}
 
-    def _settle_collapsible_body(body_widget, caret):
-        """Apply the caret's collapsed state immediately and clear stale clamps."""
-        if body_widget is None or caret is None:
-            return
-        try:
-            collapsed = bool(caret.property("collapsed"))
-            parent = body_widget.parentWidget()
-            parent_name = parent.objectName() if parent is not None else ""
-            body_widget.setMinimumHeight(0)
-            if collapsed:
-                current_hint = max(
-                    int(body_widget.height()),
-                    int(body_widget.sizeHint().height()),
-                    int(body_widget.minimumSizeHint().height()),
-                    int(body_widget.property("expanded_height_hint") or 0),
-                    1,
-                )
-                body_widget.setProperty("expanded_height_hint", current_hint)
-                body_widget.setMaximumHeight(0)
-                body_widget.setVisible(False)
-            else:
-                body_widget.setVisible(True)
-                body_widget.setMaximumHeight(16777215)
-
-            if parent is not None:
-                parent.setMinimumHeight(0)
-                if collapsed:
-                    parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
-                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-                else:
-                    parent.setMaximumHeight(16777215)
-                    if parent_name == "inspector_card":
-                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-                    else:
-                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-                parent.updateGeometry()
-            body_widget.updateGeometry()
-        except Exception:
-            pass
-
-    def _settle_active_collapse_animations():
-        """Stop active panel animations and snap each panel to its requested state.
-
-        This is used only during live window resizing so the resize handle is not
-        fighting QPropertyAnimation updates on maximumHeight.
-        """
-        try:
-            for anim in list(self._collapse_animations.values()):
-                try:
-                    anim.stop()
-                except Exception:
-                    pass
-            self._collapse_animations.clear()
-            for body_widget, caret in list(self._panel_collapse_controls.values()):
-                _settle_collapsible_body(body_widget, caret)
-            if hasattr(self, "_autosize_inspector_panel"):
-                self._autosize_inspector_panel()
-        except Exception:
-            pass
-
-    self._settle_active_collapse_animations = _settle_active_collapse_animations
-
-    def _toggle_collapsible_body(body_widget, caret, animate=True):
+    def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
         caret.setText("v" if collapsed else "^")
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
-        animate = bool(animate) and not bool(getattr(self, "_suppress_auto_panel_animations", False))
 
         parent = body_widget.parentWidget()
         parent_name = parent.objectName() if parent is not None else ""
@@ -149,31 +88,6 @@ def build_main_layout(window):
                 previous_anim.stop()
             except Exception:
                 pass
-
-        def _natural_body_height():
-            """Measure the expanded body even after it has been hidden/clamped."""
-            try:
-                old_visible = body_widget.isVisible()
-                old_max = body_widget.maximumHeight()
-                body_widget.setVisible(True)
-                body_widget.setMaximumHeight(16777215)
-                body_widget.updateGeometry()
-                if parent is not None:
-                    parent.setMaximumHeight(16777215)
-                    parent.updateGeometry()
-                measured = max(
-                    int(body_widget.sizeHint().height()),
-                    int(body_widget.minimumSizeHint().height()),
-                    int(body_widget.property("expanded_height_hint") or 0),
-                    1,
-                )
-                body_widget.setProperty("expanded_height_hint", measured)
-                if collapsed:
-                    body_widget.setMaximumHeight(old_max)
-                    body_widget.setVisible(old_visible)
-                return measured
-            except Exception:
-                return max(int(body_widget.property("expanded_height_hint") or 0), 1)
 
         def _finish_parent():
             if parent is None:
@@ -190,44 +104,28 @@ def build_main_layout(window):
                 else:
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             parent.updateGeometry()
-            if hasattr(self, "_autosize_inspector_panel"):
+            if parent_name == "inspector_card" and hasattr(self, "_autosize_inspector_panel"):
                 self._autosize_inspector_panel()
-                QTimer.singleShot(0, self._autosize_inspector_panel)
-            if hasattr(self, "_refresh_unlocked_selection_height"):
-                QTimer.singleShot(25, self._refresh_unlocked_selection_height)
 
         try:
             body_widget.setMinimumHeight(0)
             if collapsed:
                 start_h = max(body_widget.height(), body_widget.sizeHint().height(), 1)
-                body_widget.setProperty("expanded_height_hint", start_h)
                 end_h = 0
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(start_h)
             else:
-                # Release the parent clamp before the body expands.  The previous
-                # implementation waited until animation finish, which clipped the
-                # visible expand motion for Inspector sub-panels.
-                if parent is not None:
-                    parent.setMaximumHeight(16777215)
-                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-                    parent.updateGeometry()
                 body_widget.setVisible(True)
                 start_h = max(0, body_widget.height())
                 if start_h <= 1:
                     start_h = 0
-                end_h = _natural_body_height()
+                body_widget.setMaximumHeight(16777215)
+                body_widget.updateGeometry()
+                end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
                 body_widget.setMaximumHeight(start_h)
-                body_widget.updateGeometry()
-
-            if not animate:
-                _settle_collapsible_body(body_widget, caret)
-                _finish_parent()
-                body_widget.updateGeometry()
-                return
 
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            anim.setDuration(105 if collapsed else 115)
+            anim.setDuration(145)
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             anim.setStartValue(start_h)
             anim.setEndValue(end_h)
@@ -251,14 +149,12 @@ def build_main_layout(window):
                 body_widget.setMaximumHeight(0)
                 body_widget.setVisible(False)
             else:
-                if parent is not None:
-                    parent.setMaximumHeight(16777215)
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
             _finish_parent()
         body_widget.updateGeometry()
 
-    def _set_collapsible_panel(body_name, collapsed, auto=False, animate=None):
+    def _set_collapsible_panel(body_name, collapsed, auto=False):
         body_widget, caret = self._panel_collapse_controls.get(body_name, (None, None))
         if body_widget is None or caret is None:
             return False
@@ -267,8 +163,6 @@ def build_main_layout(window):
         user_collapsed = bool(body_widget.property("user_collapsed"))
         auto_collapsed = bool(body_widget.property("auto_collapsed"))
         current = bool(caret.property("collapsed"))
-        if animate is None:
-            animate = not (auto and bool(getattr(self, "_suppress_auto_panel_animations", False)))
 
         if auto:
             # Auto-height recovery must not reopen a panel the user explicitly
@@ -283,41 +177,10 @@ def build_main_layout(window):
             body_widget.setProperty("auto_collapsed", False)
 
         if current != collapsed:
-            _toggle_collapsible_body(body_widget, caret, animate=animate)
-        elif not bool(animate):
-            _settle_collapsible_body(body_widget, caret)
+            _toggle_collapsible_body(body_widget, caret)
         return True
 
     self._set_collapsible_panel = _set_collapsible_panel
-
-    def _bind_collapse_header_click(widget, body_widget):
-        """Let the panel header/title toggle too; the caret still remains the visible control."""
-        if widget is None or body_widget is None:
-            return
-        try:
-            widget.setCursor(Qt.CursorShape.PointingHandCursor)
-            widget.setToolTip("Collapse/expand panel")
-            def _mouse_press(event, body=body_widget):
-                try:
-                    if event.button() == Qt.MouseButton.LeftButton:
-                        caret = self._panel_collapse_controls.get(body.objectName(), (None, None))[1]
-                        if caret is not None:
-                            self._set_collapsible_panel(
-                                body.objectName(),
-                                not bool(caret.property("collapsed")),
-                                auto=False,
-                            )
-                            event.accept()
-                            return
-                except Exception:
-                    pass
-                try:
-                    QWidget.mousePressEvent(widget, event)
-                except Exception:
-                    pass
-            widget.mousePressEvent = _mouse_press
-        except Exception:
-            pass
 
     def section_header(text, icon_name, color, body_widget=None):
         row = QHBoxLayout()
@@ -361,8 +224,6 @@ def build_main_layout(window):
                     auto=False,
                 )
             )
-            for clickable in (left_balance, title_wrap, ico, lbl):
-                _bind_collapse_header_click(clickable, body_widget)
             row.addWidget(caret)
         else:
             caret = QLabel("^")
@@ -470,8 +331,6 @@ def build_main_layout(window):
                 auto=False,
             )
         )
-        for clickable in (left_balance, title_wrap, ico, lbl):
-            _bind_collapse_header_click(clickable, body)
         head.addWidget(caret)
         lo.addLayout(head)
         lo.addWidget(body)
@@ -1075,28 +934,16 @@ def build_main_layout(window):
     self._height_auto_image_on_fail_expand = 970
     self._height_auto_image_fail_target_collapse = 840
     self._height_auto_image_fail_target_expand = 910
-    # Main right-stack panels must react during normal vertical resize ranges,
-    # not only near the absolute minimum height.  These values give the user
-    # visible feedback while shrinking from the default 1100px window height,
-    # with hysteresis so sections do not chatter while dragging.
-    self._height_auto_inspector_collapse = 1000
-    self._height_auto_inspector_expand = 1080
-    self._height_auto_recorder_collapse = 890
-    self._height_auto_recorder_expand = 970
-    self._height_auto_add_collapse = 780
-    self._height_auto_add_expand = 860
+    self._height_auto_inspector_collapse = 760
+    self._height_auto_inspector_expand = 840
+    self._height_auto_recorder_collapse = 650
+    self._height_auto_recorder_expand = 720
+    self._height_auto_add_collapse = 540
+    self._height_auto_add_expand = 610
     self.sidebar_frame = sidebar
     self.add_action_body = add_body
     self.recorder_body = rec_body
     self.insp_card = insp_card
-    try:
-        # Some platforms send rapid resize notifications to child widgets before
-        # the QMainWindow settle pass.  Watch the sidebar/central widgets too so
-        # height-responsive panels react while the user is still dragging.
-        sidebar.installEventFilter(self)
-        central.installEventFilter(self)
-    except Exception:
-        pass
 
     def _set_side_panel_collapsed(collapsed, auto=False):
         collapsed = bool(collapsed)
@@ -1121,17 +968,9 @@ def build_main_layout(window):
         self.sidebar_collapse_btn.setText(">" if collapsed else "<")
         self.sidebar_collapse_btn.setToolTip("Expand side panel" if collapsed else "Collapse side panel")
         sb_lo.setSpacing(0 if collapsed else 8)
-        settler = getattr(self, "_settle_active_collapse_animations", None)
-        if settler is not None:
-            QTimer.singleShot(0, settler)
-        if not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
-            if collapsed:
-                if hasattr(self, "_auto_grow_for_collapsed_side_panel"):
-                    self._auto_grow_for_collapsed_side_panel()
-            else:
-                if hasattr(self, "_auto_grow_after_side_panel_expand"):
-                    QTimer.singleShot(0, self._auto_grow_after_side_panel_expand)
-                    QTimer.singleShot(35, self._auto_grow_after_side_panel_expand)
+        if collapsed and not bool(getattr(self, "_side_panel_locked", False)) and not bool(getattr(self, "_bottom_panel_locked", False)):
+            if hasattr(self, "_auto_grow_for_collapsed_side_panel"):
+                self._auto_grow_for_collapsed_side_panel()
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
 
@@ -1169,91 +1008,106 @@ def build_main_layout(window):
     dock_lo.setContentsMargins(7, 6, 7, 6)
     dock_lo.setSpacing(5)
 
-    def header_icon_button(obj, icon_name, color, tooltip, slot):
+    def header_separator():
+        sep = QFrame()
+        sep.setObjectName("toolbar_separator")
+        sep.setFixedSize(1, 28)
+        sep.setStyleSheet(
+            f"QFrame#toolbar_separator {{ background-color: {C['border']}; "
+            "border: none; border-radius: 1px; }}"
+        )
+        return sep
+
+    def header_icon_button(obj, icon_name, color, tooltip, slot=None, width=38, grouped=False):
         btn = QPushButton()
         btn.setObjectName(obj)
-        btn.setIcon(icon(icon_name, 15, color))
-        btn.setIconSize(QSize(15, 15))
+        btn.setIcon(icon(icon_name, 18, color))
+        btn.setIconSize(QSize(18, 18))
         btn.setToolTip(tooltip)
-        btn.setFixedSize(30, 32)
+        btn.setFixedSize(width, 38)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        radius = 9 if not grouped else 8
+        border_color = C["border"] if not grouped else "transparent"
+        bg = C["bg_tertiary"] if not grouped else "transparent"
         btn.setStyleSheet(
-            f"QPushButton#{obj} {{ background-color: {C['bg_tertiary']}; color: {color}; "
-            f"border: 1px solid {C['border']}; border-radius: 8px; padding: 0; }}"
+            f"QPushButton#{obj} {{ background-color: {bg}; color: {color}; "
+            f"border: 1px solid {border_color}; border-radius: {radius}px; padding: 0; }}"
             f"QPushButton#{obj}:hover {{ border-color: {color}; background-color: {C['bg_hover']}; }}"
             f"QPushButton#{obj}:checked {{ border-color: {color}; background-color: {C['accent_glow']}; }}"
+            f"QPushButton#{obj}::menu-indicator {{ image: none; width: 0px; }}"
         )
-        btn.clicked.connect(slot)
+        if slot is not None:
+            btn.clicked.connect(slot)
         return btn
 
     tools = QFrame()
     tools.setObjectName("toolbar_group")
+    tools.setFixedHeight(42)
     tools.setStyleSheet(
         f"QFrame#toolbar_group {{ background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 10px; }}"
+        f"border: 1px solid {C['border']}; border-radius: 12px; }}"
     )
     tools_lo = QHBoxLayout(tools)
-    tools_lo.setContentsMargins(2, 0, 2, 0)
-    tools_lo.setSpacing(0)
-    self.editor_mode_btn = header_icon_button("editor_mode_btn", "edit", C["accent"], "Open macro editor mode", self.open_macro_editor)
-    self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report)
-    self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel)
+    tools_lo.setContentsMargins(3, 2, 3, 2)
+    tools_lo.setSpacing(1)
+    self.editor_mode_btn = header_icon_button("editor_mode_btn", "magic", C["accent"], "Open macro editor mode", self.open_macro_editor, grouped=True)
+    self.preflight_btn = header_icon_button("preflight_btn", "check", C["success"], "Run macro health / pre-flight checker", self.open_preflight_report, grouped=True)
+    self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel, grouped=True)
     self.runtime_log_btn.setCheckable(True)
-    self.compact_view_btn = header_icon_button("view_toggle", "menu", C["accent"], "Timeline list view", lambda: None)
-    self.compact_view_btn.setCheckable(True)
-    self.compact_view_btn.setChecked(True)
-    for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.compact_view_btn):
+    self.mode_filter_btn = header_icon_button("mode_filter_btn", "menu", C["accent"], "Mode filters", None, width=46, grouped=True)
+    self.compact_view_btn = self.mode_filter_btn
+    for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.mode_filter_btn):
         tools_lo.addWidget(btn)
     dock_lo.addWidget(tools)
 
-    self.tl_filter = QComboBox()
-    self.tl_filter.addItems(["All", "Images", "Loops", "Conditions", "Groups", "Warnings", "Current group"])
-    self.tl_filter.setFixedSize(48, 32)
-    self.tl_filter.setToolTip("Quick timeline filter")
-    self.tl_filter.currentTextChanged.connect(lambda t: self.timeline.set_quick_filter(t))
-    dock_lo.addWidget(self.tl_filter)
+    dock_lo.addSpacing(5)
+    dock_lo.addWidget(header_separator())
+    dock_lo.addSpacing(5)
 
-    self.tl_search = QLineEdit()
-    self.tl_search.setPlaceholderText("Search...")
-    self.tl_search.setClearButtonEnabled(True)
-    self.tl_search.setMinimumWidth(52)
-    self.tl_search.setMaximumWidth(80)
-    self.tl_search.setFixedHeight(32)
-    self.tl_search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    self.tl_search.addAction(icon("search", 15, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
-    self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
-    dock_lo.addWidget(self.tl_search, stretch=1)
-
-    self.profile_btn = QPushButton("Default Profile")
+    self.profile_btn = QPushButton("Default Profile  ▾")
     self.profile_btn.setObjectName("profile_switcher")
-    self.profile_btn.setIcon(icon("folder", 15, C["accent"]))
-    self.profile_btn.setIconSize(QSize(15, 15))
+    self.profile_btn.setIcon(icon("folder", 16, C["accent"]))
+    self.profile_btn.setIconSize(QSize(16, 16))
     self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     self.profile_btn.setToolTip("Switch profile")
-    self.profile_btn.setFixedSize(96, 32)
+    self.profile_btn.setFixedSize(164, 38)
     self.profile_btn.clicked.connect(self._show_profile_menu)
+    self.profile_btn.setStyleSheet(
+        f"QPushButton#profile_switcher {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 11px; padding: 0 12px; "
+        "font-size: 12px; font-weight: 800; text-align: left; }}"
+        f"QPushButton#profile_switcher:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
+    )
     dock_lo.addWidget(self.profile_btn)
 
-    self.update_top_btn = header_icon_button("update_top_btn", "update", C["accent"], "Check for updates", self._check_update_manual)
+    dock_lo.addSpacing(5)
+    dock_lo.addWidget(header_separator())
+    dock_lo.addSpacing(5)
+
+    # Compact search: the top bar stays icon-only, while Ctrl+F/click opens a
+    # small themed search popover connected to the existing timeline search API.
+    self.search_top_btn = header_icon_button("search_top_btn", "search", C["text_dim"], "Search timeline actions", None, width=38)
+    dock_lo.addWidget(self.search_top_btn)
+
+    self.update_top_btn = header_icon_button("update_top_btn", "update", C["accent"], "Check for updates", self._check_update_manual, width=38)
     dock_lo.addWidget(self.update_top_btn)
 
-    self.menu_top_btn = header_icon_button("menu_top_btn", "menu", C["text_dim"], "Menu", self._show_action_menu)
-    dock_lo.addWidget(self.menu_top_btn)
+    dock_lo.addStretch(1)
 
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
-    status_pill.setMinimumWidth(100)
-    status_pill.setMaximumWidth(130)
-    status_pill.setFixedHeight(32)
+    status_pill.setMinimumWidth(230)
+    status_pill.setMaximumWidth(520)
+    status_pill.setFixedHeight(38)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setStyleSheet(
         f"QFrame#status_pill {{ background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 10px; }}"
+        f"border: 1px solid {C['border']}; border-radius: 13px; }}"
     )
     self.status_pill = status_pill
     sp_lo = QHBoxLayout(status_pill)
-    sp_lo.setContentsMargins(8, 0, 8, 0)
-    sp_lo.setSpacing(5)
+    sp_lo.setContentsMargins(12, 0, 12, 0)
+    sp_lo.setSpacing(8)
     self.status_dot = StatusDot()
     self.status_dot.set_color(C["success"])
     self.status_dot.setFixedSize(13, 13)
@@ -1269,6 +1123,9 @@ def build_main_layout(window):
     self.status_text.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     self.status_text.setWordWrap(False)
     sp_lo.addWidget(self.status_text, stretch=1)
+
+    # Keep the autosave label object alive for existing save-session logic and
+    # tests, but remove its visible chip from the redesigned top toolbar.
     self.autosave_label = QLabel("Saved")
     self.autosave_label.setObjectName("autosave_label")
     self.autosave_label.setStyleSheet(
@@ -1277,8 +1134,75 @@ def build_main_layout(window):
         "border-radius: 7px; padding: 2px 6px; }}"
     )
     self.autosave_label.setToolTip("Profile autosave state")
-    sp_lo.addWidget(self.autosave_label)
+    self.autosave_label.setVisible(False)
     dock_lo.addWidget(status_pill)
+
+    toolbar_menu_style = (
+        f"QMenu {{ background-color: {C['bg_card']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 6px; }}"
+        f"QMenu::item {{ padding: 7px 22px 7px 12px; border-radius: 6px; }}"
+        f"QMenu::item:selected {{ background-color: {C['bg_hover']}; color: {C['accent']}; }}"
+        f"QMenu::separator {{ height: 1px; background: {C['border']}; margin: 5px 4px; }}"
+    )
+
+    self.mode_filter_menu = QMenu(self)
+    self.mode_filter_menu.setObjectName("mode_filter_menu")
+    self.mode_filter_menu.setStyleSheet(toolbar_menu_style)
+    self._current_timeline_filter = "All"
+
+    def _apply_timeline_filter(value):
+        self._current_timeline_filter = value
+        try:
+            self.timeline.set_quick_filter(value)
+        except Exception:
+            pass
+        self.mode_filter_btn.setToolTip(f"Mode filters: {value}")
+        try:
+            self.status(f"Timeline filter: {value}")
+        except Exception:
+            pass
+
+    for label in ("All", "Images", "Loops", "Conditions", "Groups", "Warnings", "Current group"):
+        act = self.mode_filter_menu.addAction(label)
+        act.triggered.connect(lambda checked=False, value=label: _apply_timeline_filter(value))
+
+    def _show_mode_filter_menu():
+        self.mode_filter_menu.popup(self.mode_filter_btn.mapToGlobal(self.mode_filter_btn.rect().bottomLeft()))
+
+    self.mode_filter_btn.clicked.connect(_show_mode_filter_menu)
+
+    self.tl_search_menu = QMenu(self)
+    self.tl_search_menu.setObjectName("timeline_search_menu")
+    self.tl_search_menu.setStyleSheet(toolbar_menu_style)
+    self.tl_search = QLineEdit()
+    self.tl_search.setPlaceholderText("Search actions...")
+    self.tl_search.setClearButtonEnabled(True)
+    self.tl_search.setFixedSize(260, 34)
+    self.tl_search.addAction(icon("search", 15, C["text_dim"]), QLineEdit.ActionPosition.LeadingPosition)
+    self.tl_search.setStyleSheet(
+        f"QLineEdit {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 5px 10px; "
+        "font-size: 12px; font-weight: 650; }}"
+        f"QLineEdit:focus {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
+    )
+    self.tl_search.textChanged.connect(lambda t: self.timeline.set_search(t))
+    search_action = QWidgetAction(self.tl_search_menu)
+    search_wrap = QFrame()
+    search_wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
+    search_lo = QVBoxLayout(search_wrap)
+    search_lo.setContentsMargins(6, 4, 6, 4)
+    search_lo.setSpacing(0)
+    search_lo.addWidget(self.tl_search)
+    search_action.setDefaultWidget(search_wrap)
+    self.tl_search_menu.addAction(search_action)
+
+    def _show_timeline_search_popup():
+        self.tl_search_menu.popup(self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft()))
+        QTimer.singleShot(0, self.tl_search.setFocus)
+        QTimer.singleShot(0, self.tl_search.selectAll)
+
+    self._show_timeline_search_popup = _show_timeline_search_popup
+    self.search_top_btn.clicked.connect(_show_timeline_search_popup)
 
     self.macro_summary = QLabel("0 actions - 0 image checks - ~0s")
     self.macro_summary.setVisible(False)

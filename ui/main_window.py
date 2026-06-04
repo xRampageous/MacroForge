@@ -1136,7 +1136,7 @@ class MainWindow(QMainWindow):
         bind("play_pause", "Space", self._toggle_play_pause_shortcut)
         bind("stop_deselect", "Escape", self._stop_or_deselect)
         bind("save", "Ctrl+S", lambda: (self._do_save_session(), self.status("Session saved")))
-        bind("search", "Ctrl+F", lambda: self.tl_search.setFocus())
+        bind("search", "Ctrl+F", lambda: (self._show_timeline_search_popup() if hasattr(self, "_show_timeline_search_popup") else self.tl_search.setFocus()))
         bind("run_from_selected", "Ctrl+Enter", self.test_from_selected_row)
         bind("macro_editor", "Ctrl+E", self.open_macro_editor)
         bind("record", "F7", self._toggle_record)
@@ -1859,7 +1859,7 @@ class MainWindow(QMainWindow):
     def _refresh_profile_btn(self):
         if hasattr(self, "profile_btn"):
             name = str(self.session_manager.active or "Default")
-            shown = name if len(name) <= 13 else f"{name[:10]}..."
+            shown = name if len(name) <= 18 else f"{name[:15]}..."
             self.profile_btn.setText(f"{shown}  \u25be")
 
     def _show_profile_menu(self):
@@ -4678,10 +4678,10 @@ class MainWindow(QMainWindow):
             try:
                 text_w = self.status_text.fontMetrics().horizontalAdvance(str(msg))
                 icon_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(108, min(140, text_w + icon_w + 24))
+                target_w = max(230, min(520, text_w + icon_w + 38))
                 if hasattr(self, "status_pill"):
                     self.status_pill.setMinimumWidth(target_w)
-                    self.status_pill.setMaximumWidth(150)
+                    self.status_pill.setMaximumWidth(520)
             except Exception:
                 pass
             # Update status icon based on state

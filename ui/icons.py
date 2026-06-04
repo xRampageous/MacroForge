@@ -117,6 +117,21 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         p.setBrush(brush)
         p.drawEllipse(int(s * 0.25), int(s * 0.25), int(s * 0.5), int(s * 0.5))
 
+
+    def _draw_magic(p, s):
+        # Wand with tiny sparkle accents for the top toolbar quick-action button.
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawLine(int(s * 0.24), int(s * 0.76), int(s * 0.70), int(s * 0.30))
+        p.drawLine(int(s * 0.63), int(s * 0.23), int(s * 0.77), int(s * 0.37))
+        p.drawLine(int(s * 0.57), int(s * 0.29), int(s * 0.71), int(s * 0.43))
+        # small sparkle top-left
+        p.drawLine(int(s * 0.22), int(s * 0.20), int(s * 0.22), int(s * 0.34))
+        p.drawLine(int(s * 0.15), int(s * 0.27), int(s * 0.29), int(s * 0.27))
+        # small sparkle right
+        p.drawLine(int(s * 0.82), int(s * 0.56), int(s * 0.82), int(s * 0.68))
+        p.drawLine(int(s * 0.76), int(s * 0.62), int(s * 0.88), int(s * 0.62))
+
     def _draw_key(p, s):
         # Keyboard silhouette with a few key rows
         p.setPen(pen)
@@ -348,6 +363,7 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
 
     dispatch = {
         "play": _draw_play, "pause": _draw_pause, "stop": _draw_stop,
+        "magic": _draw_magic,
         "record": _draw_record, "key": _draw_key, "click": _draw_click,
         "image": _draw_image, "delay": _draw_delay, "plus": _draw_plus,
         "trash": _draw_trash, "duplicate": _draw_duplicate, "edit": _draw_edit,
