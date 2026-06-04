@@ -73,6 +73,171 @@ def build_main_layout(window):
     self._panel_collapse_controls = {}
     self._collapse_animations = {}
 
+    _image_inspector_body_names = {
+        "inspector_group_image_body",
+        "inspector_group_matching_body",
+        "inspector_group_retry_body",
+        "inspector_group_on_fail_body",
+        "inspector_group_fail_target_body",
+    }
+
+    def _layout_item_natural_height(item):
+        try:
+            widget = item.widget()
+        except Exception:
+            widget = None
+        if widget is not None:
+            if not widget.isVisible():
+                return 0
+            vals = []
+            for getter in (widget.height, lambda: widget.sizeHint().height(), lambda: widget.minimumSizeHint().height()):
+                try:
+                    vals.append(int(getter()))
+                except Exception:
+                    pass
+            return max([0] + vals)
+        try:
+            return max(0, int(item.sizeHint().height()))
+        except Exception:
+            return 0
+
+    def _body_natural_height(body_widget):
+        if body_widget is None:
+            return 0
+        layout = body_widget.layout()
+        if layout is None:
+            try:
+                return max(0, int(body_widget.sizeHint().height()), int(body_widget.minimumSizeHint().height()))
+            except Exception:
+                return max(0, int(body_widget.height() or 0))
+        try:
+            layout.invalidate()
+            layout.activate()
+        except Exception:
+            pass
+        margins = layout.contentsMargins()
+        visible_count = 0
+        total = margins.top() + margins.bottom()
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            h = _layout_item_natural_height(item)
+            if h <= 0:
+                continue
+            total += h
+            visible_count += 1
+        if visible_count > 1:
+            total += max(0, int(layout.spacing())) * (visible_count - 1)
+        try:
+            total = max(total, int(layout.sizeHint().height()), int(body_widget.minimumSizeHint().height()))
+        except Exception:
+            pass
+        return max(0, total)
+
+    def _card_natural_height_for_body(card, body_widget, collapsed=False):
+        if card is None:
+            return 0
+        layout = card.layout()
+        if layout is None:
+            try:
+                return max(0, int(card.sizeHint().height()), int(card.minimumSizeHint().height()))
+            except Exception:
+                return 0
+        try:
+            layout.invalidate()
+            layout.activate()
+        except Exception:
+            pass
+        margins = layout.contentsMargins()
+        total = margins.top() + margins.bottom()
+        visible_count = 0
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            try:
+                widget = item.widget()
+            except Exception:
+                widget = None
+            if widget is body_widget:
+                h = 0 if collapsed else _body_natural_height(body_widget)
+            else:
+                h = _layout_item_natural_height(item)
+            if h <= 0:
+                continue
+            total += h
+            visible_count += 1
+        if visible_count > 1:
+            total += max(0, int(layout.spacing())) * (visible_count - 1)
+        try:
+            total = max(total, int(card.minimumSizeHint().height()))
+        except Exception:
+            pass
+        # Small border/padding cushion prevents Qt rounding from clipping the
+        # bottom row of controls and visually overlapping the next sub-panel.
+        return max(28, total + 6)
+
+    def _normalize_image_inspector_subpanel_heights(reason=""):
+        """Keep Image Inspector sub-panels from painting into each other.
+
+        Expanded bodies get a freshly measured parent-card height so the next
+        sub-panel is laid out below the real final size. Collapsed bodies stay
+        hidden/header-only. This helper only affects Image Inspector sections.
+        """
+        try:
+            controls = getattr(self, "_panel_collapse_controls", {})
+            for body_name in _image_inspector_body_names:
+                body, caret = controls.get(body_name, (None, None))
+                if body is None or caret is None:
+                    continue
+                card = body.parentWidget()
+                collapsed = bool(caret.property("collapsed"))
+                body.setMinimumHeight(0)
+                body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                if collapsed:
+                    body.setMaximumHeight(0)
+                    body.setVisible(False)
+                    if card is not None:
+                        card.setMinimumHeight(0)
+                        card.setMaximumHeight(_card_natural_height_for_body(card, body, collapsed=True))
+                        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                        card.updateGeometry()
+                else:
+                    body.setVisible(True)
+                    body.setMaximumHeight(16777215)
+                    body.updateGeometry()
+                    if body.layout() is not None:
+                        try:
+                            body.layout().invalidate()
+                            body.layout().activate()
+                        except Exception:
+                            pass
+                    if card is not None:
+                        card.setMinimumHeight(0)
+                        card.setMaximumHeight(_card_natural_height_for_body(card, body, collapsed=False))
+                        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                        card.updateGeometry()
+            image_pane = getattr(self, "insp_image", None)
+            if image_pane is not None:
+                image_pane.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                image_pane.updateGeometry()
+                if image_pane.layout() is not None:
+                    try:
+                        image_pane.layout().invalidate()
+                        image_pane.layout().activate()
+                    except Exception:
+                        pass
+            insp_card = getattr(self, "insp_card", None)
+            if insp_card is not None:
+                insp_card.setMinimumHeight(0)
+                insp_card.setMaximumHeight(16777215)
+                insp_card.updateGeometry()
+        except Exception:
+            pass
+
+    self._normalize_image_inspector_subpanel_heights = _normalize_image_inspector_subpanel_heights
+
     def _toggle_collapsible_body(body_widget, caret):
         collapsed = not bool(caret.property("collapsed"))
         caret.setProperty("collapsed", collapsed)
@@ -80,14 +245,7 @@ def build_main_layout(window):
         caret.setToolTip("Expand down" if collapsed else "Collapse up")
 
         body_name = body_widget.objectName() or ""
-        image_inspector_bodies = {
-            "inspector_group_image_body",
-            "inspector_group_matching_body",
-            "inspector_group_retry_body",
-            "inspector_group_on_fail_body",
-            "inspector_group_fail_target_body",
-        }
-        is_image_inspector_body = body_name in image_inspector_bodies
+        is_image_inspector_body = body_name in _image_inspector_body_names
 
         parent = body_widget.parentWidget()
         parent_name = parent.objectName() if parent is not None else ""
@@ -136,6 +294,14 @@ def build_main_layout(window):
                 if parent is not None:
                     parent.updateGeometry()
                 sidebar_frame = getattr(self, "sidebar_frame", None)
+                if is_image_inspector_body and parent is not None:
+                    # During live expansion keep the parent card unclamped so the
+                    # body can push following sub-panels down instead of drawing
+                    # through them. The final measured clamp is applied when the
+                    # animation finishes.
+                    parent.setMinimumHeight(0)
+                    parent.setMaximumHeight(16777215)
+                    parent.updateGeometry()
                 if sidebar_frame is not None:
                     layout = sidebar_frame.layout()
                     if layout is not None:
@@ -202,7 +368,13 @@ def build_main_layout(window):
                 body_widget.updateGeometry()
                 if parent is not None:
                     parent.updateGeometry()
-                end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
+                if is_image_inspector_body:
+                    end_h = max(_body_natural_height(body_widget), body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
+                    if parent is not None:
+                        parent.setMaximumHeight(16777215)
+                        parent.updateGeometry()
+                else:
+                    end_h = max(body_widget.sizeHint().height(), body_widget.minimumSizeHint().height(), 1)
                 body_widget.setMaximumHeight(start_h)
 
             anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
@@ -219,6 +391,10 @@ def build_main_layout(window):
                     body_widget.setVisible(True)
                     body_widget.setMaximumHeight(16777215)
                 _finish_parent()
+                if is_image_inspector_body:
+                    _normalize_image_inspector_subpanel_heights(reason=f"{body_name}.finished")
+                    _refresh_inspector_size(0)
+                    _refresh_inspector_size(80)
                 body_widget.updateGeometry()
                 self._collapse_animations.pop(anim_key, None)
                 _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 45, 120))
@@ -239,6 +415,10 @@ def build_main_layout(window):
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
             _finish_parent()
+            if is_image_inspector_body:
+                _normalize_image_inspector_subpanel_heights(reason=f"{body_name}.fallback")
+                _refresh_inspector_size(0)
+                _refresh_inspector_size(80)
             _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 45, 120))
         body_widget.updateGeometry()
         _side_panel_animation_tick()
@@ -360,6 +540,9 @@ def build_main_layout(window):
     def inspector_group(title, icon_name, color, show_info=False):
         card = QFrame()
         card.setObjectName(f"inspector_group_{title.lower().replace(' ', '_')}")
+        card.setMinimumHeight(0)
+        card.setMaximumHeight(16777215)
+        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         card.setStyleSheet(
             f"QFrame#{card.objectName()} {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
             f"stop:0 #04111D, stop:1 #00060E); border: 1px solid {C['border']}; "
@@ -370,6 +553,9 @@ def build_main_layout(window):
         lo.setSpacing(7)
         body = QWidget(card)
         body.setObjectName(f"{card.objectName()}_body")
+        body.setMinimumHeight(0)
+        body.setMaximumHeight(16777215)
+        body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         body_lo = QVBoxLayout(body)
         body_lo.setContentsMargins(0, 0, 0, 0)
         body_lo.setSpacing(7)
@@ -1166,6 +1352,10 @@ def build_main_layout(window):
                 guard.setFixedHeight(int(getattr(self, "_side_panel_bottom_guard_px", 2)))
                 guard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
                 guard.updateGeometry()
+
+            normalize_image_groups = getattr(self, "_normalize_image_inspector_subpanel_heights", None)
+            if callable(normalize_image_groups):
+                normalize_image_groups(reason=reason)
 
             if hasattr(self, "_autosize_inspector_panel"):
                 # Inspector content may have just gained/returned height.  Run

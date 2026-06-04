@@ -513,10 +513,28 @@ class MainWindow(QMainWindow):
                             min_hint_h = 0
                         natural_h += max(0, current_h, hint_h, min_hint_h)
 
+                    # Measure against the actual program content bottom, not just the
+                    # sidebar widget's internal height.  Sidebar margins/padding can make
+                    # the old sidebar-local guard fire a little early/late; mapping the
+                    # sidebar top into the central widget gives a guard anchored to the
+                    # real bottom edge of the app window.
                     try:
-                        available_h = int(sidebar.height())
+                        central = self.centralWidget()
                     except Exception:
-                        available_h = height
+                        central = None
+                    if central is not None:
+                        try:
+                            sidebar_top_y = int(sidebar.mapTo(central, sidebar.rect().topLeft()).y())
+                            available_h = int(central.rect().bottom()) + 1 - sidebar_top_y
+                        except Exception:
+                            available_h = 0
+                    else:
+                        available_h = 0
+                    if available_h <= 0:
+                        try:
+                            available_h = int(sidebar.height())
+                        except Exception:
+                            available_h = height
                     if available_h <= 0:
                         available_h = height
                     return max(0, natural_h), max(0, available_h)
@@ -1040,6 +1058,14 @@ class MainWindow(QMainWindow):
             card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
             if body is not None:
                 body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+
+            normalize_image_groups = getattr(self, "_normalize_image_inspector_subpanel_heights", None)
+            if callable(normalize_image_groups) and not bool(getattr(self, "_normalizing_image_inspector_heights", False)):
+                try:
+                    self._normalizing_image_inspector_heights = True
+                    normalize_image_groups(reason="autosize")
+                finally:
+                    self._normalizing_image_inspector_heights = False
 
             if body is not None and not body.isVisible():
                 # Collapsed Inspector: clamp to the header-only size.
