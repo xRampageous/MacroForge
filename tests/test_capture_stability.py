@@ -437,7 +437,7 @@ class TestPlaybackVisibility(QtTestCase):
 
             sidebar = window.findChild(QFrame, "mf3_sidebar")
             self.assertIsNotNone(sidebar)
-            self.assertEqual(sidebar.width(), 272)
+            self.assertEqual(sidebar.width(), 260)
             self.assertTrue(window.image_preview_label.property("has_template"))
             self.assertIsNotNone(window.image_preview_label.pixmap())
             self.assertFalse(window.image_preview_label.pixmap().isNull())

@@ -370,21 +370,18 @@ class MainWindow(QMainWindow):
                 margins = (5, 5, 7, 5)
                 spacing = 2
                 separator_visible = False
-                status_bounds = (108, 150)
             elif width < 860:
                 mode = "compact"
                 profile_w = int(getattr(self, "_toolbar_profile_compact_width", 132))
                 margins = (6, 5, 8, 5)
                 spacing = 3
                 separator_visible = True
-                status_bounds = (132, 210)
             else:
                 mode = "full"
                 profile_w = int(getattr(self, "_toolbar_profile_full_width", 164))
                 margins = (7, 5, 9, 5)
                 spacing = 4
                 separator_visible = True
-                status_bounds = (260, 390)
 
             if getattr(self, "_toolbar_profile_mode", None) != mode:
                 self._toolbar_profile_mode = mode
@@ -412,8 +409,7 @@ class MainWindow(QMainWindow):
             status_pill = getattr(self, "status_pill", None)
             if status_pill is not None:
                 try:
-                    status_pill.setMinimumWidth(status_bounds[0])
-                    status_pill.setMaximumWidth(status_bounds[1])
+                    status_pill.setFixedWidth(int(getattr(self, "_status_pill_fixed_width", 150)))
                 except Exception:
                     pass
 
@@ -5246,11 +5242,7 @@ class MainWindow(QMainWindow):
             # Keep the centered status capsule readable without letting it
             # crowd the profile/update/menu cluster on narrow windows.
             def _fit_status_pill_to_visible_text():
-                text_w = self.status_text.fontMetrics().horizontalAdvance(visible_msg)
-                chrome_w = 50 if getattr(self, "status_icon", None) and self.status_icon.isVisible() else 28
-                target_w = max(112, min(390, text_w + chrome_w + 30))
-                self.status_pill.setMinimumWidth(target_w)
-                self.status_pill.setMaximumWidth(target_w)
+                self.status_pill.setFixedWidth(int(getattr(self, "_status_pill_fixed_width", 150)))
             try:
                 if hasattr(self, "status_pill"):
                     _fit_status_pill_to_visible_text()

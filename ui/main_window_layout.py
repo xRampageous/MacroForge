@@ -282,7 +282,8 @@ def build_main_layout(window):
             if not is_image_inspector_body:
                 return
             for frame, height in (
-                (getattr(self, "ii_preview_frame", None), 166),
+                (getattr(self, "ii_preview_stack", None), 144),
+                (getattr(self, "ii_preview_frame", None), 111),
                 (getattr(self, "ii_preview_toolbar", None), 27),
             ):
                 if frame is None:
@@ -760,7 +761,7 @@ def build_main_layout(window):
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
-    sidebar.setFixedWidth(272)
+    sidebar.setFixedWidth(260)
     sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
@@ -1136,12 +1137,23 @@ def build_main_layout(window):
     except Exception:
         self.ii_image_settings_body = None
 
+    preview_stack = QWidget()
+    preview_stack.setObjectName("image_preview_stack")
+    self.ii_preview_stack = preview_stack
+    preview_stack.setFixedHeight(144)
+    preview_stack.setMinimumHeight(144)
+    preview_stack.setMaximumHeight(144)
+    preview_stack.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+    preview_stack_lo = QVBoxLayout(preview_stack)
+    preview_stack_lo.setContentsMargins(0, 0, 0, 0)
+    preview_stack_lo.setSpacing(6)
+
     preview = QFrame()
     preview.setObjectName("image_inspector_preview")
     self.ii_preview_frame = preview
-    preview.setFixedHeight(166)
-    preview.setMinimumHeight(166)
-    preview.setMaximumHeight(166)
+    preview.setFixedHeight(111)
+    preview.setMinimumHeight(111)
+    preview.setMaximumHeight(111)
     preview.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     preview.setStyleSheet(
         f"QFrame#image_inspector_preview {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
@@ -1172,9 +1184,9 @@ def build_main_layout(window):
     self.image_preview_label = art_icon
     art_lo.addWidget(art_icon, stretch=1)
     preview_lo.addWidget(art, stretch=1)
-    image_flat_lo.addWidget(preview)
+    preview_stack_lo.addWidget(preview)
 
-    image_toolbar = QFrame(preview)
+    image_toolbar = QFrame(preview_stack)
     image_toolbar.setObjectName("image_preview_toolbar")
     self.ii_preview_toolbar = image_toolbar
     image_toolbar.setFixedHeight(27)
@@ -1217,9 +1229,11 @@ def build_main_layout(window):
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
     image_actions.addStretch()
-    # Keep Browse / Capture / Test inside a real toolbar frame so Image Settings
-    # paints as one atomic visual panel during collapse/expand.
-    preview_lo.addWidget(image_toolbar)
+    # Keep Browse / Capture / Test in the same fixed-height preview stack, but
+    # outside the preview frame so Matching never competes with toolbar height.
+    preview_stack_lo.addWidget(image_toolbar)
+    image_flat_lo.addWidget(preview_stack)
+    image_flat_lo.addSpacing(3)
 
     image_flat_lo.addLayout(flat_section_title("Matching", "target", C["accent"]))
     self.ii_sim = inspector_value("0.85", 58)
@@ -1365,7 +1379,7 @@ def build_main_layout(window):
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
     self._bottom_panel_locked = False
-    self._side_panel_expanded_width = 272
+    self._side_panel_expanded_width = 260
     self._side_panel_collapsed_width = 22
     self._side_panel_expand_restore_window_width = 920
     self._side_panel_auto_collapse_width = 910
@@ -1730,10 +1744,8 @@ def build_main_layout(window):
 
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
-    status_pill.setMinimumWidth(260)
-    # Top-panel containment pass: trim the large status pill by 40px
-    # while keeping its existing minimum readable width.
-    status_pill.setMaximumWidth(390)
+    self._status_pill_fixed_width = 150
+    status_pill.setFixedWidth(self._status_pill_fixed_width)
     status_pill.setFixedHeight(38)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setAutoFillBackground(False)
