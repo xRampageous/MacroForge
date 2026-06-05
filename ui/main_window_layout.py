@@ -844,12 +844,12 @@ def build_main_layout(window):
     # Fixed-width host prevents the two small-button columns from drifting apart
     # when the side panel has spare width; their outside edges now align with
     # the Folder button.
-    add_grid.setHorizontalSpacing(10)
+    add_grid.setHorizontalSpacing(8)
     add_grid.setVerticalSpacing(3)
-    # Qt stylesheet width constraints include the 1px border on each side in
-    # the final widget size, so these internal widths render as 90px / 188px.
-    self._add_action_button_width = 88
-    self._add_action_group_width = 186
+    # Keep the two columns inside the fixed side panel.  The Folder button is
+    # the outside-edge reference; small buttons align to its left/right edges.
+    self._add_action_button_width = 86
+    self._add_action_group_width = 180
     add_grid_host.setFixedWidth(self._add_action_group_width)
     add_grid.setColumnMinimumWidth(0, self._add_action_button_width)
     add_grid.setColumnMinimumWidth(1, self._add_action_button_width)
@@ -1750,17 +1750,8 @@ def build_main_layout(window):
     self.menu_top_btn = self.settings_top_btn
     dock_lo.addWidget(self.settings_top_btn)
 
-    self.debug_top_btn = header_icon_button("debug_top_btn", "target", C["pause_cyan"], "Debug tools", None, width=64)
-    self.debug_top_btn.setText("Debug")
-    self.debug_top_btn.setStyleSheet(
-        f"QPushButton#debug_top_btn {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        f"stop:0 #07172A, stop:1 #020A13); color: {C['pause_cyan']}; "
-        "border: 1px solid #15354D; border-radius: 9px; padding: 0 6px; "
-        "font-size: 10px; font-weight: 900; }}"
-        f"QPushButton#debug_top_btn:hover {{ border-color: {C['pause_cyan']}; background: {C['bg_hover']}; }}"
-        f"QPushButton#debug_top_btn:pressed {{ border-color: {C['pause_cyan']}; background: {C['bg_pressed']}; }}"
-        "QPushButton#debug_top_btn::menu-indicator { image: none; width: 0px; }"
-    )
+    self.debug_top_btn = header_icon_button("debug_top_btn", "target", C["pause_cyan"], "Debug tools", None, width=38)
+    self.debug_top_btn.setText("")
     dock_lo.addWidget(self.debug_top_btn)
 
     dock_lo.addStretch(1)

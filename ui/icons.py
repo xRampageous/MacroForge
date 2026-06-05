@@ -371,6 +371,18 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
             for gy in (0.3, 0.5, 0.7):
                 p.drawEllipse(QRectF(s * gx - s * 0.05, s * gy - s * 0.05, s * 0.1, s * 0.1))
 
+    def _draw_lock(p, s):
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(s * 0.24, s * 0.42, s * 0.52, s * 0.42), 2.5, 2.5)
+        p.drawArc(int(s * 0.32), int(s * 0.16), int(s * 0.36), int(s * 0.42), 0, 180 * 16)
+        p.drawLine(int(s * 0.32), int(s * 0.37), int(s * 0.32), int(s * 0.44))
+        p.drawLine(int(s * 0.68), int(s * 0.37), int(s * 0.68), int(s * 0.44))
+        p.drawLine(int(s * 0.50), int(s * 0.58), int(s * 0.50), int(s * 0.70))
+        p.setBrush(brush)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QRectF(s * 0.46, s * 0.54, s * 0.08, s * 0.08))
+
     dispatch = {
         "play": _draw_play, "pause": _draw_pause, "stop": _draw_stop,
         "magic": _draw_magic,
@@ -384,7 +396,7 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         "folder": _draw_folder, "undo": _draw_undo, "redo": _draw_redo,
         "search": _draw_search, "eye": _draw_eye, "target": _draw_target,
         "camera": _draw_camera, "chevron": _draw_chevron, "minimize": _draw_minimize,
-        "close": _draw_close, "grip": _draw_grip,
+        "close": _draw_close, "grip": _draw_grip, "lock": _draw_lock,
     }
     fn = dispatch.get(name)
     if fn:

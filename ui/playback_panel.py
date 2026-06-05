@@ -189,12 +189,12 @@ def make_playback_panel(window):
     self.speed_combo.setCurrentText("1.0x")
     self.speed_combo.currentTextChanged.connect(self._on_speed_change)
     self.speed_combo.setFixedHeight(30)
-    self.speed_combo.setMinimumWidth(136)
-    self.speed_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    self.speed_combo.setFixedWidth(50)
+    self.speed_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     self.speed_combo.setStyleSheet(
         f"QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 12px; "
-        "font-size: 13px; font-weight: 750; }}"
+        f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 4px; "
+        "font-size: 12px; font-weight: 800; }}"
         f"QComboBox:hover {{ border-color: {C['accent_dim']}; }}"
         "QComboBox::drop-down { border: none; width: 0px; }"
         "QComboBox::down-arrow { image: none; width: 0px; height: 0px; }"
@@ -262,12 +262,12 @@ def make_playback_panel(window):
     self.loops_spin.setRange(1, 9999)
     self.loops_spin.setValue(1)
     self.loops_spin.setFixedHeight(30)
-    self.loops_spin.setMinimumWidth(88)
-    self.loops_spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    self.loops_spin.setFixedWidth(60)
+    self.loops_spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     self.loops_spin.setStyleSheet(
         f"QSpinBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 12px; "
-        "font-size: 13px; font-weight: 750; }}"
+        f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 6px; "
+        "font-size: 12px; font-weight: 800; }}"
         f"QSpinBox:hover {{ border-color: {C['accent_dim']}; }}"
         "QSpinBox::up-button, QSpinBox::down-button { border: none; background: transparent; width: 0px; }"
     )
@@ -290,14 +290,15 @@ def make_playback_panel(window):
         frame.setObjectName(f"{attr_name}_chip")
         frame.setFixedSize(width, 30)
         frame.setProperty("checked", "true" if checked else "false")
+        frame.setCursor(Qt.CursorShape.PointingHandCursor)
+        frame.setToolTip(tooltip)
         frame.setStyleSheet(chip_style(f"{attr_name}_chip", color))
         frame_lo = QHBoxLayout(frame)
         frame_lo.setContentsMargins(7, 0, 7, 0)
         frame_lo.setSpacing(4)
 
         ico = QLabel()
-        ico.setFixedSize(14, 14)
-        ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
+        ico.setFixedSize(16, 16)
         frame_lo.addWidget(ico)
 
         check = QCheckBox(label)
@@ -305,24 +306,32 @@ def make_playback_panel(window):
         check.setToolTip(tooltip)
         check.setChecked(checked)
         check.setStyleSheet(
-            f"QCheckBox#playback_mode_toggle {{ color: {C['text']}; font-size: 11px; font-weight: 800; spacing: 0px; }}"
+            f"QCheckBox#playback_mode_toggle {{ color: {C['text']}; font-size: 11px; font-weight: 850; spacing: 0px; }}"
             "QCheckBox#playback_mode_toggle::indicator { width: 0px; height: 0px; }"
         )
         frame_lo.addWidget(check, stretch=1)
 
         def refresh(is_checked):
             frame.setProperty("checked", "true" if is_checked else "false")
+            active_col = color if is_checked else C["text_dim"]
+            label_col = C["text"] if is_checked else C["text_dim"]
+            ico.setPixmap(icon(icon_name, 16, active_col).pixmap(16, 16))
+            check.setStyleSheet(
+                f"QCheckBox#playback_mode_toggle {{ color: {label_col}; font-size: 11px; font-weight: 850; spacing: 0px; }}"
+                "QCheckBox#playback_mode_toggle::indicator { width: 0px; height: 0px; }"
+            )
             frame.style().unpolish(frame)
             frame.style().polish(frame)
 
         check.toggled.connect(refresh)
+        refresh(checked)
         frame.mousePressEvent = lambda event, cb=check: cb.toggle()
         setattr(self, attr_name, check)
         mode_row.addWidget(frame)
 
     add_mode_check("sim_check", "Sim", "settings", C["accent"], 60, "Simulation mode")
-    add_mode_check("human_check", "Human", "target", C["text_dim"], 72, "Humanized movement curve", checked=True)
-    add_mode_check("focus_check", "Lock", "save", C["text_dim"], 66, "Keep playback targeted to the captured window")
+    add_mode_check("human_check", "Human", "target", C["success"], 72, "Humanized movement curve", checked=True)
+    add_mode_check("focus_check", "Lock", "lock", C["pause_cyan"], 66, "Refocus the locked window before each action")
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
     options_body.addLayout(loops_modes, stretch=2)
@@ -336,13 +345,13 @@ def make_playback_panel(window):
     self.bottom_panel_lock_btn.clicked.connect(self._toggle_bottom_panel_lock)
     self.bottom_panel_lock_btn.setVisible(False)
 
-    self.collapse_playback_btn = QPushButton("Hide  ^")
+    self.collapse_playback_btn = QPushButton("^")
     self.collapse_playback_btn.setToolTip("Collapse playback panel")
-    self.collapse_playback_btn.setFixedSize(80, 40)
+    self.collapse_playback_btn.setFixedSize(42, 40)
     self.collapse_playback_btn.setStyleSheet(
         f"QPushButton {{ color: {C['accent']}; background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['accent_dim']}; border-radius: 9px; padding: 0 10px; "
-        "font-size: 13px; font-weight: 850; }}"
+        f"border: 1px solid {C['accent_dim']}; border-radius: 9px; padding: 0; "
+        "font-size: 16px; font-weight: 950; }}"
         f"QPushButton:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
     )
     self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))

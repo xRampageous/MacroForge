@@ -216,7 +216,8 @@ class TimelineDelegate(QStyledItemDelegate):
             hovered = row == getattr(view, "hover_row", -1)
             playing = row == getattr(view, "playing_index", -1)
             queued = row == getattr(view, "next_index", -1)
-            dragging = row == getattr(view, "drag_source_row", -1)
+            drag_rows = set(getattr(view, "drag_source_rows", []) or [])
+            dragging = row == getattr(view, "drag_source_row", -1) or row in drag_rows
             group_drop_target = row == getattr(view, "drop_group_row", -1)
             flashed = row == getattr(view, "flash_row", -1)
             flash_opacity = float(getattr(view, "flash_opacity", 0.0) or 0.0)
@@ -508,10 +509,9 @@ class TimelineDelegate(QStyledItemDelegate):
             if not enabled:
                 status, status_col = "Disabled", COLORS["text_dark"]
             elif kind == "group":
-                if group_drop_target:
-                    status, status_col = "Drop in", COLORS.get("success", type_color)
-                else:
-                    status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
+                # Drop interaction text is emitted to the top-right status pill;
+                # group row status stays stable/aligned during drag targeting.
+                status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
             elif kind == "loop":
                 status, status_col = "Loop", type_color
             elif playing:
@@ -522,7 +522,10 @@ class TimelineDelegate(QStyledItemDelegate):
                 status, status_col = "Pending", COLORS["text_dim"]
 
             status_base_w = 76 if compact else 92
-            status_right = outer.left() + (292 if compact else 392)
+            # Use one invisible global column system for normal rows, group
+            # headers and cut-in child rows.  Child cards remain indented on
+            # the left, but status/duration/progress stay table-aligned.
+            status_right = full_outer.left() + (292 if compact else 392)
             status_font = QFont("Segoe UI", 8, QFont.Weight.DemiBold)
             painter.setFont(status_font)
             status_text_w = painter.fontMetrics().horizontalAdvance(status)
@@ -539,6 +542,21 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Title/detail with elision so compact windows remain readable.
             title, detail = _action_text(action)
+            detail_color = COLORS["text_dim"]
+            image_match_state = ""
+            image_match_color = COLORS["text_dim"]
+            if kind == "image":
+                image_match_state = str(getattr(view, "image_states", {}).get(row, "") or "")
+                if image_match_state:
+                    image_match_color = {
+                        "Found": COLORS["success"],
+                        "Waiting": COLORS["neon_gold"],
+                        "Missed": COLORS["error"],
+                    }.get(image_match_state, COLORS["text_dim"])
+                    # Image runtime tests sit under the row name, not as a
+                    # separate floating chip, so the timeline stays compact.
+                    detail = image_match_state
+                    detail_color = image_match_color
             if kind == "group" and group_badge:
                 count = _safe_int(group_badge.get("count", 0), 0)
                 dur = _safe_float(group_badge.get("duration", 0.0), 0.0)
@@ -576,8 +594,8 @@ class TimelineDelegate(QStyledItemDelegate):
             fm = painter.fontMetrics()
             painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(title, Qt.TextElideMode.ElideRight, int(text_w)))
             if kind != "group":
-                painter.setPen(QColor(COLORS["text_dim"]))
-                painter.setFont(QFont("Segoe UI", 7 if compact else 8))
+                painter.setPen(QColor(detail_color))
+                painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold if image_match_state else QFont.Weight.Normal))
                 fm = painter.fontMetrics()
                 painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
@@ -591,19 +609,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, badge)
 
             if kind == "image":
-                match_state = getattr(view, "image_states", {}).get(row, "")
-                if match_state:
-                    match_col = {
-                        "Found": COLORS["success"],
-                        "Waiting": COLORS["neon_gold"],
-                        "Missed": COLORS["error"],
-                    }.get(match_state, COLORS["text_dim"])
-                    badge_w = 42 if compact else 50
-                    badge_rect = QRectF(text_x, outer.center().y() - 7, badge_w, 14)
-                    self._rounded_rect(painter, badge_rect, 4, COLORS["bg"], match_col, 1)
-                    painter.setPen(QColor(match_col))
-                    painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
-                    painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, match_state)
+                # Runtime image result text is drawn on the subtitle line under
+                # the row name.  Keep this area for static confidence metadata.
 
                 # Confidence threshold preview for image actions. This is static
                 # metadata, while the match-state badge above reflects runtime.
@@ -668,17 +675,9 @@ class TimelineDelegate(QStyledItemDelegate):
             # Image threshold metadata is drawn as plain text before the status
             # pill; no extra chip is drawn later in the row.
 
-            if group_drop_target and kind == "group":
-                feedback = self.drop_feedback_text(row) if hasattr(self, "drop_feedback_text") else "Add to group"
-                fb_w = 110 if compact else min(180, max(112, painter.fontMetrics().horizontalAdvance(feedback) + 22))
-                fb_rect = QRectF(max(text_x, outer.right() - fb_w - 72), outer.center().y() - 13, fb_w, 26)
-                glow_col = QColor(type_color); glow_col.setAlpha(38)
-                painter.setBrush(glow_col)
-                painter.setPen(QPen(QColor(type_color), 1.4))
-                painter.drawRoundedRect(fb_rect, 7, 7)
-                painter.setPen(QColor(type_color))
-                painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
-                painter.drawText(fb_rect, Qt.AlignmentFlag.AlignCenter, feedback)
+            # Timeline interaction text such as drag/drop feedback is routed to
+            # the top-right status pill.  The row keeps only visual targeting
+            # feedback (border/tint/insert line) to avoid clutter.
 
             # Far-right control.  Group rows keep the same hit-test/collapse
             # behavior, but the visual now reads as a clean expand/collapse
@@ -763,6 +762,7 @@ class TimelineView(QListView):
     action_dropped_many_into_group = pyqtSignal(list, int)
     group_toggle_requested = pyqtSignal(int)
     selection_summary_changed = pyqtSignal(list)
+    interaction_status_changed = pyqtSignal(str)
 
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
@@ -1264,41 +1264,10 @@ class TimelineView(QListView):
                 pass
 
     def paintEvent(self, event):
+        # Row/insert/drop visuals are handled by the delegate.  Timeline
+        # interaction status text is emitted to the top-right status pill so no
+        # floating overlay competes with the clean timeline rows.
         super().paintEvent(event)
-        dragging = self.drag_source_row >= 0
-        selected_count = len(getattr(self, "selected_indices", set()) or set())
-        if not dragging and selected_count <= 1:
-            return
-        label = getattr(self, "drop_feedback_label", "") or "Drag row"
-        kind = getattr(self, "drop_feedback_kind", "")
-        valid = bool(getattr(self, "drop_feedback_valid", False))
-        if not dragging:
-            label = f"{selected_count} actions selected"
-            kind = "selection"
-            valid = True
-        try:
-            painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            vw = self.viewport().width()
-            accent_key = "success" if kind == "group" else ("accent" if valid else "error")
-            accent = QColor(COLORS.get(accent_key, COLORS.get("accent", "#45c8ff")))
-            width = min(308, max(176, painter.fontMetrics().horizontalAdvance(label) + 52), vw - 24)
-            shell = QRectF(max(12, vw // 2 - int(width / 2)), 10, width, 30)
-
-            glow = QColor(accent)
-            glow.setAlpha(55)
-            painter.setPen(QPen(glow, 5))
-            painter.setBrush(QColor(0, 9, 18, 232))
-            painter.drawRoundedRect(shell, 11, 11)
-
-            painter.setPen(QPen(accent, 1.2))
-            painter.drawRoundedRect(shell, 11, 11)
-
-            painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Black))
-            painter.setPen(QColor(COLORS.get("text", "#F5F8FF")))
-            painter.drawText(shell, Qt.AlignmentFlag.AlignCenter, label)
-        except Exception:
-            pass
 
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
@@ -1335,6 +1304,11 @@ class TimelineView(QListView):
         if set(self.drag_source_rows) != set(selected):
             self.set_selected_rows(self.drag_source_rows, active=self._drag_start_row)
         self.drag_source_row = self._drag_start_row
+        try:
+            count = len(self.drag_rows())
+            self._emit_interaction_status(f"Dragging {count} row{'s' if count != 1 else ''}")
+        except Exception:
+            pass
         self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
         self.viewport().update()
         try:
@@ -1347,6 +1321,14 @@ class TimelineView(QListView):
             event.acceptProposedAction()
             return
         super().dragEnterEvent(event)
+
+    def _emit_interaction_status(self, text: str):
+        try:
+            msg = str(text or "")
+            if msg:
+                self.interaction_status_changed.emit(msg)
+        except Exception:
+            pass
 
     def dragMoveEvent(self, event):
         if event.source() is self:
@@ -1375,6 +1357,7 @@ class TimelineView(QListView):
                     )
                 else:
                     self.drop_feedback_label = "Drop unavailable"
+            self._emit_interaction_status(self.drop_feedback_label)
             self.viewport().update()
             event.acceptProposedAction()
             return
@@ -1423,6 +1406,7 @@ class TimelineView(QListView):
                     )
                 else:
                     self.drop_feedback_label = "Drop unavailable"
+            self._emit_interaction_status(self.drop_feedback_label)
             self.viewport().update()
 
     def _stop_auto_scroll(self):

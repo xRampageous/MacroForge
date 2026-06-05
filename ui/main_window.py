@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog,
     QDialog, QPlainTextEdit, QListWidget
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QEvent
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QEvent, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon, QPixmap
 
 from engine import ExecutionEngine
@@ -392,12 +392,8 @@ class MainWindow(QMainWindow):
             # With the added Debug button the toolbar can get tight.  Give the
             # status pill as much real space as is available, then let it grow
             # left from the right edge without overlapping the fixed toolbar controls.
-            visible_debug = 0
-            try:
-                visible_debug = int(getattr(self, "debug_top_btn", None).width() or 0)
-            except Exception:
-                visible_debug = 0
-            static_budget = profile_w + visible_debug + 338
+            visible_debug = 38
+            static_budget = profile_w + visible_debug + 312
             available_status = max(112, width - static_budget)
             status_bounds = (108 if mode == "tiny" else 112, max(112, min(status_cap, available_status)))
 
@@ -411,13 +407,9 @@ class MainWindow(QMainWindow):
             debug_btn = getattr(self, "debug_top_btn", None)
             if debug_btn is not None:
                 try:
-                    if mode == "tiny":
-                        debug_btn.setText("")
-                        debug_btn.setFixedWidth(38)
-                        debug_btn.setToolTip("Debug tools")
-                    else:
-                        debug_btn.setText("Debug")
-                        debug_btn.setFixedWidth(64)
+                    debug_btn.setText("")
+                    debug_btn.setFixedWidth(38)
+                    debug_btn.setToolTip("Debug tools")
                 except Exception:
                     pass
 
@@ -831,7 +823,7 @@ class MainWindow(QMainWindow):
                     int(sidebar.minimumSizeHint().height()),
                 )
 
-            playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 188
+            playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 175
             base_min_h = int(getattr(self, "_base_min_height", 420))
             # Small padding accounts for the root layout margins without leaving
             # the bottom of the window far below the side panel.
@@ -1776,6 +1768,8 @@ class MainWindow(QMainWindow):
         self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
         if hasattr(self.timeline, "selection_summary_changed"):
             self.timeline.selection_summary_changed.connect(self._timeline_selection_summary_changed)
+        if hasattr(self.timeline, "interaction_status_changed"):
+            self.timeline.interaction_status_changed.connect(self.status)
 
     def _timeline_selection_summary_changed(self, rows):
         try:
@@ -4014,15 +4008,21 @@ class MainWindow(QMainWindow):
         try:
             if hasattr(self.timeline, "clear_runtime_visuals"):
                 self.timeline.clear_runtime_visuals(clear_playing=clear_playing)
-                return
-            if clear_playing and hasattr(self.timeline, "clear_playing"):
-                self.timeline.clear_playing()
-            if hasattr(self.timeline, "clear_image_states"):
-                self.timeline.clear_image_states()
-            if hasattr(self.timeline, "clear_trace"):
-                self.timeline.clear_trace()
-            if hasattr(self.timeline, "set_link_targets"):
-                self.timeline.set_link_targets(-1, [])
+            else:
+                if clear_playing and hasattr(self.timeline, "clear_playing"):
+                    self.timeline.clear_playing()
+                if hasattr(self.timeline, "clear_image_states"):
+                    self.timeline.clear_image_states()
+                if hasattr(self.timeline, "clear_trace"):
+                    self.timeline.clear_trace()
+                if hasattr(self.timeline, "set_link_targets"):
+                    self.timeline.set_link_targets(-1, [])
+            try:
+                self.timeline.viewport().update()
+                QTimer.singleShot(0, self.timeline.viewport().update)
+                QTimer.singleShot(35, self.timeline.viewport().update)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -4098,13 +4098,11 @@ class MainWindow(QMainWindow):
         self._diag(f"[STATUS] {msg}")
         text = str(msg or "")
         lower = text.lower()
-        # Keep playback feedback out of the top header. The top capsule is
-        # reserved for app/profile/save state and errors.
+        # Runtime/timeline interaction status is now mirrored to the top-right
+        # status pill. The playback panel still receives the same text for local
+        # feedback, but the header pill is the single interaction status surface.
         if getattr(self.engine, "running", False):
             self._playback_feedback_msg.emit(text)
-            if any(word in lower for word in ("error", "failed", "stopped", "not found", "warning")):
-                self._status_msg.emit(text)
-            return
         self._status_msg.emit(text)
 
     def _set_playback_feedback(self, msg: str):
@@ -4185,10 +4183,16 @@ class MainWindow(QMainWindow):
         self._image_match_state.emit(idx, state)
 
     def _do_image_match_state(self, idx, state):
+        # Ignore late worker callbacks after Stop/new reset so stale Found/Missed
+        # labels do not reappear after the timeline has been cleared.
+        if not getattr(self.engine, "running", False) and getattr(self.timeline, "playing_index", -1) < 0:
+            return
         display_idx = self._display_index_from_engine_index(idx)
         self.timeline.set_image_state(display_idx, state)
 
     def _do_trace_row(self, row):
+        if not getattr(self.engine, "running", False) and getattr(self.timeline, "playing_index", -1) < 0:
+            return
         if hasattr(self.timeline, "mark_trace"):
             self.timeline.mark_trace(row)
 
@@ -5428,11 +5432,65 @@ class MainWindow(QMainWindow):
             self._playback_user_collapsed = collapsed
             self._playback_auto_collapsed = False
         self._playback_collapsed = collapsed
-        self.playback_dock.setVisible(not collapsed)
-        self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(36 if collapsed else 175)
-        if hasattr(self, "_apply_panel_size_locks"):
-            self._apply_panel_size_locks()
+
+        panel = getattr(self, "playback_panel", None)
+        dock = getattr(self, "playback_dock", None)
+        restore = getattr(self, "playback_restore_btn", None)
+        if panel is None or dock is None or restore is None:
+            return
+
+        target_h = 36 if collapsed else 175
+        try:
+            anim = getattr(self, "_playback_collapse_anim", None)
+            if anim is not None:
+                anim.stop()
+        except Exception:
+            pass
+
+        start_h = int(panel.height() or (36 if not collapsed else 175))
+        if start_h <= 0:
+            start_h = 36 if not collapsed else 175
+        if not collapsed:
+            restore.setVisible(False)
+            dock.setVisible(True)
+        panel.setMinimumHeight(min(start_h, target_h))
+        panel.setMaximumHeight(max(start_h, target_h))
+
+        anim = QPropertyAnimation(panel, b"maximumHeight", self)
+        self._playback_collapse_anim = anim
+        anim.setDuration(150 if collapsed else 178)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad if collapsed else QEasingCurve.Type.OutCubic)
+        anim.setStartValue(start_h)
+        anim.setEndValue(target_h)
+
+        def _tick(value):
+            try:
+                h = int(value)
+                panel.setFixedHeight(h)
+                panel.updateGeometry()
+            except Exception:
+                pass
+
+        def _finished():
+            try:
+                panel.setFixedHeight(target_h)
+                dock.setVisible(not collapsed)
+                restore.setVisible(collapsed)
+                panel.updateGeometry()
+                if hasattr(self, "_apply_panel_size_locks"):
+                    self._apply_panel_size_locks()
+            except Exception:
+                pass
+            try:
+                if getattr(self, "_playback_collapse_anim", None) is anim:
+                    self._playback_collapse_anim = None
+                anim.deleteLater()
+            except Exception:
+                pass
+
+        anim.valueChanged.connect(_tick)
+        anim.finished.connect(_finished)
+        anim.start()
 
     @staticmethod
     def _format_hms(seconds: float) -> str:
@@ -5715,6 +5773,15 @@ class MainWindow(QMainWindow):
 
     def _open_group_dialog(self):
         try:
+            # Group headers cannot be added into/onto another group.  This keeps
+            # MacroForge to one folder level and prevents nested group corruption.
+            if 0 <= self.active_index < self.action_model.rowCount():
+                try:
+                    if self.timeline.group_badge(self.active_index):
+                        self.status("Cannot add a group row inside another group")
+                        return
+                except Exception:
+                    pass
             from ui.dialogs.group_dialog import GroupDialog
             dlg = GroupDialog(self)
             if dlg.exec() == QDialog.DialogCode.Accepted:
