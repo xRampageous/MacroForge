@@ -1192,8 +1192,8 @@ class MainWindow(QMainWindow):
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 72, "Loops": 72, "Seq": 88, "Time": 100}.get(title, 76))
-        chip.setFixedHeight(40)
+        chip.setFixedWidth({"Played": 62, "Loops": 62, "Seq": 80, "Time": 92}.get(title, 68))
+        chip.setFixedHeight(36)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
@@ -1202,19 +1202,19 @@ class MainWindow(QMainWindow):
         )
 
         lo = QHBoxLayout(chip)
-        lo.setContentsMargins(10, 4, 10, 4)
-        lo.setSpacing(7)
+        lo.setContentsMargins(8, 3, 8, 3)
+        lo.setSpacing(5)
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(18, 18)
-        ico.setPixmap(icon(icon_name, 18, color).pixmap(18, 18))
+        ico.setFixedSize(16, 16)
+        ico.setPixmap(icon(icon_name, 16, color).pixmap(16, 16))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 14px; font-weight: 850; background: transparent;"
+            f"color: {C['text']}; font-size: 13px; font-weight: 850; background: transparent;"
         )
         lo.addWidget(value_lbl)
         return chip, value_lbl
@@ -3763,9 +3763,7 @@ class MainWindow(QMainWindow):
         self.session_start_time = time.time()
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
-        if hasattr(self.timeline, "clear_trace"):
-            self.timeline.clear_trace()
+        self._clear_timeline_runtime_marks(clear_playing=True)
         self.start_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
@@ -3973,6 +3971,20 @@ class MainWindow(QMainWindow):
         except ValueError:
             pass
 
+    def _clear_timeline_runtime_marks(self, clear_playing=False):
+        """Clear visual-only timeline runtime state without changing macro data."""
+        try:
+            if clear_playing and hasattr(self.timeline, "clear_playing"):
+                self.timeline.clear_playing()
+            if hasattr(self.timeline, "clear_image_states"):
+                self.timeline.clear_image_states()
+            if hasattr(self.timeline, "clear_trace"):
+                self.timeline.clear_trace()
+            if hasattr(self.timeline, "set_link_targets"):
+                self.timeline.set_link_targets(-1, [])
+        except Exception:
+            pass
+
     def start(self):
         if self.engine.running:
             self.status("Already running")
@@ -3989,8 +4001,7 @@ class MainWindow(QMainWindow):
         if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             return
         self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
-        if hasattr(self.timeline, "clear_trace"):
-            self.timeline.clear_trace()
+        self._clear_timeline_runtime_marks(clear_playing=True)
         self.actions_played = 0
         self.session_elapsed_time = 0.0
         self.session_start_time = time.time()
@@ -4001,7 +4012,6 @@ class MainWindow(QMainWindow):
         self.playback_feedback("Starting macro…")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
         self.engine.infinite_loop = self.inf_check.isChecked()
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
@@ -4020,7 +4030,9 @@ class MainWindow(QMainWindow):
         self._run_from_index = 0
         self._run_index_map = []
         self.engine.stop()
-        self.timeline.clear_playing()
+        self._clear_timeline_runtime_marks(clear_playing=True)
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
         self.start_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
@@ -4353,7 +4365,7 @@ class MainWindow(QMainWindow):
         self.session_start_time = time.time()
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
+        self._clear_timeline_runtime_marks(clear_playing=True)
         self.start_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
@@ -4405,7 +4417,7 @@ class MainWindow(QMainWindow):
         self.session_start_time = time.time()
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.timeline.clear_image_states()
+        self._clear_timeline_runtime_marks(clear_playing=True)
         self.start_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
@@ -5367,7 +5379,7 @@ class MainWindow(QMainWindow):
         self._playback_collapsed = collapsed
         self.playback_dock.setVisible(not collapsed)
         self.playback_restore_btn.setVisible(collapsed)
-        self.playback_panel.setFixedHeight(36 if collapsed else 188)
+        self.playback_panel.setFixedHeight(36 if collapsed else 175)
         if hasattr(self, "_apply_panel_size_locks"):
             self._apply_panel_size_locks()
 

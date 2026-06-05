@@ -331,7 +331,7 @@ class TimelineDelegate(QStyledItemDelegate):
             # Child rows are indented internally only; row size and height stay
             # untouched. The extra pixels make room for connector rail -> stripe
             # -> drag grip without clipping the grip on grouped rows.
-            child_indent = 28 if child_group and compact else (34 if child_group else 0)
+            child_indent = 36 if child_group and compact else (44 if child_group else 0)
 
             # Left type accent stripe and active play marker. Active playback fills
             # the row's left end with the action's own gradient colour.
@@ -366,7 +366,7 @@ class TimelineDelegate(QStyledItemDelegate):
             if child_group:
                 actions = view._actions() if hasattr(view, "_actions") else []
                 gid = child_group.get("gid", "")
-                rail_x = outer.left() + (11 if compact else 15)
+                rail_x = outer.left() + (14 if compact else 18)
                 node_r = 3.5 if compact else 4.0
                 rail_col = QColor(child_group.get("color") or type_color)
                 rail_col.setAlpha(150)
@@ -395,7 +395,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.drawLine(QPointF(rail_x, center_y), QPointF(rail_x, bottom_y))
                 # Short branch stops before the stripe/grip area, avoiding the
                 # previous overlap with the grouped-row drag handle.
-                painter.drawLine(QPointF(rail_x, center_y), QPointF(outer.left() + child_indent - 8, center_y))
+                painter.drawLine(QPointF(rail_x, center_y), QPointF(outer.left() + child_indent - 10, center_y))
                 painter.setPen(Qt.PenStyle.NoPen)
                 node_fill = QColor(COLORS["bg_card"])
                 node_fill.setAlpha(245)
@@ -420,7 +420,7 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Drag grip. Grouped child rows move the grip after the coloured
             # stripe so the dots are no longer clipped by the connector gutter.
-            grip_x = (stripe.right() + (6 if compact else 8)) if child_group else (outer.left() + (12 if compact else 16))
+            grip_x = (stripe.right() + (8 if compact else 10)) if child_group else (outer.left() + (12 if compact else 16))
             grip_y = outer.center().y() - 8
             painter.setPen(Qt.PenStyle.NoPen)
             grip_color = "#000000" if playing else (COLORS["border_light"] if getattr(view, "playing_index", -1) >= 0 else COLORS["text_dark"])
@@ -448,18 +448,42 @@ class TimelineDelegate(QStyledItemDelegate):
             self._draw_type_icon(painter, icon_rect, kind, type_color)
 
             # Right-side progress area. Status and duration are static columns;
-            # only the progress rail expands/contracts with window width.
+            # only the progress rail expands/contracts with window width.  The
+            # status pill keeps its right edge locked and expands left for
+            # longer runtime labels so duration/progress never jump sideways.
             menu_reserve = 22 if compact else 26
             pct_w = 38 if compact else 44
             right_edge = outer.right() - menu_reserve - pct_w - 10
 
-            status_w = 76 if compact else 92
-            status_x = outer.left() + (216 if compact else 300)
-            conf_w = 42 if compact else 50
-            conf_gap = 8 if compact else 10
+            if not enabled:
+                status, status_col = "Disabled", COLORS["text_dark"]
+            elif kind == "group":
+                if group_drop_target:
+                    status, status_col = "Drop in", COLORS.get("success", type_color)
+                else:
+                    status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
+            elif kind == "loop":
+                status, status_col = "Loop", type_color
+            elif playing:
+                status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", type_color)
+            elif progress >= 0.999:
+                status, status_col = "Completed", type_color
+            else:
+                status, status_col = "Pending", COLORS["text_dim"]
+
+            status_base_w = 76 if compact else 92
+            status_right = outer.left() + (292 if compact else 392)
+            status_font = QFont("Segoe UI", 8, QFont.Weight.DemiBold)
+            painter.setFont(status_font)
+            status_text_w = painter.fontMetrics().horizontalAdvance(status)
+            status_max_w = 126 if compact else 154
+            status_w = max(status_base_w, min(status_max_w, status_text_w + (28 if compact else 34)))
+            status_x = status_right - status_w
+            conf_w = 46 if compact else 56
+            conf_gap = 7 if compact else 9
             conf_rect = QRectF(status_x - conf_w - conf_gap, outer.center().y() - 8, conf_w, 16) if kind == "image" else QRectF()
             duration_w = 46 if compact else 56
-            dur_x = status_x + status_w + 10
+            dur_x = status_right + 10
             bar_x = dur_x + duration_w + 10
             bar_w = max(28, int(right_edge - bar_x))
 
@@ -510,10 +534,10 @@ class TimelineDelegate(QStyledItemDelegate):
             if kind == "group":
                 badge = group_badge.get("badge", "G") if group_badge else "G"
                 gcol = QColor(group_badge.get("color") if group_badge else type_color)
-                chip_rect = QRectF(text_x, outer.center().y() + 8, 32 if compact else 36, 13)
+                chip_rect = QRectF(text_x, outer.center().y() + 8, 28 if compact else 32, 12)
                 self._rounded_rect(painter, chip_rect, 3, COLORS["bg"], gcol.name(), 1)
                 painter.setPen(gcol)
-                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.Black))
+                painter.setFont(QFont("Segoe UI", 6, QFont.Weight.Black))
                 painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, badge)
 
             if kind == "image":
@@ -548,12 +572,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                 painter.drawText(link_rect, Qt.AlignmentFlag.AlignCenter, "TARGET")
 
-            if traced and not playing and not linked_target:
-                done_rect = QRectF(text_x, outer.center().y() + 7, 42 if compact else 50, 14)
-                self._rounded_rect(painter, done_rect, 4, COLORS["bg"], COLORS.get("success", type_color), 1)
-                painter.setPen(QColor(COLORS.get("success", type_color)))
-                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
-                painter.drawText(done_rect, Qt.AlignmentFlag.AlignCenter, "TRACE")
+            # Trace rows retain their subtle row tint/border only; the old
+            # TRACE text badge was intentionally removed to prevent clutter.
 
             if not enabled:
                 disabled_rect = QRectF(text_x, outer.center().y() + 7, 54 if compact else 64, 14)
@@ -562,23 +582,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                 painter.drawText(disabled_rect, Qt.AlignmentFlag.AlignCenter, "DISABLED")
 
-            # Status chip. Its width is fixed and never collapses into a dot.
-            if not enabled:
-                status, status_col = "Disabled", COLORS["text_dark"]
-            elif kind == "group":
-                if group_drop_target:
-                    status, status_col = "Drop in", COLORS.get("success", type_color)
-                else:
-                    status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
-            elif kind == "loop":
-                status, status_col = "Loop", type_color
-            elif playing:
-                status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", type_color)
-            elif progress >= 0.999:
-                status, status_col = "Completed", type_color
-            else:
-                status, status_col = "Pending", COLORS["text_dim"]
-
+            # Status chip. It keeps a stable right edge and grows left for
+            # longer labels such as Completed/Running/Disabled.
             status_rect = QRectF(status_x, outer.center().y() - 15, status_w, 30)
             self._rounded_rect(painter, status_rect, 5, COLORS["bg"], status_col, 1)
             painter.setPen(QColor(status_col))
@@ -1032,7 +1037,18 @@ class TimelineView(QListView):
         if outer.isNull():
             return QRectF()
         compact = outer.width() < 760
-        grip_x = outer.left() + (8 if compact else 12)
+        actions = self._actions()
+        child_group = False
+        if 0 <= row < len(actions):
+            action = actions[row]
+            meta = self.group_badge(row)
+            child_group = bool(meta and getattr(action, "action_type", "") != "group")
+        if child_group:
+            child_indent = 36 if compact else 44
+            stripe_x = outer.left() + child_indent
+            grip_x = stripe_x + 3.0 + (8 if compact else 10)
+        else:
+            grip_x = outer.left() + (12 if compact else 16)
         grip_y = outer.center().y() - 14
         return QRectF(grip_x - 4, grip_y, 24, 28)
 

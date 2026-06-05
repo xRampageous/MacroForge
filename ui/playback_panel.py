@@ -25,12 +25,12 @@ def make_playback_panel(window):
 
     panel = QFrame()
     panel.setObjectName("mf3_playback_panel")
-    panel.setFixedHeight(188)
+    panel.setFixedHeight(175)
     panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     panel.setStyleSheet(f"QFrame#mf3_playback_panel {{ background-color: {C['bg']}; border: none; }}")
 
     lo = QVBoxLayout(panel)
-    lo.setContentsMargins(8, 4, 8, 8)
+    lo.setContentsMargins(8, 3, 8, 6)
     lo.setSpacing(0)
 
     dock = QFrame()
@@ -43,20 +43,20 @@ def make_playback_panel(window):
         "QFrame#mf3_playback_dock QLabel { background: transparent; border: none; }"
     )
     dlo = QVBoxLayout(dock)
-    dlo.setContentsMargins(10, 8, 10, 8)
-    dlo.setSpacing(7)
+    dlo.setContentsMargins(10, 6, 10, 6)
+    dlo.setSpacing(5)
 
     def section_title(text, icon_name, color):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         ico = QLabel()
-        ico.setPixmap(icon(icon_name, 20, color).pixmap(20, 20))
-        ico.setFixedSize(22, 22)
+        ico.setPixmap(icon(icon_name, 18, color).pixmap(18, 18))
+        ico.setFixedSize(20, 20)
         row.addWidget(ico)
         lbl = QLabel(text)
         lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 14px; font-weight: 900; "
+            f"color: {C['text']}; font-size: 13px; font-weight: 900; "
             "letter-spacing: 0; background: transparent;"
         )
         row.addWidget(lbl)
@@ -66,7 +66,7 @@ def make_playback_panel(window):
     def tiny_label(text):
         lbl = QLabel(text)
         lbl.setStyleSheet(
-            f"color: {C['text_dim']}; font-size: 11px; font-weight: 850; background: transparent;"
+            f"color: {C['text_dim']}; font-size: 10px; font-weight: 850; background: transparent;"
         )
         return lbl
 
@@ -89,26 +89,26 @@ def make_playback_panel(window):
 
     top = QHBoxLayout()
     top.setContentsMargins(0, 0, 0, 0)
-    top.setSpacing(12)
+    top.setSpacing(10)
 
     play_section = QFrame()
     play_section.setObjectName("playback_block")
-    play_section.setFixedWidth(216)
+    play_section.setFixedWidth(204)
     play_section.setStyleSheet("QFrame#playback_block { background: transparent; border: none; }")
     play_lo = QVBoxLayout(play_section)
     play_lo.setContentsMargins(0, 0, 0, 0)
-    play_lo.setSpacing(7)
+    play_lo.setSpacing(5)
     play_lo.addLayout(section_title("PLAYBACK", "play", C["accent"]))
 
     play_row = QHBoxLayout()
     play_row.setContentsMargins(0, 0, 0, 0)
-    play_row.setSpacing(5)
+    play_row.setSpacing(4)
     self.start_btn = QPushButton()
     self.start_btn.setObjectName("play_btn")
     self.start_btn.setIcon(icon("play", 18, C["success"]))
     self.start_btn.setIconSize(QSize(18, 18))
     self.start_btn.setToolTip("Start playback (F9)")
-    self.start_btn.setFixedSize(58, 42)
+    self.start_btn.setFixedSize(52, 38)
     self.start_btn.clicked.connect(self.start)
     play_row.addWidget(self.start_btn)
 
@@ -117,7 +117,7 @@ def make_playback_panel(window):
     self.pause_btn.setIcon(icon("pause", 17, C["pause_cyan"]))
     self.pause_btn.setIconSize(QSize(17, 17))
     self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-    self.pause_btn.setFixedSize(58, 42)
+    self.pause_btn.setFixedSize(52, 38)
     self.pause_btn.setEnabled(False)
     self.pause_btn.clicked.connect(self.engine.toggle_pause)
     play_row.addWidget(self.pause_btn)
@@ -127,7 +127,7 @@ def make_playback_panel(window):
     self.stop_btn.setIcon(icon("stop", 16, C["error"]))
     self.stop_btn.setIconSize(QSize(16, 16))
     self.stop_btn.setToolTip("Stop playback")
-    self.stop_btn.setFixedSize(58, 42)
+    self.stop_btn.setFixedSize(52, 38)
     self.stop_btn.setEnabled(False)
     self.stop_btn.clicked.connect(self.stop)
     play_row.addWidget(self.stop_btn)
@@ -136,15 +136,15 @@ def make_playback_panel(window):
 
     feedback_frame = QFrame()
     feedback_frame.setObjectName("playback_feedback_frame")
-    feedback_frame.setFixedSize(216, 28)
+    feedback_frame.setFixedSize(204, 26)
     feedback_frame.setToolTip("Playback status")
     feedback_frame.setStyleSheet(
         f"QFrame#playback_feedback_frame {{ background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['accent_dim']}; border-radius: 7px; }}"
     )
     feedback_lo = QHBoxLayout(feedback_frame)
-    feedback_lo.setContentsMargins(9, 0, 9, 0)
-    feedback_lo.setSpacing(7)
+    feedback_lo.setContentsMargins(8, 0, 8, 0)
+    feedback_lo.setSpacing(6)
     self.playback_feedback_icon = QLabel()
     self.playback_feedback_icon.setObjectName("playback_feedback_icon")
     self.playback_feedback_icon.setFixedSize(15, 15)
@@ -153,13 +153,13 @@ def make_playback_panel(window):
 
     self.playback_feedback_label = QLabel("Playback ready")
     self.playback_feedback_label.setObjectName("playback_feedback")
-    self.playback_feedback_label.setFixedHeight(24)
+    self.playback_feedback_label.setFixedHeight(22)
     self.playback_feedback_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.playback_feedback_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     self.playback_feedback_label.setToolTip("Playback status")
     self.playback_feedback_label.setStyleSheet(
         f"QLabel#playback_feedback {{ color: {C['accent']}; "
-        "font-size: 12px; font-weight: 850; background: transparent; border: none; }}"
+        "font-size: 11px; font-weight: 850; background: transparent; border: none; }}"
     )
     feedback_lo.addWidget(self.playback_feedback_label, stretch=1)
     self.playback_feedback_frame = feedback_frame
@@ -173,28 +173,28 @@ def make_playback_panel(window):
     options_section.setStyleSheet("QFrame#options_block { background: transparent; border: none; }")
     opt_lo = QVBoxLayout(options_section)
     opt_lo.setContentsMargins(0, 0, 0, 0)
-    opt_lo.setSpacing(5)
+    opt_lo.setSpacing(4)
     opt_lo.addLayout(section_title("OPTIONS", "settings", C["text_dim"]))
 
     options_body = QHBoxLayout()
     options_body.setContentsMargins(0, 0, 0, 0)
-    options_body.setSpacing(14)
+    options_body.setSpacing(10)
 
     speed_box = QVBoxLayout()
     speed_box.setContentsMargins(0, 0, 0, 0)
-    speed_box.setSpacing(4)
+    speed_box.setSpacing(3)
     speed_box.addWidget(tiny_label("Speed"))
     self.speed_combo = QComboBox()
     self.speed_combo.addItems(["0.1x", "0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x", "4.0x"])
     self.speed_combo.setCurrentText("1.0x")
     self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-    self.speed_combo.setFixedHeight(34)
-    self.speed_combo.setMinimumWidth(150)
+    self.speed_combo.setFixedHeight(30)
+    self.speed_combo.setMinimumWidth(136)
     self.speed_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.speed_combo.setStyleSheet(
         f"QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
         f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 12px; "
-        "font-size: 14px; font-weight: 750; }}"
+        "font-size: 13px; font-weight: 750; }}"
         f"QComboBox:hover {{ border-color: {C['accent_dim']}; }}"
         "QComboBox::drop-down { border: none; width: 0px; }"
         "QComboBox::down-arrow { image: none; width: 0px; height: 0px; }"
@@ -207,12 +207,12 @@ def make_playback_panel(window):
     self.speed_slider.setValue(self.speed_combo.currentIndex())
     self.speed_slider.setTickInterval(1)
     self.speed_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    self.speed_slider.setFixedHeight(24)
+    self.speed_slider.setFixedHeight(20)
     self.speed_slider.setStyleSheet(
         f"QSlider#playback_speed_slider::groove:horizontal {{ height: 6px; background: {C['lane']}; border-radius: 3px; }}"
         f"QSlider#playback_speed_slider::sub-page:horizontal {{ background: {C['accent']}; border-radius: 3px; }}"
-        f"QSlider#playback_speed_slider::handle:horizontal {{ background: {C['accent']}; width: 18px; height: 18px; "
-        f"border-radius: 9px; margin: -6px 0; }}"
+        f"QSlider#playback_speed_slider::handle:horizontal {{ background: {C['accent']}; width: 16px; height: 16px; "
+        f"border-radius: 8px; margin: -5px 0; }}"
         f"QSlider#playback_speed_slider::handle:horizontal:hover {{ background: {C['accent_hover']}; }}"
     )
     self.speed_slider.valueChanged.connect(lambda value: self.speed_combo.setCurrentIndex(int(value)))
@@ -225,7 +225,7 @@ def make_playback_panel(window):
     for text, align in (("0.1x", Qt.AlignmentFlag.AlignLeft), ("1x", Qt.AlignmentFlag.AlignCenter), ("4x", Qt.AlignmentFlag.AlignRight)):
         scale_lbl = QLabel(text)
         scale_lbl.setAlignment(align)
-        scale_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 800; background: transparent;")
+        scale_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 800; background: transparent;")
         speed_scale.addWidget(scale_lbl, stretch=1)
     speed_box.addLayout(speed_scale)
     options_body.addLayout(speed_box, stretch=2)
@@ -233,26 +233,26 @@ def make_playback_panel(window):
 
     loops_modes = QVBoxLayout()
     loops_modes.setContentsMargins(0, 0, 0, 0)
-    loops_modes.setSpacing(8)
+    loops_modes.setSpacing(5)
 
     loops_header = QHBoxLayout()
     loops_header.setContentsMargins(0, 0, 0, 0)
-    loops_header.setSpacing(8)
+    loops_header.setSpacing(6)
     loops_header.addWidget(tiny_label("Loops"))
     loops_header.addStretch()
     loops_modes.addLayout(loops_header)
 
     loop_row = QHBoxLayout()
     loop_row.setContentsMargins(0, 0, 0, 0)
-    loop_row.setSpacing(8)
+    loop_row.setSpacing(6)
     self.inf_check = QCheckBox("∞")
     self.inf_check.setObjectName("playback_inf_toggle")
     self.inf_check.setToolTip("Infinite loop")
-    self.inf_check.setFixedSize(58, 34)
+    self.inf_check.setFixedSize(52, 30)
     self.inf_check.setStyleSheet(
         f"QCheckBox#playback_inf_toggle {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding-left: 14px; "
-        "font-size: 20px; font-weight: 800; }}"
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding-left: 12px; "
+        "font-size: 18px; font-weight: 800; }}"
         f"QCheckBox#playback_inf_toggle:hover {{ border-color: {C['border_light']}; }}"
         f"QCheckBox#playback_inf_toggle::indicator {{ width: 0px; height: 0px; }}"
         f"QCheckBox#playback_inf_toggle:checked {{ border-color: {C['accent']}; background-color: {C['accent_glow']}; }}"
@@ -261,13 +261,13 @@ def make_playback_panel(window):
     self.loops_spin = QSpinBox()
     self.loops_spin.setRange(1, 9999)
     self.loops_spin.setValue(1)
-    self.loops_spin.setFixedHeight(34)
-    self.loops_spin.setMinimumWidth(100)
+    self.loops_spin.setFixedHeight(30)
+    self.loops_spin.setMinimumWidth(88)
     self.loops_spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.loops_spin.setStyleSheet(
         f"QSpinBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
         f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 12px; "
-        "font-size: 14px; font-weight: 750; }}"
+        "font-size: 13px; font-weight: 750; }}"
         f"QSpinBox:hover {{ border-color: {C['accent_dim']}; }}"
         "QSpinBox::up-button, QSpinBox::down-button { border: none; background: transparent; width: 0px; }"
     )
@@ -276,28 +276,28 @@ def make_playback_panel(window):
     loop_count.setSpacing(2)
     loop_count.addWidget(self.loops_spin)
     loops_hint = QLabel("# loops")
-    loops_hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 750; background: transparent;")
+    loops_hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 750; background: transparent;")
     loop_count.addWidget(loops_hint)
     loop_row.addLayout(loop_count, stretch=1)
     loops_modes.addLayout(loop_row)
 
     mode_row = QHBoxLayout()
     mode_row.setContentsMargins(0, 0, 0, 0)
-    mode_row.setSpacing(7)
+    mode_row.setSpacing(5)
 
     def add_mode_check(attr_name, label, icon_name, color, width, tooltip, checked=False):
         frame = QFrame()
         frame.setObjectName(f"{attr_name}_chip")
-        frame.setFixedSize(width, 34)
+        frame.setFixedSize(width, 30)
         frame.setProperty("checked", "true" if checked else "false")
         frame.setStyleSheet(chip_style(f"{attr_name}_chip", color))
         frame_lo = QHBoxLayout(frame)
-        frame_lo.setContentsMargins(9, 0, 9, 0)
-        frame_lo.setSpacing(5)
+        frame_lo.setContentsMargins(7, 0, 7, 0)
+        frame_lo.setSpacing(4)
 
         ico = QLabel()
-        ico.setFixedSize(15, 15)
-        ico.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
+        ico.setFixedSize(14, 14)
+        ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
         frame_lo.addWidget(ico)
 
         check = QCheckBox(label)
@@ -305,7 +305,7 @@ def make_playback_panel(window):
         check.setToolTip(tooltip)
         check.setChecked(checked)
         check.setStyleSheet(
-            f"QCheckBox#playback_mode_toggle {{ color: {C['text']}; font-size: 12px; font-weight: 800; spacing: 0px; }}"
+            f"QCheckBox#playback_mode_toggle {{ color: {C['text']}; font-size: 11px; font-weight: 800; spacing: 0px; }}"
             "QCheckBox#playback_mode_toggle::indicator { width: 0px; height: 0px; }"
         )
         frame_lo.addWidget(check, stretch=1)
@@ -320,9 +320,9 @@ def make_playback_panel(window):
         setattr(self, attr_name, check)
         mode_row.addWidget(frame)
 
-    add_mode_check("sim_check", "Sim", "settings", C["accent"], 66, "Simulation mode")
-    add_mode_check("human_check", "Human", "target", C["text_dim"], 78, "Humanized movement curve", checked=True)
-    add_mode_check("focus_check", "Lock", "save", C["text_dim"], 72, "Keep playback targeted to the captured window")
+    add_mode_check("sim_check", "Sim", "settings", C["accent"], 60, "Simulation mode")
+    add_mode_check("human_check", "Human", "target", C["text_dim"], 72, "Humanized movement curve", checked=True)
+    add_mode_check("focus_check", "Lock", "save", C["text_dim"], 66, "Keep playback targeted to the captured window")
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
     options_body.addLayout(loops_modes, stretch=2)
@@ -338,11 +338,11 @@ def make_playback_panel(window):
 
     self.collapse_playback_btn = QPushButton("Hide  ^")
     self.collapse_playback_btn.setToolTip("Collapse playback panel")
-    self.collapse_playback_btn.setFixedSize(82, 44)
+    self.collapse_playback_btn.setFixedSize(80, 40)
     self.collapse_playback_btn.setStyleSheet(
         f"QPushButton {{ color: {C['accent']}; background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['accent_dim']}; border-radius: 9px; padding: 0 10px; "
-        "font-size: 14px; font-weight: 850; }}"
+        "font-size: 13px; font-weight: 850; }}"
         f"QPushButton:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
     )
     self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))
@@ -351,24 +351,24 @@ def make_playback_panel(window):
 
     bottom = QHBoxLayout()
     bottom.setContentsMargins(0, 0, 0, 0)
-    bottom.setSpacing(7)
+    bottom.setSpacing(6)
 
     progress_wrap = QFrame()
     progress_wrap.setObjectName("progress_wrap")
     progress_wrap.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    progress_wrap.setFixedHeight(40)
+    progress_wrap.setFixedHeight(36)
     progress_wrap.setStyleSheet(
         f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['border']}; border-radius: 8px; }}"
     )
     pw_lo = QHBoxLayout(progress_wrap)
-    pw_lo.setContentsMargins(12, 5, 12, 5)
-    pw_lo.setSpacing(10)
+    pw_lo.setContentsMargins(10, 4, 10, 4)
+    pw_lo.setSpacing(8)
     self.progress_bar = QProgressBar()
     self.progress_bar.setRange(0, 100)
     self.progress_bar.setValue(0)
     self.progress_bar.setTextVisible(False)
-    self.progress_bar.setFixedHeight(10)
+    self.progress_bar.setFixedHeight(9)
     self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.progress_bar.setStyleSheet(
         f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 9px; }}"
@@ -378,7 +378,7 @@ def make_playback_panel(window):
     self.progress_label = QLabel("0%")
     self.progress_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
     self.progress_label.setStyleSheet(
-        f"color: {C['accent']}; font-size: 14px; font-weight: 900; min-width: 42px;"
+        f"color: {C['accent']}; font-size: 13px; font-weight: 900; min-width: 38px;"
     )
     pw_lo.addWidget(self.progress_label)
     bottom.addWidget(progress_wrap, stretch=1)

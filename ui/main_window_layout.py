@@ -840,7 +840,7 @@ def build_main_layout(window):
     add_grid = QGridLayout()
     add_grid.setContentsMargins(0, 0, 0, 0)
     add_grid.setHorizontalSpacing(5)
-    add_grid.setVerticalSpacing(5)
+    add_grid.setVerticalSpacing(3)
     # Qt stylesheet width constraints include the 1px border on each side in
     # the final widget size, so these internal widths render as 90px / 188px.
     self._add_action_button_width = 88
@@ -854,7 +854,7 @@ def build_main_layout(window):
         ("Image", self._open_image_dialog, C["image"], "image", 1, 1, 1, 1),
         ("Condition", self._open_condition_dialog, C["condition"], "condition", 2, 0, 1, 1),
         ("Loop", self._open_loop_dialog, C["loop"], "loop", 2, 1, 1, 1),
-        ("Folder", self._open_group_dialog, C["group"], "group", 3, 0, 1, 2),
+        ("Folder", self._open_group_dialog, C["group"], "group", 4, 0, 1, 2),
     ]
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
@@ -864,6 +864,8 @@ def build_main_layout(window):
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
         btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        if text == "Folder":
+            add_grid.setRowMinimumHeight(3, 5)
         add_grid.setRowMinimumHeight(row, btn_h)
         add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
     add_body_lo.addLayout(add_grid)
