@@ -93,12 +93,10 @@ def _action_text(action):
         return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
 
     if kind == "image":
-        conf = _safe_float(getattr(action, "similarity", 0.95), 0.95) * 100
-        timeout = _safe_float(getattr(action, "wait_timeout", 0.0), 0.0)
-        detail = f"Template.png · confidence ≥ {conf:.0f}%"
-        if timeout > 0:
-            detail += f" · wait {timeout:.1f}s"
-        return label or "Image", detail
+        # Keep confidence/timeout metadata in their dedicated row columns.  The
+        # detail line stays clean so image rows do not collide with the status
+        # and threshold badge columns at compact widths.
+        return label or "Image", "Template.png"
 
     if kind == "group":
         name = getattr(action, "group_name", "") or label or "Group"
@@ -329,6 +327,8 @@ class TimelineDelegate(QStyledItemDelegate):
             # Compact-aware layout. Timeline metadata stays visible at every
             # supported window size; only the progress rail flexes horizontally.
             compact = outer.width() < 760
+            child_group = group_badge if group_badge and kind != "group" else None
+            child_indent = 22 if child_group and compact else (28 if child_group else 0)
 
             # Left type accent stripe and active play marker. Active playback fills
             # the row's left end with the action's own gradient colour.
@@ -357,17 +357,52 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(edge, 2, 2)
                 painter.restore()
 
-            stripe = QRectF(outer.left(), outer.top() + 1, 3.0, outer.height() - 2)
+            # Expanded group connector rail.  Child rows keep their normal row
+            # shape and colours, but their content is shifted right just enough
+            # to make the group nesting clear without changing row height/size.
+            if child_group:
+                actions = view._actions() if hasattr(view, "_actions") else []
+                gid = child_group.get("gid", "")
+                rail_x = outer.left() + (12 if compact else 16)
+                node_r = 4.0 if compact else 4.5
+                rail_col = QColor(child_group.get("color") or type_color)
+                rail_col.setAlpha(155)
+
+                def same_visible_child(candidate_row: int) -> bool:
+                    if candidate_row < 0 or candidate_row >= len(actions):
+                        return False
+                    candidate = actions[candidate_row]
+                    if getattr(candidate, "action_type", "") == "group":
+                        return False
+                    if getattr(candidate, "group_id", "") != gid:
+                        return False
+                    if hasattr(view, "is_row_collapsed_hidden") and view.is_row_collapsed_hidden(candidate_row):
+                        return False
+                    if hasattr(view, "is_row_filtered_hidden") and view.is_row_filtered_hidden(candidate_row):
+                        return False
+                    return True
+
+                has_next = same_visible_child(row + 1)
+                has_prev = same_visible_child(row - 1)
+                painter.setPen(QPen(rail_col, 1.35, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                top_y = outer.top() - 3 if has_prev else outer.top() + 2
+                bottom_y = outer.bottom() + 3 if has_next else outer.center().y()
+                painter.drawLine(QPointF(rail_x, top_y), QPointF(rail_x, outer.center().y()))
+                painter.drawLine(QPointF(rail_x, outer.center().y()), QPointF(rail_x, bottom_y))
+                painter.drawLine(QPointF(rail_x, outer.center().y()), QPointF(outer.left() + child_indent - 3, outer.center().y()))
+                painter.setPen(Qt.PenStyle.NoPen)
+                node_fill = QColor(COLORS["bg_card"])
+                node_fill.setAlpha(245)
+                painter.setBrush(node_fill)
+                painter.drawEllipse(QRectF(rail_x - node_r, outer.center().y() - node_r, node_r * 2, node_r * 2))
+                painter.setBrush(rail_col)
+                painter.drawEllipse(QRectF(rail_x - 2.2, outer.center().y() - 2.2, 4.4, 4.4))
+
+            stripe_left = outer.left() + child_indent
+            stripe = QRectF(stripe_left, outer.top() + 1, 3.0, outer.height() - 2)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(type_color))
             painter.drawRoundedRect(stripe, 1.5, 1.5)
-
-            if group_badge and kind != "group":
-                rail = QRectF(outer.left() + 5, outer.top() + 5, 2.0, outer.height() - 10)
-                rail_col = QColor(group_badge.get("color") or type_color)
-                rail_col.setAlpha(150)
-                painter.setBrush(rail_col)
-                painter.drawRoundedRect(rail, 1, 1)
 
             if playing:
                 painter.setBrush(QColor(type_color))
@@ -388,27 +423,16 @@ class TimelineDelegate(QStyledItemDelegate):
                     painter.drawEllipse(QRectF(grip_x + gx, grip_y + gy, 2.0, 2.0))
 
             # Index.
-            num_left = outer.left() + (28 if compact else 46)
+            num_left = outer.left() + (28 if compact else 46) + child_indent
             num_rect = QRectF(num_left, outer.top(), 26 if compact else 30, outer.height())
             num_color = "#000000" if playing else COLORS["text"]
             painter.setPen(QColor(num_color))
             painter.setFont(QFont("Segoe UI", 9 if compact else 10, QFont.Weight.DemiBold))
             painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, str(row + 1))
 
-            if group_badge and kind != "group":
-                gb_rect = QRectF(num_rect.left() - 2, outer.center().y() + 9, num_rect.width() + 4, 14)
-                gb_col = QColor(group_badge.get("color") or type_color)
-                gb_bg = QColor(COLORS["bg"])
-                painter.setPen(QPen(gb_col, 1))
-                painter.setBrush(QBrush(gb_bg))
-                painter.drawRoundedRect(gb_rect, 4, 4)
-                painter.setPen(gb_col)
-                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.Black))
-                painter.drawText(gb_rect, Qt.AlignmentFlag.AlignCenter, group_badge.get("badge", "G"))
-
             # Icon tile.
             icon_size = 28 if compact else 34
-            icon_left = outer.left() + (54 if compact else 82)
+            icon_left = outer.left() + (54 if compact else 82) + child_indent
             icon_rect = QRectF(icon_left, outer.center().y() - icon_size / 2, icon_size, icon_size)
             path = QPainterPath(); path.addRoundedRect(icon_rect, 8, 8)
             painter.setPen(QPen(QColor(COLORS["border"]), 1))
@@ -424,6 +448,9 @@ class TimelineDelegate(QStyledItemDelegate):
 
             status_w = 76 if compact else 92
             status_x = outer.left() + (216 if compact else 300)
+            conf_w = 46 if compact else 54
+            conf_gap = 8 if compact else 10
+            conf_rect = QRectF(status_x - conf_w - conf_gap, outer.center().y() - 7, conf_w, 14) if kind == "image" else QRectF()
             duration_w = 46 if compact else 56
             dur_x = status_x + status_w + 10
             bar_x = dur_x + duration_w + 10
@@ -451,8 +478,15 @@ class TimelineDelegate(QStyledItemDelegate):
                     detail = f"Repeat x{count} · back to {meta.get('badge', 'G')} {meta.get('name', 'Group')}"
             depth = max(0, _safe_int(getattr(action, "block_depth", 0), 0))
             text_x = icon_rect.right() + 14 + min(depth, 4) * 12
-            text_right = max(text_x + 72, status_x - 14)
-            text_w = max(72, text_right - text_x)
+            text_right_limit = (conf_rect.left() - 10) if kind == "image" and not conf_rect.isNull() else (status_x - 14)
+            if kind == "image" and not conf_rect.isNull():
+                text_right = max(text_x + (42 if compact else 58), text_right_limit)
+                if text_right_limit > text_x + 28:
+                    text_right = min(text_right, text_right_limit)
+                text_w = max(28, text_right - text_x)
+            else:
+                text_right = max(text_x + 72, text_right_limit)
+                text_w = max(72, text_right - text_x)
             title_rect = QRectF(text_x, outer.center().y() - 13, text_w, 17)
             detail_rect = QRectF(text_x, outer.center().y() + 3, text_w, 14)
             title_color = "#000000" if playing else (COLORS["text_dark"] if not enabled else COLORS["text"])
@@ -460,20 +494,20 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
             fm = painter.fontMetrics()
             painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(title, Qt.TextElideMode.ElideRight, int(text_w)))
-            painter.setPen(QColor(COLORS["text_dim"]))
-            painter.setFont(QFont("Segoe UI", 7 if compact else 8))
-            fm = painter.fontMetrics()
-            painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
+            if kind != "group":
+                painter.setPen(QColor(COLORS["text_dim"]))
+                painter.setFont(QFont("Segoe UI", 7 if compact else 8))
+                fm = painter.fontMetrics()
+                painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
             if kind == "group":
-                tri = "▶" if bool(getattr(action, "group_collapsed", False)) else "▼"
                 badge = group_badge.get("badge", "G") if group_badge else "G"
                 gcol = QColor(group_badge.get("color") if group_badge else type_color)
-                chip_rect = QRectF(text_x, outer.center().y() + 8, 56 if compact else 66, 16)
+                chip_rect = QRectF(text_x, outer.center().y() + 7, 42 if compact else 48, 16)
                 self._rounded_rect(painter, chip_rect, 4, COLORS["bg"], gcol.name(), 1)
                 painter.setPen(gcol)
                 painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.Black))
-                painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, f"{tri} {badge}")
+                painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, badge)
 
             if kind == "image":
                 match_state = getattr(view, "image_states", {}).get(row, "")
@@ -492,12 +526,13 @@ class TimelineDelegate(QStyledItemDelegate):
 
                 # Confidence threshold preview for image actions. This is static
                 # metadata, while the match-state badge above reflects runtime.
+                # It now lives in the status area, directly left of Pending.
                 conf = int(round(_safe_float(getattr(action, "similarity", 0.95), 0.95) * 100))
-                conf_rect = QRectF(max(text_x, text_right - (48 if compact else 58)), outer.center().y() + 7, 48 if compact else 58, 14)
-                self._rounded_rect(painter, conf_rect, 4, COLORS["bg"], type_color, 1)
-                painter.setPen(QColor(type_color))
-                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
-                painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
+                if not conf_rect.isNull() and conf_rect.right() > text_x + 10:
+                    self._rounded_rect(painter, conf_rect, 4, COLORS["bg"], type_color, 1)
+                    painter.setPen(QColor(type_color))
+                    painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
+                    painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
 
             if linked_target and kind != "group":
                 link_rect = QRectF(text_x, outer.center().y() + 7, 46 if compact else 54, 14)
@@ -583,12 +618,28 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
                 painter.drawText(fb_rect, Qt.AlignmentFlag.AlignCenter, feedback)
 
-            # Kebab menu dots.
+            # Far-right control.  Group rows keep the same hit-test/collapse
+            # behavior, but the visual now reads as a clean expand/collapse
+            # chevron instead of a generic kebab menu.
             dot_x = outer.right() - (16 if compact else 22)
-            painter.setBrush(QColor(COLORS["text_dim"]))
-            painter.setPen(Qt.PenStyle.NoPen)
-            for dy in (-7, 0, 7):
-                painter.drawEllipse(QRectF(dot_x, outer.center().y() + dy - 1.5, 3, 3))
+            if kind == "group":
+                chev_col = QColor(COLORS["text_dim"])
+                chev_col.setAlpha(230)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(QPen(chev_col, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                cy = outer.center().y()
+                collapsed = bool(getattr(action, "group_collapsed", False))
+                if collapsed:
+                    painter.drawLine(QPointF(dot_x - 3, cy - 6), QPointF(dot_x + 4, cy))
+                    painter.drawLine(QPointF(dot_x + 4, cy), QPointF(dot_x - 3, cy + 6))
+                else:
+                    painter.drawLine(QPointF(dot_x - 6, cy + 3), QPointF(dot_x, cy - 3))
+                    painter.drawLine(QPointF(dot_x, cy - 3), QPointF(dot_x + 6, cy + 3))
+            else:
+                painter.setBrush(QColor(COLORS["text_dim"]))
+                painter.setPen(Qt.PenStyle.NoPen)
+                for dy in (-7, 0, 7):
+                    painter.drawEllipse(QRectF(dot_x, outer.center().y() + dy - 1.5, 3, 3))
 
             insert_row = -1 if getattr(view, "drop_group_row", -1) >= 0 else getattr(view, "drop_insert_row", -1)
             line_y = None
