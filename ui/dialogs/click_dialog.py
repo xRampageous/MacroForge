@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QPushButton, QCheckBox
 )
 from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QCursor
+from PyQt6.QtGui import QCursor, QKeySequence, QShortcut
 from models import Action
 from ui.theme import COLORS
 from ui.dialogs._common import dialog_stylesheet, make_header, make_buttons
@@ -18,6 +18,7 @@ class ClickDialog(QDialog):
         C = COLORS
         self._accent = C['click']
         self.setStyleSheet(dialog_stylesheet(self._accent))
+        self._set_coords_hotkey = self._hotkey_text(parent, "set_click_coordinates", "Ctrl+Shift+M")
         cursor_pos = QCursor.pos()
         start_x = str(getattr(existing, 'click_x', int(cursor_pos.x()))) if existing else str(int(cursor_pos.x()))
         start_y = str(getattr(existing, 'click_y', int(cursor_pos.y()))) if existing else str(int(cursor_pos.y()))
@@ -40,6 +41,17 @@ class ClickDialog(QDialog):
         coord.addWidget(self.y)
         coord.addStretch()
         lo.addLayout(coord)
+        self.cursor_pos = QLabel("Mouse: -")
+        self.cursor_pos.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 750;")
+        lo.addWidget(self.cursor_pos)
+        hint_text = (
+            f"Press {self._set_coords_hotkey} to set X/Y from the current mouse position"
+            if self._set_coords_hotkey else
+            "Set click coordinates shortcut is disabled"
+        )
+        self.hotkey_hint = QLabel(hint_text)
+        self.hotkey_hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 700;")
+        lo.addWidget(self.hotkey_hint)
 
         # Button
         btn_row = QHBoxLayout()
@@ -82,19 +94,63 @@ class ClickDialog(QDialog):
         self._xy_timer.setInterval(120)
         self._xy_timer.timeout.connect(self._sync_cursor_xy)
         self._xy_timer.start()
+        self._set_coords_shortcut = None
+        if self._set_coords_hotkey:
+            self._set_coords_shortcut = QShortcut(QKeySequence(self._set_coords_hotkey), self)
+            self._set_coords_shortcut.activated.connect(self._capture_cursor_xy)
+
+    def _hotkey_text(self, parent, name, default):
+        try:
+            if parent is not None and hasattr(parent, "_hotkey"):
+                return parent._hotkey(name, default)
+        except Exception:
+            pass
+        return default
 
     def _sync_cursor_xy(self):
-        if self.x.hasFocus() or self.y.hasFocus():
-            return
         pos = QCursor.pos()
-        self.x.setText(str(int(pos.x())))
-        self.y.setText(str(int(pos.y())))
+        self.cursor_pos.setText(f"Mouse: {int(pos.x())}, {int(pos.y())}")
+
+    def _capture_cursor_xy(self):
+        pos = QCursor.pos()
+        for field, value in ((self.x, str(int(pos.x()))), (self.y, str(int(pos.y())))):
+            field.setText(value)
+            self._set_field_invalid(field, False)
+
+    def _invalid_style(self):
+        return (
+            f"background-color: {COLORS['bg_tertiary']}; color: {COLORS['text']}; "
+            f"border: 1px solid {COLORS['error']}; border-radius: 7px; "
+            "padding: 6px 9px; font-size: 12px;"
+        )
+
+    def _set_field_invalid(self, field, invalid):
+        field.setStyleSheet(self._invalid_style() if invalid else "")
+
+    def _parse_int_field(self, field):
+        try:
+            value = int(str(field.text()).strip())
+            self._set_field_invalid(field, False)
+            return value
+        except (TypeError, ValueError):
+            self._set_field_invalid(field, True)
+            return None
+
+    def accept(self):
+        x = self._parse_int_field(self.x)
+        y = self._parse_int_field(self.y)
+        if x is None or y is None:
+            return
+        super().accept()
 
     def get_action(self):
+        x = self._parse_int_field(self.x)
+        y = self._parse_int_field(self.y)
+        if x is None or y is None:
+            return None
         try:
-            x = int(self.x.text())
-            y = int(self.y.text())
             rand = int(self.rand.text() or 0)
+            repeat = max(1, int(self.rep.text() or 1))
         except ValueError:
             return None
         return Action(
@@ -105,6 +161,6 @@ class ClickDialog(QDialog):
             click_y=y,
             click_button=self.btn.currentText(),
             click_rand_radius=rand,
-            repeat_count=max(1, int(self.rep.text() or 1)),
+            repeat_count=repeat,
             label=self.lbl.text().strip()
         )

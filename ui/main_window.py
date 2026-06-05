@@ -1649,8 +1649,10 @@ class MainWindow(QMainWindow):
     def _hotkey(self, name: str, default: str) -> str:
         try:
             hotkeys = self.settings_manager.settings.setdefault("hotkeys", {})
-            value = (hotkeys.get(name) or default or "").strip()
-            return value or default
+            value = hotkeys.get(name)
+            if value is None:
+                return (default or "").strip()
+            return str(value).strip()
         except Exception:
             return default
 
@@ -1696,6 +1698,8 @@ class MainWindow(QMainWindow):
         bind("toggle_runtime_log", "Ctrl+Shift+L", self.toggle_runtime_log_panel)
         bind("variables", "Ctrl+Alt+V", self.open_variables_dialog)
         bind("profile_library", "Ctrl+Alt+P", self.open_profile_library)
+        bind("set_click_coordinates", "Ctrl+Shift+M", self._capture_click_coordinates_from_cursor)
+        bind("reset_timeline_zoom", "Ctrl+0", self.reset_timeline_zoom)
 
     def reload_shortcuts(self):
         self._setup_shortcuts()
@@ -1775,6 +1779,28 @@ class MainWindow(QMainWindow):
             self.timeline.selection_summary_changed.connect(self._timeline_selection_summary_changed)
         if hasattr(self.timeline, "interaction_status_changed"):
             self.timeline.interaction_status_changed.connect(self.status)
+        if hasattr(self.timeline, "zoom_changed"):
+            self.timeline.zoom_changed.connect(self._on_timeline_zoom_changed)
+
+    def _on_timeline_zoom_changed(self, zoom):
+        try:
+            zoom = max(0.55, min(1.60, float(zoom)))
+            self.settings_manager.set("timeline_zoom", zoom)
+            self.save_session()
+            self.status(f"Timeline zoom {zoom:.2f}x")
+        except Exception:
+            pass
+
+    def reset_timeline_zoom(self):
+        try:
+            if hasattr(self.timeline, "set_zoom"):
+                self.timeline.set_zoom(1.0)
+            else:
+                self.timeline.zoom = 1.0
+                self.timeline.viewport().update()
+                self._on_timeline_zoom_changed(1.0)
+        except Exception:
+            pass
 
     def _timeline_selection_summary_changed(self, rows):
         try:
@@ -2337,9 +2363,11 @@ class MainWindow(QMainWindow):
                 self.inf_check.setChecked(settings.get("infinite_loop", False))
                 self.human_check.setChecked(settings.get("human_curve", True))
                 self.macro_variables = dict(settings.get("macro_variables", {}) or {})
-                # Keep the reference layout as the persisted baseline. Users
-                # can still compact rows temporarily with Ctrl+wheel.
-                self.timeline.zoom = max(1.0, float(settings.get("zoom", 1.0) or 1.0))
+                zoom = self.settings_manager.get("timeline_zoom", settings.get("zoom", 1.0))
+                if hasattr(self.timeline, "set_zoom"):
+                    self.timeline.set_zoom(zoom, emit=False)
+                else:
+                    self.timeline.zoom = max(0.55, min(1.60, float(zoom or 1.0)))
                 # Window geometry is stored GLOBALLY (see _restore_window_geometry),
                 # never per-profile, so switching profiles never moves the window.
                 self.engine.actions = self.action_model.actions()
@@ -2362,6 +2390,14 @@ class MainWindow(QMainWindow):
                     self.status("Profile partially loaded")
         else:
             self.action_model.clear()
+            try:
+                zoom = self.settings_manager.get("timeline_zoom", 1.0)
+                if hasattr(self.timeline, "set_zoom"):
+                    self.timeline.set_zoom(zoom, emit=False)
+                else:
+                    self.timeline.zoom = max(0.55, min(1.60, float(zoom or 1.0)))
+            except Exception:
+                pass
             self.timeline.refresh()
             self.update_statistics(immediate=True)
             self.status("Ready")
@@ -2385,6 +2421,10 @@ class MainWindow(QMainWindow):
             "zoom": self.timeline.zoom,
         }
         self.session_manager.save_profile(self.action_model.actions(), settings)
+        try:
+            self.settings_manager.set("timeline_zoom", self.timeline.zoom)
+        except Exception:
+            pass
         self._write_recovery_snapshot(clean_shutdown=False)
         self._save_window_geometry()
         if hasattr(self, "autosave_label"):
@@ -2491,42 +2531,85 @@ class MainWindow(QMainWindow):
         return full_text[:max(0, limit - 1)].rstrip() + "…"
 
     def _setup_click_xy_tracker(self):
-        self._click_xy_save_timer = QTimer(self)
-        self._click_xy_save_timer.setSingleShot(True)
-        self._click_xy_save_timer.timeout.connect(self.save_session)
         self._click_xy_timer = QTimer(self)
         self._click_xy_timer.setInterval(120)
-        self._click_xy_timer.timeout.connect(self._update_click_xy_from_cursor)
+        self._click_xy_timer.timeout.connect(self._update_click_xy_readout)
         self._click_xy_timer.start()
 
-    def _update_click_xy_from_cursor(self):
+    def _update_click_xy_readout(self):
         try:
-            if getattr(self, "_inspector_loading", False):
+            label = getattr(self, "ic_cursor_pos", None)
+            if label is None:
                 return
-            if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
-                return
-            action = self.action_model.get(self.active_index)
-            if getattr(action, "action_type", "") != "click":
-                return
-            if not getattr(self, "insp_click", None) or not self.insp_click.isVisible():
-                return
-            if self.ic_x.hasFocus() or self.ic_y.hasFocus():
+            if (
+                self.active_index < 0
+                or self.active_index >= self.action_model.rowCount()
+                or getattr(self.action_model.get(self.active_index), "action_type", "") != "click"
+                or not getattr(self, "insp_click", None)
+                or not self.insp_click.isVisible()
+            ):
+                label.setText("Mouse: -")
                 return
             pos = QCursor.pos()
-            x, y = int(pos.x()), int(pos.y())
-            if int(getattr(action, "click_x", 0) or 0) == x and int(getattr(action, "click_y", 0) or 0) == y:
+            label.setText(f"Mouse: {int(pos.x())}, {int(pos.y())}")
+        except Exception:
+            pass
+
+    def _click_field_invalid_style(self):
+        return (
+            f"background-color: {COLORS['bg_tertiary']}; color: {COLORS['text']}; "
+            f"border: 1px solid {COLORS['error']}; border-radius: 8px; "
+            "padding: 5px 10px; font-size: 12px;"
+        )
+
+    def _set_click_field_invalid(self, field, invalid):
+        try:
+            field.setStyleSheet(self._click_field_invalid_style() if invalid else "")
+        except Exception:
+            pass
+
+    def _validate_click_xy_fields(self):
+        valid = True
+        for field in (getattr(self, "ic_x", None), getattr(self, "ic_y", None)):
+            if field is None:
+                valid = False
+                continue
+            try:
+                int(str(field.text()).strip())
+                self._set_click_field_invalid(field, False)
+            except (TypeError, ValueError):
+                self._set_click_field_invalid(field, True)
+                valid = False
+        return valid
+
+    def _capture_click_coordinates_from_cursor(self):
+        try:
+            if (
+                self.active_index < 0
+                or self.active_index >= self.action_model.rowCount()
+                or getattr(self.action_model.get(self.active_index), "action_type", "") != "click"
+                or not getattr(self, "insp_click", None)
+                or not self.insp_click.isVisible()
+            ):
+                self.status("Select a click action to set X/Y")
                 return
-            action.click_x = x
-            action.click_y = y
-            self._stamp_action_environment(action)
+            action = self.action_model.get(self.active_index)
+            pos = QCursor.pos()
+            x, y = int(pos.x()), int(pos.y())
             for field, value in ((self.ic_x, str(x)), (self.ic_y, str(y))):
                 field.blockSignals(True)
                 field.setText(value)
                 field.blockSignals(False)
+                self._set_click_field_invalid(field, False)
+            action.click_x = x
+            action.click_y = y
+            self._stamp_action_environment(action)
             idx = self.action_model.index(self.active_index, 0)
             self.action_model.dataChanged.emit(idx, idx)
             self.timeline.viewport().update()
-            self._click_xy_save_timer.start(800)
+            self.save_session()
+            self._update_click_xy_readout()
+            self.status(f"Click coordinates set to {x}, {y}")
         except Exception:
             pass
 
@@ -2608,6 +2691,8 @@ class MainWindow(QMainWindow):
             elif action.action_type == "click":
                 self.ic_x.setText(str(getattr(action, 'click_x', 0)))
                 self.ic_y.setText(str(getattr(action, 'click_y', 0)))
+                self._validate_click_xy_fields()
+                self._update_click_xy_readout()
                 self.ic_btn.setCurrentText(getattr(action, 'click_button', 'left'))
                 self.ic_rand.setText(str(getattr(action, 'click_rand_radius', 0)))
                 self.ic_repeat.setText(str(getattr(action, 'repeat_count', 1)))
@@ -2707,6 +2792,10 @@ class MainWindow(QMainWindow):
                 action.duration = float(self.ip_dur.text())
                 action.label = inspector_label_text
             elif action.action_type == "click":
+                if not self._validate_click_xy_fields():
+                    if not autosave:
+                        QMessageBox.critical(self, "Invalid Input", "Click X and Y must be whole numbers.")
+                    return
                 action.click_x = int(self.ic_x.text())
                 action.click_y = int(self.ic_y.text())
                 action.click_button = self.ic_btn.currentText()

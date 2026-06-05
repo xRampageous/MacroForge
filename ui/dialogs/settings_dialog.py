@@ -25,6 +25,8 @@ HOTKEY_ROWS = [
     ("redo", "Redo", "Ctrl+Y"),
     ("search", "Timeline search", "Ctrl+F"),
     ("run_from_selected", "Run from selected", "Ctrl+Enter"),
+    ("set_click_coordinates", "Set click coordinates", "Ctrl+Shift+M"),
+    ("reset_timeline_zoom", "Reset timeline zoom", "Ctrl+0"),
     ("save", "Save session", "Ctrl+S"),
 ]
 
@@ -134,7 +136,7 @@ class SettingsDialog(QDialog):
             self.hotkeys_preview.setText(
                 f"Playback: {val('play_pause')} start/pause · {val('stop_deselect')} stop/deselect · {val('toggle_runtime_log')} runtime log\n"
                 f"Editor: {val('select_all')} select all · {val('duplicate')} duplicate · {val('delete')} delete · {val('group')} folder · {val('ungroup')} ungroup\n"
-                f"Tools: {val('preflight')} pre-flight · {val('macro_editor')} macro editor · {val('profile_library')} library · {val('variables')} variables"
+                f"Tools: {val('preflight')} pre-flight · {val('macro_editor')} macro editor · {val('profile_library')} library · {val('variables')} variables · {val('set_click_coordinates')} set click X/Y · {val('reset_timeline_zoom')} reset zoom"
             )
         except Exception:
             pass

@@ -763,6 +763,7 @@ class TimelineView(QListView):
     group_toggle_requested = pyqtSignal(int)
     selection_summary_changed = pyqtSignal(list)
     interaction_status_changed = pyqtSignal(str)
+    zoom_changed = pyqtSignal(float)
 
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
@@ -839,6 +840,21 @@ class TimelineView(QListView):
         sel = self.selectionModel()
         if sel is not None:
             sel.currentChanged.connect(self._on_current_changed)
+
+    def set_zoom(self, value, emit=True):
+        old = self.zoom
+        try:
+            zoom = float(value)
+        except (TypeError, ValueError):
+            zoom = 1.0
+        self.zoom = max(0.55, min(1.60, zoom))
+        if self.zoom != old:
+            self.setUniformItemSizes(False)
+            self.doItemsLayout()
+            self.setUniformItemSizes(False)
+            self.viewport().update()
+            if emit:
+                self.zoom_changed.emit(float(self.zoom))
 
     def _actions(self):
         model = self.model()
@@ -1594,14 +1610,8 @@ class TimelineView(QListView):
 
     def wheelEvent(self, event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            old = self.zoom
             delta = event.angleDelta().y()
-            self.zoom = max(0.55, min(1.60, self.zoom * (1.08 if delta > 0 else 1 / 1.08)))
-            if self.zoom != old:
-                self.setUniformItemSizes(False)
-                self.doItemsLayout()
-                self.setUniformItemSizes(False)
-                self.viewport().update()
+            self.set_zoom(self.zoom * (1.08 if delta > 0 else 1 / 1.08))
             event.accept()
             return
         super().wheelEvent(event)

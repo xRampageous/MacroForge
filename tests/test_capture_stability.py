@@ -17,7 +17,8 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QMenu, QPushButton, QWidget
 
 from debugger import DebugLogger
-from models import Action, ActionListModel, ProfileManager
+from models import Action, ActionListModel, ProfileManager, SettingsManager
+from ui.dialogs.click_dialog import ClickDialog
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
 from ui.timeline import TimelineView, _action_text
@@ -967,6 +968,81 @@ class TestPlaybackVisibility(QtTestCase):
             for label in ("Open", "New", "Duplicate", "Rename", "Repair", "Export", "Import", "Delete", "Close"):
                 self.assertIn(label, captured["buttons"])
             self._dispose_window(window)
+
+    def test_timeline_zoom_persists_from_global_settings(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_manager = ProfileManager()
+            profile_manager.base_dir = tmpdir
+            profile_manager.profiles_dir = os.path.join(tmpdir, "profiles")
+            profile_manager.settings_file = os.path.join(tmpdir, "settings.json")
+            os.makedirs(profile_manager.profiles_dir, exist_ok=True)
+            profile_manager.save_profile([Action("alpha", 1.0)], {"zoom": 1.0}, "alpha")
+            settings_manager = SettingsManager(tmpdir)
+            settings_manager.set("timeline_zoom", 0.72)
+            with (
+                patch.object(MainWindow, "_check_update_silent"),
+                patch.object(MainWindow, "_restore_window_geometry"),
+                patch.object(MainWindow, "_setup_tray"),
+            ):
+                window = MainWindow(profile_manager=profile_manager, settings_manager=settings_manager)
+
+            self.assertAlmostEqual(window.timeline.zoom, 0.72)
+            window.timeline.set_zoom(1.24)
+            self.assertAlmostEqual(settings_manager.get("timeline_zoom"), 1.24)
+            window.reset_timeline_zoom()
+            self.assertAlmostEqual(window.timeline.zoom, 1.0)
+            self.assertAlmostEqual(settings_manager.get("timeline_zoom"), 1.0)
+            self._dispose_window(window)
+
+    def test_click_coordinate_capture_hotkey_updates_selected_click_only_on_command(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action(
+                "[CLICK]",
+                0.05,
+                action_type="click",
+                click_x=10,
+                click_y=20,
+                click_button="left",
+            )
+            window.action_model.set_actions([action])
+            window.show()
+            self.app.processEvents()
+            window.select(0)
+
+            with patch("ui.main_window.QCursor.pos", return_value=QPoint(333, 444)):
+                window._update_click_xy_readout()
+                self.assertEqual((action.click_x, action.click_y), (10, 20))
+                self.assertIn("333, 444", window.ic_cursor_pos.text())
+                window._capture_click_coordinates_from_cursor()
+
+            self.assertEqual((action.click_x, action.click_y), (333, 444))
+            self.assertEqual(window.ic_x.text(), "333")
+            self.assertEqual(window.ic_y.text(), "444")
+            self.assertTrue(window._save_session_timer.isActive())
+            self._dispose_window(window)
+
+    def test_click_dialog_shows_hotkey_hint_without_auto_overwriting_fields(self):
+        class Parent(QWidget):
+            def _hotkey(self, name, default):
+                return "Ctrl+Shift+M"
+
+        parent = Parent()
+        with patch("ui.dialogs.click_dialog.QCursor.pos", return_value=QPoint(10, 20)):
+            dialog = ClickDialog(parent=parent)
+
+        dialog.x.setText("1")
+        dialog.y.setText("2")
+        with patch("ui.dialogs.click_dialog.QCursor.pos", return_value=QPoint(30, 40)):
+            dialog._sync_cursor_xy()
+            self.assertEqual((dialog.x.text(), dialog.y.text()), ("1", "2"))
+            self.assertIn("30, 40", dialog.cursor_pos.text())
+            dialog._capture_cursor_xy()
+
+        self.assertEqual((dialog.x.text(), dialog.y.text()), ("30", "40"))
+        self.assertIn("Ctrl+Shift+M", dialog.hotkey_hint.text())
+        dialog.deleteLater()
+        parent.deleteLater()
 
     def test_profile_switch_loads_actions_and_exact_speed_settings(self):
         with tempfile.TemporaryDirectory() as tmpdir:

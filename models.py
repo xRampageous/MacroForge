@@ -522,11 +522,14 @@ class SettingsManager:
             "toggle_runtime_log": "Ctrl+Shift+L",
             "variables": "Ctrl+Alt+V",
             "profile_library": "Ctrl+Alt+P",
+            "set_click_coordinates": "Ctrl+Shift+M",
+            "reset_timeline_zoom": "Ctrl+0",
         },
         "start_minimized": False,
         "auto_save": True,
         "default_loops": 1,
         "default_speed": 1.0,
+        "timeline_zoom": 1.0,
     }
 
     def __init__(self, base_dir: str = None):
