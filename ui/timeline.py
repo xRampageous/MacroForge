@@ -13,6 +13,9 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPainterPath, QLi
 from ui.theme import COLORS, TYPE_COLORS
 from models import ActionListModel
 
+TIMELINE_PROGRESS_COLUMN_SHIFT = 20
+TIMELINE_MULTI_SELECT_RAIL_WIDTH = 4
+
 
 def _safe_float(value, default=0.0):
     try:
@@ -211,6 +214,12 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             action = index.data(ActionListModel.ActionRole)
             selected = bool(option.state & QStyle.StateFlag.State_Selected)
+            multi_select = (
+                view.multi_selection_visual_state(row)
+                if hasattr(view, "multi_selection_visual_state")
+                else {"active": False, "count": 0, "has_previous": False, "has_next": False}
+            )
+            multi_selected = bool(multi_select.get("active"))
             hovered = row == getattr(view, "hover_row", -1)
             playing = row == getattr(view, "playing_index", -1)
             queued = row == getattr(view, "next_index", -1)
@@ -256,6 +265,8 @@ class TimelineDelegate(QStyledItemDelegate):
                 bg = _mix(bg, COLORS["bg"], 0.72)
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
+            if multi_selected and not playing:
+                bg = _mix(bg, COLORS.get("accent", type_color), 0.16)
             if selected and hovered:
                 bg = _mix(bg, type_color, 0.12)
             if queued or active_group:
@@ -282,6 +293,8 @@ class TimelineDelegate(QStyledItemDelegate):
             border = COLORS["border"]
             if selected and hovered:
                 border = COLORS["border_light"]
+            if multi_selected and not playing:
+                border = COLORS.get("accent", type_color)
             if queued:
                 border = _mix(COLORS["border"], type_color, 0.35)
             if traced:
@@ -349,6 +362,39 @@ class TimelineDelegate(QStyledItemDelegate):
                     shadow_col.setAlpha(95)
                     self._rounded_rect(painter, shadow, 8, shadow_col.name(QColor.NameFormat.HexArgb))
                 self._rounded_rect(painter, outer, 8, bg, border, 1)
+
+            if multi_selected:
+                painter.save()
+                rail_col = QColor(COLORS.get("accent", type_color))
+                rail_col.setAlpha(236 if selected else 205)
+                rail_x = outer.left() + (7 if compact else 9)
+                rail_w = TIMELINE_MULTI_SELECT_RAIL_WIDTH
+                rail_top = outer.top() + (0 if multi_select.get("has_previous") else 7)
+                rail_bottom = outer.bottom() - (0 if multi_select.get("has_next") else 7)
+                rail = QRectF(rail_x, rail_top, rail_w, max(8, rail_bottom - rail_top))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(rail_col)
+                painter.drawRoundedRect(rail, rail_w / 2, rail_w / 2)
+
+                node_r = 4.0 if compact else 4.5
+                node = QRectF(
+                    rail_x + rail_w / 2 - node_r,
+                    outer.center().y() - node_r,
+                    node_r * 2,
+                    node_r * 2,
+                )
+                painter.setBrush(QColor(COLORS["bg"]))
+                painter.drawEllipse(node.adjusted(-1.2, -1.2, 1.2, 1.2))
+                painter.setBrush(rail_col)
+                painter.drawEllipse(node)
+
+                if selected:
+                    glow = QColor(COLORS.get("accent", type_color))
+                    glow.setAlpha(96)
+                    painter.setPen(QPen(glow, 1.4))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRoundedRect(QRectF(outer).adjusted(1.5, 1.5, -1.5, -1.5), 7, 7)
+                painter.restore()
 
             if current_search_match and not playing:
                 glow_rect = QRectF(outer).adjusted(1.5, 1.5, -1.5, -1.5)
@@ -534,7 +580,7 @@ class TimelineDelegate(QStyledItemDelegate):
             # Use one invisible global column system for normal rows, group
             # headers and cut-in child rows.  Child cards remain indented on
             # the left, but status/duration/progress stay table-aligned.
-            status_right = full_outer.left() + (292 if compact else 392)
+            status_right = full_outer.left() + (292 if compact else 392) + TIMELINE_PROGRESS_COLUMN_SHIFT
             status_font = QFont("Segoe UI", 8, QFont.Weight.DemiBold)
             painter.setFont(status_font)
             status_text_w = painter.fontMetrics().horizontalAdvance(status)
@@ -943,6 +989,22 @@ class TimelineView(QListView):
 
     def selected_rows(self):
         return sorted(int(r) for r in self.sync_selection())
+
+    def multi_selection_visual_state(self, row: int):
+        try:
+            row = int(row)
+        except (TypeError, ValueError):
+            return {"active": False, "count": 0, "has_previous": False, "has_next": False, "ordinal": -1}
+        rows = sorted({int(r) for r in getattr(self, "selected_indices", set())})
+        if len(rows) <= 1 or row not in rows:
+            return {"active": False, "count": len(rows), "has_previous": False, "has_next": False, "ordinal": -1}
+        return {
+            "active": True,
+            "count": len(rows),
+            "has_previous": row - 1 in rows,
+            "has_next": row + 1 in rows,
+            "ordinal": rows.index(row),
+        }
 
     def _is_row_selectable(self, row: int) -> bool:
         if self.model() is None or row < 0 or row >= self.model().rowCount():

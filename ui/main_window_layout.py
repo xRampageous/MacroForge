@@ -1236,7 +1236,7 @@ def build_main_layout(window):
         return btn
 
     self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 60)
-    self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 69)
+    self.ii_capture_btn = image_tool_btn("Capture image", "target", "Capture image", self._capture_active_image_region, 86)
     self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 47)
     self.ii_zoom_btn = self.ii_browse_btn
     self.ii_fit_btn = self.ii_test_btn
@@ -1345,27 +1345,40 @@ def build_main_layout(window):
     self.ico_false = compact_combo()
     self.ico_retry_count = QSpinBox()
     self.ico_retry_count.setRange(1, 99)
-    self.ico_retry_count.setFixedHeight(30)
+    self.ico_retry_count.setFixedSize(50, 30)
+    self.ico_retry_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.ico_retry_count.setStyleSheet(
+        f"QSpinBox {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 6px; "
+        "font-size: 11px; font-weight: 750; }}"
+        f"QSpinBox:focus {{ border-color: {C['condition']}; }}"
+    )
     self.ico_retry_delay = form_input("delay", "0.25")
+    self.ico_retry_delay.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.ico_fail_mode = compact_combo(["default", "continue", "stop", "jump", "recovery_group"])
     self.ico_fail_target = compact_combo()
     self.ico_rule = QLabel("Edit for pixel/variable values")
     self.ico_rule.setWordWrap(True)
-    self.ico_rule.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
+    self.ico_rule.setMinimumHeight(30)
+    self.ico_rule.setStyleSheet(
+        f"color: {C['text_dim']}; font-size: 10px; font-weight: 700; "
+        f"background-color: {C['bg_secondary']}; border: 1px solid {C['border']}; "
+        "border-radius: 7px; padding: 5px 7px;"
+    )
     ico_retry = QHBoxLayout()
     ico_retry.setContentsMargins(0, 0, 0, 0)
     ico_retry.setSpacing(6)
-    self.ico_retry_count.setFixedWidth(56)
+    self.ico_retry_count.setFixedWidth(50)
     self.ico_retry_delay.setFixedWidth(80)
     ico_retry.addWidget(self.ico_retry_count)
     ico_retry.addWidget(self.ico_retry_delay)
     self.ico_label.setVisible(False)
-    condition_value_width = 142
+    condition_value_width = 136
     ico_lo.addLayout(inspector_field_row("Type", self.ico_type, width=condition_value_width))
-    ico_lo.addLayout(inspector_field_row("True target", self.ico_true, width=condition_value_width))
-    ico_lo.addLayout(inspector_field_row("False target", self.ico_false, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("True", self.ico_true, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("False", self.ico_false, width=condition_value_width))
     ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=condition_value_width))
-    ico_lo.addLayout(inspector_field_row("On false/fail", self.ico_fail_mode, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("On false", self.ico_fail_mode, width=condition_value_width))
     ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=condition_value_width))
     ico_lo.addWidget(self.ico_rule)
     ico_outer.addWidget(condition_card)

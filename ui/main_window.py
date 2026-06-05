@@ -4,6 +4,7 @@ import sys
 import time
 import json
 import csv
+import io
 import base64
 import queue
 import ctypes
@@ -566,23 +567,33 @@ class MainWindow(QMainWindow):
                     ctl = controls.get(body_name)
                     return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-                # Image actions use one collapsible Image Settings block inside
-                # the flat Inspector.  Let that block collapse before the main
-                # Inspector, then continue with the regular side-panel cards.
+                # Active image rows must keep Image Settings fully drawn.  Under
+                # height pressure, collapse the less important side-panel cards
+                # first instead of folding the selected image editor.
                 try:
+                    active_kind = ""
+                    if 0 <= int(getattr(self, "active_index", -1)) < self.action_model.rowCount():
+                        active_kind = getattr(self.action_model.get(self.active_index), "action_type", "") or ""
                     image_settings_visible = bool(
                         getattr(self, "insp_image", None) is not None
-                        and self.insp_image.isVisible()
+                        and not self.insp_image.isHidden()
+                        and active_kind == "image"
                         and "inspector_group_image_settings_body" in controls
                     )
                 except Exception:
                     image_settings_visible = False
-                collapse_steps = [
-                    ("inspector_group_image_settings_body", image_settings_visible),
-                    ("inspector_body", True),
-                    ("recorder_body", True),
-                    ("add_action_body", True),
-                ]
+                if image_settings_visible:
+                    collapse_steps = [
+                        ("recorder_body", True),
+                        ("add_action_body", True),
+                    ]
+                else:
+                    collapse_steps = [
+                        ("inspector_group_image_settings_body", False),
+                        ("inspector_body", True),
+                        ("recorder_body", True),
+                        ("add_action_body", True),
+                    ]
                 active_steps = [step for step in collapse_steps if bool(step[1])]
 
                 restore_margin = max(0, int(getattr(self, "_side_panel_bottom_restore_margin", 32)))
@@ -1445,7 +1456,7 @@ class MainWindow(QMainWindow):
             if body is not None:
                 body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
 
-            if body is not None and not body.isVisible():
+            if body is not None and body.isHidden():
                 # Collapsed Inspector: clamp to the header-only size.
                 card.setMinimumHeight(0)
                 card.setMaximumHeight(max(32, card.minimumSizeHint().height() + 2))
@@ -1456,6 +1467,18 @@ class MainWindow(QMainWindow):
                 if body is not None:
                     body.setMinimumHeight(0)
                     body.setMaximumHeight(16777215)
+                if getattr(self, "insp_image", None) is not None and not self.insp_image.isHidden():
+                    image_card = getattr(self, "ii_image_card", None)
+                    if image_card is not None:
+                        image_card.setMaximumHeight(16777215)
+                        image_card.updateGeometry()
+                        image_h = max(
+                            int(image_card.sizeHint().height()),
+                            int(image_card.minimumSizeHint().height()),
+                        )
+                        if image_h > 0:
+                            image_card.setMinimumHeight(image_h)
+                            self.insp_image.setMinimumHeight(image_h)
                 card.setMinimumHeight(0)
                 card.setMaximumHeight(16777215)
                 card.updateGeometry()
@@ -1573,7 +1596,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Image Error", str(exc))
 
     def _capture_active_image_region(self):
-        """Capture only the image search region from the side Inspector button."""
+        """Capture a replacement image template from the side Inspector button."""
         if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
             self.status("No image action selected")
             return
@@ -1583,20 +1606,40 @@ class MainWindow(QMainWindow):
             return
         try:
             from ui.dialogs.image_dialog import CaptureOverlay
+            try:
+                from PIL import ImageGrab
+            except ImportError:
+                QMessageBox.warning(self, "Missing Dependency", "Screen capture requires Pillow:\npip install pillow")
+                return
+            previous_opacity = self.windowOpacity()
+            self.setWindowOpacity(0.0)
+            QApplication.processEvents()
+            time.sleep(0.08)
             overlay = CaptureOverlay()
-            result = overlay.exec()
-            if result == QDialog.DialogCode.Accepted and overlay.region:
-                x, y, w, h = overlay.region
-                self.history.push(self.action_model.actions())
-                action.search_region = f"{x},{y},{w},{h}"
-                self._stamp_action_environment(action)
-                self.refresh()
-                self.save_session()
-                self.status(f"Image search region captured: {x},{y},{w},{h}")
-            else:
-                self.status("Capture region cancelled")
+            try:
+                result = overlay.exec()
+                if result == QDialog.DialogCode.Accepted and overlay.region:
+                    x, y, w, h = overlay.region
+                    shot = ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True)
+                    buf = io.BytesIO()
+                    shot.save(buf, format="PNG")
+                    data = base64.b64encode(buf.getvalue()).decode()
+                    self.history.push(self.action_model.actions())
+                    action.image_data = data
+                    self._stamp_action_environment(action)
+                    self.refresh()
+                    self._set_image_inspector_preview(action)
+                    self.save_session()
+                    self.status("Image captured")
+                else:
+                    self.status("Image capture cancelled")
+            finally:
+                self.setWindowOpacity(previous_opacity)
+                self.raise_()
+                self.activateWindow()
+                QApplication.processEvents()
         except Exception as exc:
-            logger.exception("Failed to capture active image search region")
+            logger.exception("Failed to capture active image template")
             QMessageBox.critical(self, "Capture Error", str(exc))
 
     def _setup_inspector_autosave(self):

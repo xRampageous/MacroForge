@@ -1,5 +1,6 @@
 """Regression tests for the image capture OK/apply path and owned timers."""
 import base64
+import io
 import os
 import sys
 import tempfile
@@ -21,7 +22,7 @@ from models import Action, ActionListModel, ProfileManager, SettingsManager
 from ui.dialogs.click_dialog import ClickDialog
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
-from ui.timeline import TimelineView, _action_text
+from ui.timeline import TIMELINE_MULTI_SELECT_RAIL_WIDTH, TIMELINE_PROGRESS_COLUMN_SHIFT, TimelineView, _action_text
 
 
 PNG_1X1 = base64.b64encode(
@@ -462,6 +463,8 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertTrue(window.image_preview_label.property("has_template"))
             self.assertIsNotNone(window.image_preview_label.pixmap())
             self.assertFalse(window.image_preview_label.pixmap().isNull())
+            self.assertEqual(window.ii_capture_btn.text(), "Capture image")
+            self.assertGreaterEqual(window.ii_capture_btn.width(), 86)
             for object_name in (
                 "image_inspector_preview",
                 "inspector_group_matching",
@@ -479,6 +482,111 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertGreater(grab.width(), 0)
             self.assertGreater(grab.height(), 0)
             window.hide()
+            self._dispose_window(window)
+
+    def test_image_inspector_capture_replaces_timeline_image_template(self):
+        class FakeOverlay:
+            region = (10, 20, 4, 5)
+
+            def exec(self):
+                return QDialog.DialogCode.Accepted
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action(
+                "[IMAGE]",
+                0.05,
+                action_type="image",
+                image_data=PNG_1X1,
+                search_region="1,2,3,4",
+                similarity=0.85,
+                wait_timeout=1.0,
+            )
+            window.action_model.set_actions([action])
+            window.select(0)
+
+            with (
+                patch("ui.dialogs.image_dialog.CaptureOverlay", FakeOverlay),
+                patch("PIL.ImageGrab.grab", return_value=Image.new("RGB", (4, 5), "red")),
+            ):
+                window._capture_active_image_region()
+
+            self.assertNotEqual(action.image_data, PNG_1X1)
+            self.assertEqual(action.search_region, "1,2,3,4")
+            self.assertTrue(window.image_preview_label.property("has_template"))
+            raw = base64.b64decode(action.image_data)
+            with Image.open(io.BytesIO(raw)) as captured:
+                self.assertEqual(captured.size, (4, 5))
+            self.assertTrue(window._save_session_timer.isActive())
+            self._dispose_window(window)
+
+    def test_timeline_progress_column_shift_shortens_rail_by_twenty_pixels(self):
+        self.assertEqual(TIMELINE_PROGRESS_COLUMN_SHIFT, 20)
+
+    def test_timeline_multi_selection_visual_state_tracks_selected_run(self):
+        timeline = TimelineView(model=ActionListModel([Action(str(i), 0.1) for i in range(5)]))
+        timeline.selected_indices = {1, 2, 3}
+
+        first = timeline.multi_selection_visual_state(1)
+        middle = timeline.multi_selection_visual_state(2)
+        last = timeline.multi_selection_visual_state(3)
+        outside = timeline.multi_selection_visual_state(4)
+
+        self.assertEqual(TIMELINE_MULTI_SELECT_RAIL_WIDTH, 4)
+        self.assertTrue(first["active"])
+        self.assertFalse(first["has_previous"])
+        self.assertTrue(first["has_next"])
+        self.assertEqual(first["count"], 3)
+        self.assertTrue(middle["has_previous"])
+        self.assertTrue(middle["has_next"])
+        self.assertTrue(last["has_previous"])
+        self.assertFalse(last["has_next"])
+        self.assertFalse(outside["active"])
+        timeline.deleteLater()
+
+    def test_image_inspector_reserves_full_image_settings_height(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action(
+                "[IMAGE]",
+                0.05,
+                action_type="image",
+                image_data=PNG_1X1,
+                similarity=0.85,
+                wait_timeout=1.0,
+                retry_delay=0.25,
+            )
+            window.action_model.set_actions([action])
+            window.resize(985, 560)
+            window.select(0)
+            window.show()
+            self.app.processEvents()
+
+            image_hint = max(window.ii_image_card.sizeHint().height(), window.ii_image_card.minimumSizeHint().height())
+            self.assertGreater(image_hint, 0)
+            self.assertGreaterEqual(window.ii_image_card.minimumHeight(), image_hint)
+            self.assertGreaterEqual(window.insp_image.minimumHeight(), image_hint)
+            self.assertGreaterEqual(window.insp_card.maximumHeight(), window.insp_card.minimumSizeHint().height())
+            self._dispose_window(window)
+
+    def test_condition_inspector_controls_are_compact_and_aligned(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action("[CONDITION]", 0.0, action_type="condition")
+            action.condition_type = "pixel_color"
+            window.action_model.set_actions([action])
+            window.select(0)
+
+            self.assertEqual(window.ico_type.width(), 136)
+            self.assertEqual(window.ico_true.width(), 136)
+            self.assertEqual(window.ico_false.width(), 136)
+            self.assertEqual(window.ico_fail_mode.width(), 136)
+            self.assertEqual(window.ico_fail_target.width(), 136)
+            self.assertEqual(window.ico_retry_count.width(), 50)
+            self.assertEqual(window.ico_retry_delay.width(), 80)
+            self.assertEqual(window.ico_retry_delay.alignment() & Qt.AlignmentFlag.AlignCenter, Qt.AlignmentFlag.AlignCenter)
+            self.assertGreaterEqual(window.ico_rule.minimumHeight(), 30)
+            self.assertIn("border", window.ico_rule.styleSheet())
             self._dispose_window(window)
 
     def test_add_action_buttons_use_compact_qt_stacked_layout_without_png_assets(self):

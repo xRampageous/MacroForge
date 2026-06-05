@@ -52,6 +52,29 @@ class ConditionDialog(QDialog):
             )
             return w
 
+        combo_style = (
+            f"QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 6px 10px; min-height: 24px; }}"
+            f"QComboBox:focus {{ border-color: {C['condition']}; }}"
+            "QComboBox::drop-down { border: none; width: 22px; }"
+        )
+        spin_style = (
+            f"QSpinBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 6px 10px; min-height: 24px; }}"
+            f"QSpinBox:focus {{ border-color: {C['condition']}; }}"
+        )
+
+        def style_combo(combo):
+            combo.setStyleSheet(combo_style)
+            combo.setMinimumHeight(34)
+            return combo
+
+        def style_spin(spin):
+            spin.setStyleSheet(spin_style)
+            spin.setMinimumHeight(34)
+            spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            return spin
+
         self.label_edit = field(getattr(existing, "label", "") if existing else "")
         self.label_edit.setPlaceholderText("Label, e.g. If button is visible")
         body_lo.addWidget(label("Label"))
@@ -59,13 +82,14 @@ class ConditionDialog(QDialog):
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(["pixel_color", "variable", "none"])
+        style_combo(self.type_combo)
         self.type_combo.setCurrentText(getattr(existing, "condition_type", "pixel_color") if existing else "pixel_color")
         body_lo.addWidget(label("Condition type"))
         body_lo.addWidget(self.type_combo)
 
         xy = QHBoxLayout()
-        self.x_spin = QSpinBox(); self.x_spin.setRange(-99999, 99999)
-        self.y_spin = QSpinBox(); self.y_spin.setRange(-99999, 99999)
+        self.x_spin = style_spin(QSpinBox()); self.x_spin.setRange(-99999, 99999)
+        self.y_spin = style_spin(QSpinBox()); self.y_spin.setRange(-99999, 99999)
         self.x_spin.setValue(int(getattr(existing, "condition_x", 0) if existing else 0))
         self.y_spin.setValue(int(getattr(existing, "condition_y", 0) if existing else 0))
         xy.addWidget(self.x_spin); xy.addWidget(self.y_spin)
@@ -87,6 +111,8 @@ class ConditionDialog(QDialog):
 
         self.true_jump = QComboBox()
         self.false_jump = QComboBox()
+        style_combo(self.true_jump)
+        style_combo(self.false_jump)
 
         def add_targets(combo):
             combo.addItem("Next row", -1)
@@ -122,15 +148,18 @@ class ConditionDialog(QDialog):
         jump_row.addWidget(QLabel("False →")); jump_row.addWidget(self.false_jump)
         body_lo.addLayout(jump_row)
 
-        self.retry_attempts = QSpinBox(); self.retry_attempts.setRange(1, 99)
+        self.retry_attempts = style_spin(QSpinBox()); self.retry_attempts.setRange(1, 99)
         self.retry_attempts.setValue(max(1, int(getattr(existing, "retry_attempts", 1) if existing else 1)))
         self.retry_delay = field(str(getattr(existing, "retry_delay", 0.25) if existing else 0.25))
+        self.retry_delay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.retry_delay.setFixedWidth(120)
         retry_row = QHBoxLayout(); retry_row.addWidget(self.retry_attempts); retry_row.addWidget(self.retry_delay)
         body_lo.addWidget(label("Smart retry attempts / delay")); body_lo.addLayout(retry_row)
 
         self.fail_mode = QComboBox(); self.fail_mode.addItems(["default", "continue", "stop", "jump", "recovery_group"])
+        style_combo(self.fail_mode)
         self.fail_mode.setCurrentText(getattr(existing, "on_fail_action", "default") if existing else "default")
-        self.fail_target = QComboBox(); add_targets(self.fail_target); select_target(self.fail_target, int(getattr(existing, "on_fail_target", -1) if existing else -1))
+        self.fail_target = QComboBox(); style_combo(self.fail_target); add_targets(self.fail_target); select_target(self.fail_target, int(getattr(existing, "on_fail_target", -1) if existing else -1))
         body_lo.addWidget(label("On false/fail")); body_lo.addWidget(self.fail_mode); body_lo.addWidget(label("Fail target")); body_lo.addWidget(self.fail_target)
 
         hint = QLabel("Targets can point to normal rows or folder headers such as F1/F2. Recovery mode jumps to the first recovery folder if no target is chosen.")
