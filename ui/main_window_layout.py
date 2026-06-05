@@ -840,7 +840,7 @@ def build_main_layout(window):
     add_grid_host = QWidget(add_body)
     add_grid_host.setObjectName("add_action_grid_host")
     add_grid = QGridLayout(add_grid_host)
-    add_grid.setContentsMargins(0, 0, 0, 0)
+    add_grid.setContentsMargins(3, 0, 3, 0)
     # Fixed-width host prevents the two small-button columns from drifting apart
     # when the side panel has spare width; their outside edges now align with
     # the Folder button.
@@ -851,7 +851,7 @@ def build_main_layout(window):
     # edges without clipping the panel border on high-DPI Windows.
     self._add_action_button_width = 82
     self._add_action_group_width = 170
-    add_grid_host.setFixedWidth(self._add_action_group_width)
+    add_grid_host.setFixedWidth(self._add_action_group_width + 6)
     add_grid.setColumnMinimumWidth(0, self._add_action_button_width)
     add_grid.setColumnMinimumWidth(1, self._add_action_button_width)
     add_grid.setColumnStretch(0, 0)
@@ -868,7 +868,7 @@ def build_main_layout(window):
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
         btn_w = self._add_action_group_width if colspan > 1 else self._add_action_button_width
-        btn_h = 45
+        btn_h = 42
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
@@ -1351,17 +1351,18 @@ def build_main_layout(window):
     ico_retry = QHBoxLayout()
     ico_retry.setContentsMargins(0, 0, 0, 0)
     ico_retry.setSpacing(6)
-    self.ico_retry_count.setFixedWidth(61)
-    self.ico_retry_delay.setFixedWidth(65)
+    self.ico_retry_count.setFixedWidth(56)
+    self.ico_retry_delay.setFixedWidth(80)
     ico_retry.addWidget(self.ico_retry_count)
     ico_retry.addWidget(self.ico_retry_delay)
     self.ico_label.setVisible(False)
-    ico_lo.addLayout(inspector_field_row("Type", self.ico_type, width=132))
-    ico_lo.addLayout(inspector_field_row("True target", self.ico_true, width=132))
-    ico_lo.addLayout(inspector_field_row("False target", self.ico_false, width=132))
-    ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=132))
-    ico_lo.addLayout(inspector_field_row("On false/fail", self.ico_fail_mode, width=132))
-    ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=132))
+    condition_value_width = 142
+    ico_lo.addLayout(inspector_field_row("Type", self.ico_type, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("True target", self.ico_true, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("False target", self.ico_false, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("On false/fail", self.ico_fail_mode, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=condition_value_width))
     ico_lo.addWidget(self.ico_rule)
     ico_outer.addWidget(condition_card)
 

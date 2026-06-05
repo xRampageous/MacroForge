@@ -1,6 +1,8 @@
 """MacroForge icon renderer — self-contained, no external assets.
 Draws common UI icons as QPixmap using QPainter paths.
 """
+import math
+
 from PyQt6.QtCore import Qt, QSize, QRectF, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush, QFont, QIcon
 
@@ -262,13 +264,19 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
     def _draw_settings(p, s):
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        for y in (0.28, 0.50, 0.72):
-            p.drawLine(int(s * 0.18), int(s * y), int(s * 0.82), int(s * y))
-        p.setBrush(brush)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(QRectF(s * 0.30, s * 0.20, s * 0.16, s * 0.16))
-        p.drawEllipse(QRectF(s * 0.56, s * 0.42, s * 0.16, s * 0.16))
-        p.drawEllipse(QRectF(s * 0.40, s * 0.64, s * 0.16, s * 0.16))
+        cx = cy = s * 0.50
+        inner = s * 0.17
+        body = s * 0.27
+        tooth_inner = s * 0.32
+        tooth_outer = s * 0.41
+        for step in range(8):
+            angle = math.radians(step * 45)
+            p.drawLine(
+                QPointF(cx + math.cos(angle) * tooth_inner, cy + math.sin(angle) * tooth_inner),
+                QPointF(cx + math.cos(angle) * tooth_outer, cy + math.sin(angle) * tooth_outer),
+            )
+        p.drawEllipse(QRectF(cx - body, cy - body, body * 2, body * 2))
+        p.drawEllipse(QRectF(cx - inner, cy - inner, inner * 2, inner * 2))
 
     def _draw_browse(p, s):
         p.setPen(pen)
