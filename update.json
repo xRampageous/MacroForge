@@ -1,6 +1,6 @@
 {
-  "version": "3.5.51",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.51/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.51/MacroForge-v3.5.51.zip",
-  "notes": "v3.5.51: Apply image settings atomic collapse dynamic status patch - updated main_window.py with dynamic status pill width fitting."
+  "version": "3.5.52",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.52/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.5.52/MacroForge-v3.5.52.zip",
+  "notes": "Release v3.5.52"
 }

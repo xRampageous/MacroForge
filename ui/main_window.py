@@ -339,7 +339,8 @@ class MainWindow(QMainWindow):
             name = "Default"
         mode = str(getattr(self, "_toolbar_profile_mode", "full"))
         if mode == "tiny":
-            return "Profile  ▾"
+            shown = name if len(name) <= 8 else f"{name[:7]}…"
+            return f"{shown}  ▾"
         if mode == "compact":
             shown = name if len(name) <= 11 else f"{name[:10]}…"
             return f"{shown}  ▾"
@@ -369,18 +370,21 @@ class MainWindow(QMainWindow):
                 margins = (5, 5, 7, 5)
                 spacing = 2
                 separator_visible = False
+                status_bounds = (108, 150)
             elif width < 860:
                 mode = "compact"
                 profile_w = int(getattr(self, "_toolbar_profile_compact_width", 132))
                 margins = (6, 5, 8, 5)
                 spacing = 3
                 separator_visible = True
+                status_bounds = (132, 210)
             else:
                 mode = "full"
                 profile_w = int(getattr(self, "_toolbar_profile_full_width", 164))
                 margins = (7, 5, 9, 5)
                 spacing = 4
                 separator_visible = True
+                status_bounds = (260, 390)
 
             if getattr(self, "_toolbar_profile_mode", None) != mode:
                 self._toolbar_profile_mode = mode
@@ -402,6 +406,14 @@ class MainWindow(QMainWindow):
                 try:
                     sep.setVisible(separator_visible)
                     sep.setFixedWidth(1 if separator_visible else 0)
+                except Exception:
+                    pass
+
+            status_pill = getattr(self, "status_pill", None)
+            if status_pill is not None:
+                try:
+                    status_pill.setMinimumWidth(status_bounds[0])
+                    status_pill.setMaximumWidth(status_bounds[1])
                 except Exception:
                     pass
 
@@ -996,6 +1008,9 @@ class MainWindow(QMainWindow):
                     anim = getattr(self, "_collapse_animations", {}).pop(anim_key, None)
                     if anim is not None:
                         anim.stop()
+                        anim.deleteLater()
+                    if not bool(getattr(self, "_collapse_animations", {})):
+                        self._panel_motion_suspends_inspector_autosize = False
                 except Exception:
                     pass
 
@@ -1045,6 +1060,8 @@ class MainWindow(QMainWindow):
                     body_widget.setVisible(True)
                     body_widget.setMinimumHeight(0)
                     body_widget.setMaximumHeight(16777215)
+                    body_widget.setGraphicsEffect(None)
+                    body_widget.setProperty("panel_transition_state", "expanded")
                     body_widget.updateGeometry()
                 except Exception:
                     pass
@@ -1243,9 +1260,8 @@ class MainWindow(QMainWindow):
         btn.setText("")
         btn.setIcon(QIcon())
         btn_w = int(getattr(self, "_add_action_group_width", 205)) if action_kind == "group" else int(getattr(self, "_add_action_button_width", 100))
-        # Hard-lock every Add Action button to the same 42px visual height.
-        # Widths are driven by the 255px side-panel layout constants.
-        btn_h = 42
+        # The stylesheet box renders two pixels taller than this content value.
+        btn_h = 43
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
@@ -1354,7 +1370,7 @@ class MainWindow(QMainWindow):
             self.insp_empty.setVisible(True)
         self._autosize_inspector_panel()
 
-    def _autosize_inspector_panel(self):
+    def _autosize_inspector_panel(self, force=False):
         """Resize Inspector to the selected action pane instead of stretching.
 
         The Inspector must stay immediately below the panels above it.  It uses
@@ -1362,6 +1378,10 @@ class MainWindow(QMainWindow):
         so collapse is visually upward into the Inspector header and expansion
         grows downward from that header.
         """
+        if not force and bool(getattr(self, "_panel_motion_suspends_inspector_autosize", False)):
+            self._pending_inspector_autosize = True
+            return
+
         card = getattr(self, "insp_card", None)
         body = getattr(self, "insp_body", None)
         if card is None:

@@ -1,6 +1,6 @@
 """Main layout construction for MacroForge main window."""
 
-from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer, QParallelAnimationGroup
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QGraphicsOpacityEffect,
 )
 
 from version import VERSION
@@ -72,50 +73,58 @@ def build_main_layout(window):
 
     self._panel_collapse_controls = {}
     self._collapse_animations = {}
+    self._panel_motion_generation = 0
+    self._panel_motion_suspends_inspector_autosize = False
+    self._pending_inspector_autosize = False
 
     def _toggle_collapsible_body(body_widget, caret):
-        collapsed = not bool(caret.property("collapsed"))
+        was_collapsed = bool(caret.property("collapsed"))
+        was_body_visible = bool(body_widget.isVisible())
+        collapsed = not was_collapsed
         caret.setProperty("collapsed", collapsed)
         caret.setText("")
         caret.setToolTip("Expand panel" if collapsed else "Collapse panel")
 
         body_name = body_widget.objectName() or ""
-        # The flat Image editor has one collapsible body inside the main
-        # Inspector.  Treat it like the other collapsible bodies, but refresh
-        # the Inspector parent after it animates so the side panel measures the
-        # full editor instead of a stale preview height.
         image_inspector_bodies = {"inspector_group_image_settings_body"}
         is_image_inspector_body = body_name in image_inspector_bodies
+        request_auto = bool(body_widget.property("_collapse_request_auto"))
 
         parent = body_widget.parentWidget()
         parent_name = parent.objectName() if parent is not None else ""
         anim_key = body_name or str(id(body_widget))
-        previous_anim = self._collapse_animations.get(anim_key)
+        previous_anim = self._collapse_animations.pop(anim_key, None)
         if previous_anim is not None:
             try:
                 previous_anim.stop()
+                previous_anim.deleteLater()
             except Exception:
                 pass
 
-        def _refresh_inspector_size(delay_ms=0):
-            if not hasattr(self, "_autosize_inspector_panel"):
+        def _call_inspector_autosize(force=False):
+            autosize = getattr(self, "_autosize_inspector_panel", None)
+            if not callable(autosize):
                 return
             try:
+                autosize(force)
+            except TypeError:
+                try:
+                    autosize()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        def _refresh_inspector_size(delay_ms=0, force=False):
+            try:
                 if delay_ms > 0:
-                    QTimer.singleShot(delay_ms, self._autosize_inspector_panel)
+                    QTimer.singleShot(delay_ms, lambda f=force: _call_inspector_autosize(f))
                 else:
-                    self._autosize_inspector_panel()
+                    _call_inspector_autosize(force)
             except Exception:
                 pass
 
         def _queue_side_panel_rebalance(reason="collapse", delays=(0, 24, 55, 95)):
-            """Let the side-panel stack settle into space freed by a collapse/expand.
-
-            The rebalancer is intentionally passive: it does not add resize
-            thresholds or change lock state.  It only invalidates/activates the
-            side-panel layout and refreshes stale height clamps so the spacer
-            and Inspector can absorb freed height smoothly while a body animates.
-            """
             rebalance = getattr(self, "_rebalance_side_panel_space", None)
             if not callable(rebalance):
                 return
@@ -129,14 +138,6 @@ def build_main_layout(window):
                     pass
 
         def _collapsible_body_height_hint(widget):
-            """Return the natural height of the whole collapsible body.
-
-            Qt can report a stale/partial ``sizeHint`` while a body has just
-            been collapsed or is still constrained by a previous animation.
-            Measure from the body layout first so the IMAGE sub-panel uses the
-            full section body container, not just the visible preview/template
-            child that happened to have the last painted height.
-            """
             if widget is None:
                 return 1
 
@@ -233,6 +234,75 @@ def build_main_layout(window):
                     pass
             return max(1, *vals)
 
+        def _activate_layout(owner):
+            if owner is None:
+                return
+            try:
+                layout = owner.layout()
+                if layout is not None:
+                    layout.invalidate()
+                    layout.activate()
+            except Exception:
+                pass
+            try:
+                owner.updateGeometry()
+            except Exception:
+                pass
+
+        def _release_motion_clamps():
+            owners = [
+                body_widget,
+                parent,
+                getattr(self, "sidebar_frame", None),
+            ]
+            if parent_name == "inspector_card" or is_image_inspector_body:
+                owners.extend([
+                    getattr(self, "insp_body", None),
+                    getattr(self, "insp_card", None),
+                ])
+            if is_image_inspector_body:
+                owners.extend([
+                    getattr(self, "ii_image_card", None),
+                    getattr(self, "insp_image", None),
+                ])
+            seen = set()
+            for owner in owners:
+                if owner is None or id(owner) in seen:
+                    continue
+                seen.add(id(owner))
+                try:
+                    owner.setMinimumHeight(0)
+                    owner.setMaximumHeight(16777215)
+                    owner.updateGeometry()
+                except Exception:
+                    pass
+                _activate_layout(owner)
+
+        def _prepare_image_settings_motion():
+            if not is_image_inspector_body:
+                return
+            for frame, height in (
+                (getattr(self, "ii_preview_frame", None), 166),
+                (getattr(self, "ii_preview_toolbar", None), 27),
+            ):
+                if frame is None:
+                    continue
+                try:
+                    frame.setVisible(True)
+                    frame.setFixedHeight(height)
+                    frame.setMinimumHeight(height)
+                    frame.setMaximumHeight(height)
+                    frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+                    frame.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+                    frame.updateGeometry()
+                except Exception:
+                    pass
+            try:
+                body_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                body_widget.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+            except Exception:
+                pass
+
         def _side_panel_animation_tick(_value=None):
             try:
                 body_widget.updateGeometry()
@@ -251,193 +321,64 @@ def build_main_layout(window):
             except Exception:
                 pass
 
-        def _finish_parent():
-            if parent is None:
-                return
-            if collapsed:
-                parent.setMinimumHeight(0)
-                parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
-                parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-            else:
-                parent.setMinimumHeight(0)
-                parent.setMaximumHeight(16777215)
-                if parent_name == "inspector_card":
+        def _finish_parent(force_inspector=False):
+            if parent is not None:
+                if collapsed:
+                    parent.setMinimumHeight(0)
+                    parent.setMaximumHeight(max(28, parent.minimumSizeHint().height() + 2))
                     parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
                 else:
-                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            parent.updateGeometry()
-            if parent_name == "inspector_card" or is_image_inspector_body:
-                _refresh_inspector_size()
-                if is_image_inspector_body:
-                    _refresh_inspector_size(0)
-                    _refresh_inspector_size(80)
-
-        def _snap_image_settings_body(collapsed_state):
-            # Atomic snap path for the flat Image Settings body.
-            #
-            # Image Settings has a fixed preview/tool strip plus multiple form
-            # sections.  Letting Qt paint while the nested body is half-clamped can
-            # split the preview/buttons from Matching.  For this one body, hide
-            # updates for the entire image-settings ownership chain, apply the
-            # final open/closed state in one batch, then repaint and rebalance.
-            if not is_image_inspector_body:
-                return False
-
-            update_targets = []
-
-            def _disable_updates(owner):
-                if owner is None or owner in update_targets:
-                    return
-                try:
-                    owner.setUpdatesEnabled(False)
-                    update_targets.append(owner)
-                except Exception:
-                    pass
-
-            def _enable_updates():
-                for owner in reversed(update_targets):
-                    try:
-                        owner.setUpdatesEnabled(True)
-                        owner.update()
-                    except Exception:
-                        pass
-                update_targets.clear()
-
-            try:
-                preview_frame = getattr(self, "ii_preview_frame", None)
-                toolbar_frame = getattr(self, "ii_preview_toolbar", None)
-                preview_art = getattr(self, "ii_preview_art", None)
-                image_card = getattr(self, "ii_image_card", None)
-                inspector_widgets = (
-                    body_widget, parent, image_card, preview_frame, toolbar_frame,
-                    preview_art, getattr(self, "insp_image", None),
-                    getattr(self, "insp_body", None), getattr(self, "insp_card", None),
-                    getattr(self, "sidebar_frame", None),
-                )
-
-                for owner in inspector_widgets:
-                    _disable_updates(owner)
-
-                for owner in (body_widget, parent, image_card, getattr(self, "insp_image", None), getattr(self, "insp_body", None), getattr(self, "insp_card", None)):
-                    if owner is None:
-                        continue
-                    try:
-                        owner.setMinimumHeight(0)
-                        owner.setMaximumHeight(16777215)
-                        owner.updateGeometry()
-                    except Exception:
-                        pass
-
-                if preview_frame is not None:
-                    try:
-                        preview_frame.setVisible(True)
-                        preview_frame.setFixedHeight(166)
-                        preview_frame.setMinimumHeight(166)
-                        preview_frame.setMaximumHeight(166)
-                        preview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-                        preview_frame.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
-                        preview_frame.updateGeometry()
-                    except Exception:
-                        pass
-
-                if toolbar_frame is not None:
-                    try:
-                        toolbar_frame.setVisible(True)
-                        toolbar_frame.setFixedHeight(27)
-                        toolbar_frame.setMinimumHeight(27)
-                        toolbar_frame.setMaximumHeight(27)
-                        toolbar_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-                        toolbar_frame.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
-                        toolbar_frame.updateGeometry()
-                    except Exception:
-                        pass
-
-                if collapsed_state:
-                    body_widget.setMaximumHeight(0)
-                    body_widget.setVisible(False)
-                else:
-                    body_widget.setVisible(True)
-                    body_widget.setMaximumHeight(16777215)
-                    body_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-                    try:
-                        layout = body_widget.layout()
-                        if layout is not None:
-                            layout.invalidate()
-                            layout.activate()
-                    except Exception:
-                        pass
-
-                try:
-                    body_widget.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
-                except Exception:
-                    pass
-
-                _finish_parent()
-                body_widget.updateGeometry()
-                if parent is not None:
-                    parent.updateGeometry()
-                _side_panel_animation_tick()
-                self._collapse_animations.pop(anim_key, None)
-
-                _enable_updates()
-
-                _queue_side_panel_rebalance(
-                    reason=f"{body_name}.atomic",
-                    delays=(0, 24, 55, 95, 140),
-                )
-                _refresh_inspector_size()
-                _refresh_inspector_size(35)
-                _refresh_inspector_size(90)
-
-                # One final queued repaint after the layout has settled prevents a
-                # transient toolbar/Matching overlap on slower paints.
-                def _final_image_settings_repaint():
-                    try:
-                        for owner in (body_widget, parent, image_card, preview_frame, toolbar_frame):
-                            if owner is not None:
-                                owner.updateGeometry()
-                                owner.repaint()
-                        _side_panel_animation_tick()
-                    except Exception:
-                        pass
-
-                QTimer.singleShot(0, _final_image_settings_repaint)
-                QTimer.singleShot(45, _final_image_settings_repaint)
-                return True
-            except Exception:
-                _enable_updates()
-                return False
-            finally:
-                _enable_updates()
-
-        try:
-            body_widget.setMinimumHeight(0)
-            if is_image_inspector_body and _snap_image_settings_body(collapsed):
-                return
-            if is_image_inspector_body:
-                # Image Inspector sub-panels sit inside an Inspector card that is
-                # height-clamped to its selected content. Release the parent/card
-                # clamps before measuring, otherwise expand can calculate against
-                # the old collapsed height and leave controls half-visible.
-                body_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-                if parent is not None:
                     parent.setMinimumHeight(0)
                     parent.setMaximumHeight(16777215)
-                    parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-                    parent.updateGeometry()
-                inspector_card = getattr(self, "insp_card", None)
-                if inspector_card is not None:
-                    inspector_card.setMinimumHeight(0)
-                    inspector_card.setMaximumHeight(16777215)
-                    inspector_card.updateGeometry()
+                    if parent_name == "inspector_card":
+                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                    else:
+                        parent.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                parent.updateGeometry()
+            if parent_name == "inspector_card" or is_image_inspector_body:
+                _refresh_inspector_size(force=force_inspector)
+                if is_image_inspector_body:
+                    _refresh_inspector_size(35, force=force_inspector)
+                    _refresh_inspector_size(90, force=force_inspector)
 
-            # Measure once, then animate only the body container height.
-            # Do not hide/show child controls mid-animation: doing so makes Qt
-            # recalculate sizeHint() from an artificially empty body, which can
-            # cause wrong target heights, overlap, and broken expand/collapse
-            # states.  The body itself is hidden only after collapse finishes.
+        def _begin_panel_motion():
+            try:
+                self._panel_motion_suspends_inspector_autosize = True
+                body_widget.setProperty("panel_transition_state", "collapsing" if collapsed else "expanding")
+            except Exception:
+                pass
+
+        def _end_panel_motion_if_idle():
+            try:
+                self._panel_motion_suspends_inspector_autosize = bool(getattr(self, "_collapse_animations", {}))
+                if not self._panel_motion_suspends_inspector_autosize and bool(getattr(self, "_pending_inspector_autosize", False)):
+                    self._pending_inspector_autosize = False
+                    _refresh_inspector_size(0, force=True)
+            except Exception:
+                pass
+
+        try:
+            self._panel_motion_generation = int(getattr(self, "_panel_motion_generation", 0)) + 1
+        except Exception:
+            self._panel_motion_generation = 1
+        motion_id = self._panel_motion_generation
+        try:
+            body_widget.setProperty("_panel_motion_id", motion_id)
+        except Exception:
+            pass
+
+        try:
+            _begin_panel_motion()
+            body_widget.setMinimumHeight(0)
+            body_widget.setVisible(True)
+            try:
+                body_widget.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
+            except Exception:
+                pass
+            _release_motion_clamps()
+            _prepare_image_settings_motion()
+
             if collapsed:
-                body_widget.setVisible(True)
                 start_h = max(0, int(body_widget.height()))
                 if start_h <= 1:
                     try:
@@ -447,59 +388,102 @@ def build_main_layout(window):
                 end_h = 0
                 body_widget.setMaximumHeight(start_h)
             else:
-                body_widget.setVisible(True)
                 start_h = max(0, int(body_widget.height()))
-                if start_h <= 1:
+                if was_collapsed or not was_body_visible or start_h <= 1:
                     start_h = 0
                 body_widget.setMaximumHeight(16777215)
-                body_widget.updateGeometry()
+                _activate_layout(body_widget)
                 if parent is not None:
-                    parent.updateGeometry()
+                    _activate_layout(parent)
                 end_h = _collapsible_body_height_hint(body_widget)
                 body_widget.setMaximumHeight(start_h)
 
-            try:
-                body_widget.setAttribute(Qt.WidgetAttribute.WA_ClipsChildrenToShape, True)
-            except Exception:
-                pass
+            effect = QGraphicsOpacityEffect(body_widget)
+            body_widget.setGraphicsEffect(effect)
+            effect.setOpacity(1.0 if collapsed else 0.0)
 
-            anim = QPropertyAnimation(body_widget, b"maximumHeight", self)
-            # Snappier side-panel motion: short enough to feel responsive,
-            # but still long enough to avoid abrupt layout jumps while Qt
-            # recalculates the nested Inspector stack.
-            anim.setDuration(78 if is_image_inspector_body else 92)
-            anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-            anim.setStartValue(start_h)
-            anim.setEndValue(end_h)
+            duration = 128 if collapsed else 174
+            if is_image_inspector_body:
+                duration = 144 if collapsed else 196
+            if request_auto:
+                duration = max(96, duration - 28)
+
+            group = QParallelAnimationGroup(self)
+            height_anim = QPropertyAnimation(body_widget, b"maximumHeight", group)
+            height_anim.setDuration(duration)
+            height_anim.setEasingCurve(QEasingCurve.Type.InOutQuad if collapsed else QEasingCurve.Type.OutCubic)
+            height_anim.setStartValue(start_h)
+            height_anim.setEndValue(end_h)
+
+            opacity_anim = QPropertyAnimation(effect, b"opacity", group)
+            opacity_anim.setDuration(max(90, duration - (26 if collapsed else 12)))
+            opacity_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+            opacity_anim.setStartValue(1.0 if collapsed else 0.0)
+            opacity_anim.setEndValue(0.08 if collapsed else 1.0)
+
+            group.addAnimation(height_anim)
+            group.addAnimation(opacity_anim)
 
             def _finished():
-                if collapsed:
-                    body_widget.setMaximumHeight(0)
-                    body_widget.setVisible(False)
-                else:
-                    body_widget.setVisible(True)
-                    body_widget.setMaximumHeight(16777215)
-                _finish_parent()
+                try:
+                    if int(body_widget.property("_panel_motion_id") or -1) != int(motion_id):
+                        return
+                except Exception:
+                    return
+                try:
+                    if collapsed:
+                        body_widget.setMaximumHeight(0)
+                        body_widget.setVisible(False)
+                        body_widget.setProperty("panel_transition_state", "collapsed")
+                    else:
+                        body_widget.setVisible(True)
+                        body_widget.setMaximumHeight(16777215)
+                        body_widget.setProperty("panel_transition_state", "expanded")
+                    body_widget.setGraphicsEffect(None)
+                except Exception:
+                    pass
+                _finish_parent(force_inspector=True)
                 body_widget.updateGeometry()
-                self._collapse_animations.pop(anim_key, None)
+                try:
+                    if self._collapse_animations.get(anim_key) is group:
+                        self._collapse_animations.pop(anim_key, None)
+                except Exception:
+                    pass
+                try:
+                    group.deleteLater()
+                except Exception:
+                    pass
+                _end_panel_motion_if_idle()
                 _queue_side_panel_rebalance(reason=f"{body_name}.finished", delays=(0, 24, 65))
+                _side_panel_animation_tick()
 
             try:
-                anim.valueChanged.connect(_side_panel_animation_tick)
+                height_anim.valueChanged.connect(_side_panel_animation_tick)
             except Exception:
                 pass
-            anim.finished.connect(_finished)
-            self._collapse_animations[anim_key] = anim
-            _queue_side_panel_rebalance(reason=f"{body_name}.start", delays=(0, 18))
-            anim.start()
+            group.finished.connect(_finished)
+            self._collapse_animations[anim_key] = group
+            _queue_side_panel_rebalance(reason=f"{body_name}.start", delays=(0, 24))
+            group.start()
         except Exception:
+            try:
+                body_widget.setGraphicsEffect(None)
+            except Exception:
+                pass
             if collapsed:
                 body_widget.setMaximumHeight(0)
                 body_widget.setVisible(False)
+                body_widget.setProperty("panel_transition_state", "collapsed")
             else:
                 body_widget.setVisible(True)
                 body_widget.setMaximumHeight(16777215)
-            _finish_parent()
+                body_widget.setProperty("panel_transition_state", "expanded")
+            try:
+                self._collapse_animations.pop(anim_key, None)
+            except Exception:
+                pass
+            _finish_parent(force_inspector=True)
+            _end_panel_motion_if_idle()
             _queue_side_panel_rebalance(reason=f"{body_name}.fallback", delays=(0, 24, 65))
         body_widget.updateGeometry()
         _side_panel_animation_tick()
@@ -527,7 +511,9 @@ def build_main_layout(window):
             body_widget.setProperty("auto_collapsed", False)
 
         if current != collapsed:
+            body_widget.setProperty("_collapse_request_auto", auto)
             _toggle_collapsible_body(body_widget, caret)
+            body_widget.setProperty("_collapse_request_auto", False)
         return True
 
     self._set_collapsible_panel = _set_collapsible_panel
@@ -774,7 +760,7 @@ def build_main_layout(window):
     # Left command rail.
     sidebar = QFrame()
     sidebar.setObjectName("mf3_sidebar")
-    sidebar.setFixedWidth(255)
+    sidebar.setFixedWidth(272)
     sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
     sidebar.setStyleSheet(
         f"QFrame#mf3_sidebar {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
@@ -854,8 +840,10 @@ def build_main_layout(window):
     add_grid.setContentsMargins(0, 0, 0, 0)
     add_grid.setHorizontalSpacing(5)
     add_grid.setVerticalSpacing(5)
-    self._add_action_button_width = 100
-    self._add_action_group_width = 205
+    # Qt stylesheet width constraints include the 1px border on each side in
+    # the final widget size, so these internal widths render as 90px / 188px.
+    self._add_action_button_width = 88
+    self._add_action_group_width = 186
     add_grid.setColumnMinimumWidth(0, self._add_action_button_width)
     add_grid.setColumnMinimumWidth(1, self._add_action_button_width)
     action_specs = [
@@ -865,13 +853,12 @@ def build_main_layout(window):
         ("Image", self._open_image_dialog, C["image"], "image", 1, 1, 1, 1),
         ("Condition", self._open_condition_dialog, C["condition"], "condition", 2, 0, 1, 1),
         ("Loop", self._open_loop_dialog, C["loop"], "loop", 2, 1, 1, 1),
-        ("Group", self._open_group_dialog, C["group"], "group", 3, 0, 1, 2),
+        ("Folder", self._open_group_dialog, C["group"], "group", 3, 0, 1, 2),
     ]
     for text, callback, color, icon_name, row, col, rowspan, colspan in action_specs:
         btn = self._add_btn(text, callback, color, None, icon_name)
         btn_w = self._add_action_group_width if colspan > 1 else self._add_action_button_width
-        # Hard-lock every Add Action button to 42px tall. Widths remain unchanged.
-        btn_h = 42
+        btn_h = 45
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
@@ -1097,6 +1084,18 @@ def build_main_layout(window):
     ii_lo = QVBoxLayout(self.insp_image)
     ii_lo.setContentsMargins(0, 0, 0, 0)
     ii_lo.setSpacing(7)
+    self._legacy_image_section_markers = {}
+    for legacy_name in (
+        "inspector_group_matching",
+        "inspector_group_retry",
+        "inspector_group_on_fail",
+        "inspector_group_fail_target",
+    ):
+        marker = QFrame(self.insp_image)
+        marker.setObjectName(legacy_name)
+        marker.setFixedSize(0, 0)
+        marker.setVisible(False)
+        self._legacy_image_section_markers[legacy_name] = marker
 
     def flat_section_title(text, icon_name=None, color=None):
         row = QHBoxLayout()
@@ -1212,6 +1211,8 @@ def build_main_layout(window):
     self.ii_browse_btn = image_tool_btn("Browse", "image", "Browse image template", self._browse_active_image_file, 60)
     self.ii_capture_btn = image_tool_btn("Capture", "target", "Capture image search region", self._capture_active_image_region, 69)
     self.ii_test_btn = image_tool_btn("Test", "play", "Test this image action", self.test_selected_action, 47)
+    self.ii_zoom_btn = self.ii_browse_btn
+    self.ii_fit_btn = self.ii_test_btn
     image_actions.addWidget(self.ii_browse_btn)
     image_actions.addWidget(self.ii_capture_btn)
     image_actions.addWidget(self.ii_test_btn)
@@ -1364,12 +1365,12 @@ def build_main_layout(window):
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
     self._bottom_panel_locked = False
-    self._side_panel_expanded_width = 255
+    self._side_panel_expanded_width = 272
     self._side_panel_collapsed_width = 22
     self._side_panel_expand_restore_window_width = 920
     self._side_panel_auto_collapse_width = 910
     self._side_panel_auto_expand_width = 1040
-    self._height_auto_playback_collapse = 1100
+    self._height_auto_playback_collapse = 1099
     self._height_auto_playback_expand = 1170
     # Side-panel auto-hide order while unlocked and resizing height.
     # Image settings are now flat inside the main Inspector, so only the main
@@ -1722,6 +1723,7 @@ def build_main_layout(window):
     self.update_top_btn = header_icon_button("update_top_btn", "download", C["accent"], "Check for updates", self._check_update_manual, width=38)
     dock_lo.addWidget(self.update_top_btn)
     self.settings_top_btn = header_icon_button("settings_top_btn", "settings", C["text_dim"], "Settings", self.open_settings_dialog, width=38)
+    self.menu_top_btn = self.settings_top_btn
     dock_lo.addWidget(self.settings_top_btn)
 
     dock_lo.addStretch(1)
