@@ -1,0 +1,25 @@
+{
+  "patch_name": "MacroForge Final Timeline Polish 28",
+  "source_baseline": "MacroForge(8).zip",
+  "changed_files": [
+    "MacroForge/ui/timeline.py",
+    "MacroForge/ui/main_window.py",
+    "MacroForge/ui/main_window_layout.py",
+    "MacroForge/engine.py",
+    "MacroForge/PATCH_NOTES_FINAL_TIMELINE_POLISH_28.md",
+    "MacroForge/PATCH_MANIFEST_FINAL_TIMELINE_POLISH_28.json",
+    "MacroForge/final_timeline_polish_28.patch"
+  ],
+  "preserved": [
+    "timeline size",
+    "timeline row height",
+    "existing colors and gradients",
+    "action model/save-load data",
+    "macro execution semantics",
+    "group collapse behavior",
+    "Add Action button callbacks"
+  ],
+  "validation": [
+    "python3 -m py_compile ui/timeline.py ui/main_window.py ui/main_window_layout.py engine.py"
+  ]
+}

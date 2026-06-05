@@ -179,6 +179,28 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawLine(int(x + w * 0.34), int(y + h * 0.58), int(x + w * 0.66), int(y + h * 0.58))
         painter.restore()
 
+    def _row_rects(self, view, row: int, option_rect):
+        """Return full row, painted card, and grouped-gutter geometry.
+
+        Grouped child rows are visually cut in from the left so the far-left
+        gutter contains only the group connector rail/node.  The returned card
+        rect is used for all card fills, active overlays, stripe, grip, text,
+        progress and right controls.
+        """
+        narrow = option_rect.width() < 700
+        full = option_rect.adjusted(8, 2, -8, -2) if narrow else option_rect.adjusted(14, 3, -20, -3)
+        full = QRectF(full)
+        compact = full.width() < 760
+        actions = view._actions() if hasattr(view, "_actions") else []
+        action = actions[row] if 0 <= row < len(actions) else None
+        meta = view.group_badge(row) if hasattr(view, "group_badge") else None
+        child_group = bool(meta and action is not None and getattr(action, "action_type", "") != "group")
+        cut = (38 if compact else 48) if child_group else 0
+        card = QRectF(full)
+        if cut:
+            card.adjust(cut, 0, 0, 0)
+        return {"full": full, "card": card, "compact": compact, "child_group": child_group, "cut": cut, "group_badge": meta}
+
     def paint(self, painter: QPainter, option, index):
         painter.save()
         try:
@@ -221,10 +243,14 @@ class TimelineDelegate(QStyledItemDelegate):
             if not enabled:
                 type_color = _mix(type_color, COLORS["text_dark"], 0.62)
 
-            narrow = option.rect.width() < 700
-            # Compact timeline treatment: tighter outer padding keeps more rows
-            # visible at once without changing the overall layout structure.
-            outer = option.rect.adjusted(8, 2, -8, -2) if narrow else option.rect.adjusted(14, 3, -20, -3)
+            row_rects = self._row_rects(view, row, option.rect)
+            full_outer = row_rects["full"]
+            outer = row_rects["card"]
+            compact = bool(row_rects["compact"])
+            child_group = group_badge if row_rects["child_group"] else None
+
+            painter.setClipRect(option.rect.adjusted(-1, -1, 1, 1))
+
             bg = COLORS["bg_card"]
             if not enabled:
                 bg = _mix(bg, COLORS["bg"], 0.72)
@@ -236,6 +262,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 bg = _mix(bg, type_color, 0.07 if queued else 0.10)
             if dragging:
                 bg = _mix(bg, type_color, 0.18)
+                full_outer.translate(0, -2)
                 outer.translate(0, -2)
             if traced and not playing:
                 bg = _mix(bg, COLORS.get("success", type_color), 0.07)
@@ -326,12 +353,10 @@ class TimelineDelegate(QStyledItemDelegate):
 
             # Compact-aware layout. Timeline metadata stays visible at every
             # supported window size; only the progress rail flexes horizontally.
-            compact = outer.width() < 760
-            child_group = group_badge if group_badge and kind != "group" else None
-            # Child rows are indented internally only; row size and height stay
-            # untouched. The extra pixels make room for connector rail -> stripe
-            # -> drag grip without clipping the grip on grouped rows.
-            child_indent = 36 if child_group and compact else (44 if child_group else 0)
+            # Grouped child rows already use a cut-in card rect, so all child
+            # content starts at the card left while the connector rail stays in
+            # the untouched gutter.
+            child_indent = 0
 
             # Left type accent stripe and active play marker. Active playback fills
             # the row's left end with the action's own gradient colour.
@@ -360,16 +385,16 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.drawRoundedRect(edge, 2, 2)
                 painter.restore()
 
-            # Expanded group connector rail.  Child rows keep their normal row
-            # shape and colours, but their content is shifted right just enough
-            # to make the group nesting clear without changing row height/size.
+            # Expanded group connector rail. Grouped child rows now have a
+            # cut-in painted card, leaving the far-left gutter exclusively for
+            # rail + node + short branch.
             if child_group:
                 actions = view._actions() if hasattr(view, "_actions") else []
                 gid = child_group.get("gid", "")
-                rail_x = outer.left() + (14 if compact else 18)
+                rail_x = full_outer.left() + (16 if compact else 20)
                 node_r = 3.5 if compact else 4.0
                 rail_col = QColor(child_group.get("color") or type_color)
-                rail_col.setAlpha(150)
+                rail_col.setAlpha(154)
 
                 def same_visible_child(candidate_row: int) -> bool:
                     if candidate_row < 0 or candidate_row >= len(actions):
@@ -385,24 +410,49 @@ class TimelineDelegate(QStyledItemDelegate):
                         return False
                     return True
 
-                has_next = same_visible_child(row + 1)
-                has_prev = same_visible_child(row - 1)
+                def visible_child_before() -> bool:
+                    for candidate_row in range(row - 1, -1, -1):
+                        candidate = actions[candidate_row] if candidate_row < len(actions) else None
+                        if getattr(candidate, "action_type", "") == "group" and getattr(candidate, "group_id", "") == gid:
+                            return False
+                        if getattr(candidate, "group_id", "") not in (gid, "") and getattr(candidate, "action_type", "") == "group":
+                            return False
+                        if same_visible_child(candidate_row):
+                            return True
+                    return False
+
+                def visible_child_after() -> bool:
+                    for candidate_row in range(row + 1, len(actions)):
+                        candidate = actions[candidate_row]
+                        if getattr(candidate, "action_type", "") == "group":
+                            return False
+                        if getattr(candidate, "group_id", "") != gid:
+                            return False
+                        if same_visible_child(candidate_row):
+                            return True
+                    return False
+
+                has_prev = visible_child_before()
+                has_next = visible_child_after()
+                center_y = full_outer.center().y()
+                top_y = full_outer.top() - 2 if has_prev else full_outer.top() + 8
+                bottom_y = full_outer.bottom() + 2 if has_next else center_y
+                branch_end = max(rail_x + 12, outer.left() - (5 if compact else 6))
+
+                painter.save()
+                painter.setClipRect(option.rect.adjusted(-2, -2, 2, 2))
                 painter.setPen(QPen(rail_col, 1.35, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                top_y = outer.top() - 2 if has_prev else outer.top() + 7
-                bottom_y = outer.bottom() + 2 if has_next else outer.center().y()
-                center_y = outer.center().y()
                 painter.drawLine(QPointF(rail_x, top_y), QPointF(rail_x, center_y))
                 painter.drawLine(QPointF(rail_x, center_y), QPointF(rail_x, bottom_y))
-                # Short branch stops before the stripe/grip area, avoiding the
-                # previous overlap with the grouped-row drag handle.
-                painter.drawLine(QPointF(rail_x, center_y), QPointF(outer.left() + child_indent - 10, center_y))
+                painter.drawLine(QPointF(rail_x, center_y), QPointF(branch_end, center_y))
                 painter.setPen(Qt.PenStyle.NoPen)
                 node_fill = QColor(COLORS["bg_card"])
                 node_fill.setAlpha(245)
                 painter.setBrush(node_fill)
-                painter.drawEllipse(QRectF(rail_x - node_r, outer.center().y() - node_r, node_r * 2, node_r * 2))
+                painter.drawEllipse(QRectF(rail_x - node_r, center_y - node_r, node_r * 2, node_r * 2))
                 painter.setBrush(rail_col)
-                painter.drawEllipse(QRectF(rail_x - 2.2, outer.center().y() - 2.2, 4.4, 4.4))
+                painter.drawEllipse(QRectF(rail_x - 2.2, center_y - 2.2, 4.4, 4.4))
+                painter.restore()
 
             stripe_left = outer.left() + child_indent
             stripe = QRectF(stripe_left, outer.top() + 1, 3.0, outer.height() - 2)
@@ -974,6 +1024,19 @@ class TimelineView(QListView):
         }
         self.viewport().update()
 
+    def clear_runtime_visuals(self, clear_playing: bool = False):
+        """Reset transient playback visuals without touching macro/action data."""
+        if clear_playing:
+            self.clear_playing()
+        self.image_states.clear()
+        self.trace_rows.clear()
+        self.link_source_row = -1
+        self.link_target_rows.clear()
+        self.flash_row = -1
+        self.flash_opacity = 0.0
+        self.active_group_id = ""
+        self.viewport().update()
+
     def group_progress(self, row: int):
         actions = self._actions()
         if row < 0 or row >= len(actions):
@@ -1020,35 +1083,43 @@ class TimelineView(QListView):
         remaining = max(0.0, self._playing_duration * (1.0 - self.action_progress(row)))
         return f"{remaining:.1f}s"
 
-    def _row_outer_rect(self, row: int):
-        """Return the painted row card rect used for hit-testing grip/kebab zones."""
+    def _timeline_row_rects(self, row: int, visual_rect=None):
+        """Return full/card geometry matching TimelineDelegate painting."""
         if row < 0 or self.model() is None or row >= self.model().rowCount():
-            return QRectF()
-        idx = self.model().index(row, 0)
-        rect = self.visualRect(idx)
+            return {"full": QRectF(), "card": QRectF(), "compact": False, "child_group": False, "cut": 0}
+        rect = visual_rect
+        if rect is None:
+            idx = self.model().index(row, 0)
+            rect = self.visualRect(idx)
         if not rect.isValid():
-            return QRectF()
+            return {"full": QRectF(), "card": QRectF(), "compact": False, "child_group": False, "cut": 0}
         narrow = rect.width() < 700
-        adjusted = rect.adjusted(8, 2, -8, -2) if narrow else rect.adjusted(14, 3, -20, -3)
-        return QRectF(adjusted)
-
-    def _drag_grip_rect(self, row: int):
-        outer = self._row_outer_rect(row)
-        if outer.isNull():
-            return QRectF()
-        compact = outer.width() < 760
+        full = QRectF(rect.adjusted(8, 2, -8, -2) if narrow else rect.adjusted(14, 3, -20, -3))
+        compact = full.width() < 760
         actions = self._actions()
         child_group = False
         if 0 <= row < len(actions):
             action = actions[row]
             meta = self.group_badge(row)
             child_group = bool(meta and getattr(action, "action_type", "") != "group")
-        if child_group:
-            child_indent = 36 if compact else 44
-            stripe_x = outer.left() + child_indent
-            grip_x = stripe_x + 3.0 + (8 if compact else 10)
-        else:
-            grip_x = outer.left() + (12 if compact else 16)
+        cut = (38 if compact else 48) if child_group else 0
+        card = QRectF(full)
+        if cut:
+            card.adjust(cut, 0, 0, 0)
+        return {"full": full, "card": card, "compact": compact, "child_group": child_group, "cut": cut}
+
+    def _row_outer_rect(self, row: int):
+        """Return the visible painted row card rect used for hit-testing."""
+        return self._timeline_row_rects(row).get("card", QRectF())
+
+    def _drag_grip_rect(self, row: int):
+        rects = self._timeline_row_rects(row)
+        outer = rects.get("card", QRectF())
+        if outer.isNull():
+            return QRectF()
+        compact = bool(rects.get("compact", False))
+        stripe_x = outer.left()
+        grip_x = stripe_x + 3.0 + (8 if compact else 10) if rects.get("child_group", False) else outer.left() + (12 if compact else 16)
         grip_y = outer.center().y() - 14
         return QRectF(grip_x - 4, grip_y, 24, 28)
 

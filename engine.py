@@ -67,6 +67,7 @@ class ExecutionEngine:
         self.human_curve = True   # Adds subtle ease-in/out jitter to key presses
         self._flash_cb = None     # Optional callback(loc) to flash matched region on screen
         self.image_state_cb = None  # Optional callback(row, "Waiting" | "Found" | "Missed")
+        self.loop_start_cb = None    # Optional callback() when a new top-level playback loop begins
         self._last_image_found = False  # Set by _exec_image_search; read by loop_until_found
         self.focus_lock = False         # If True, refocus _focus_hwnd before each action
         self._focus_hwnd = None         # Window handle captured at start
@@ -423,6 +424,13 @@ class ExecutionEngine:
                 if not self.infinite_loop and loop_num >= loops:
                     break
  
+                if loop_num > 0 or self.infinite_loop:
+                    try:
+                        if self.loop_start_cb:
+                            self.loop_start_cb()
+                    except Exception:
+                        pass
+
                 if self.infinite_loop:
                     self.status("Loop: ∞")
                 else:

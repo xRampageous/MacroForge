@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
     _diag_msg = pyqtSignal(str)
     _image_match_state = pyqtSignal(int, str)
     _trace_row = pyqtSignal(int)
+    _loop_visual_reset = pyqtSignal()
     _playback_feedback_msg = pyqtSignal(str)
 
     def __init__(self, profile_manager=None, settings_manager=None):
@@ -106,6 +107,7 @@ class MainWindow(QMainWindow):
         self.engine.before_action_hook = self._before_action_diag
         self.engine.after_action_hook = self._after_action_diag
         self.engine.image_state_cb = self._image_match_cb
+        self.engine.loop_start_cb = self._loop_visual_reset_cb
         self.engine.actions = self.action_model.actions()
 
         # State
@@ -199,6 +201,7 @@ class MainWindow(QMainWindow):
         self._diag_msg.connect(self._append_diagnostic)
         self._image_match_state.connect(self._do_image_match_state)
         self._trace_row.connect(self._do_trace_row)
+        self._loop_visual_reset.connect(self._do_loop_visual_reset)
         self._playback_feedback_msg.connect(self._set_playback_feedback)
 
         self._check_update_silent()
@@ -370,21 +373,33 @@ class MainWindow(QMainWindow):
                 margins = (5, 5, 7, 5)
                 spacing = 2
                 separator_visible = False
-                status_bounds = (108, 150)
+                status_cap = 230
             elif width < 860:
                 mode = "compact"
                 profile_w = int(getattr(self, "_toolbar_profile_compact_width", 132))
                 margins = (6, 5, 8, 5)
                 spacing = 3
                 separator_visible = True
-                status_bounds = (112, 210)
+                status_cap = 310
             else:
                 mode = "full"
                 profile_w = int(getattr(self, "_toolbar_profile_full_width", 164))
                 margins = (7, 5, 9, 5)
                 spacing = 4
                 separator_visible = True
-                status_bounds = (112, 390)
+                status_cap = 420
+
+            # With the added Debug button the toolbar can get tight.  Give the
+            # status pill as much real space as is available, then let it grow
+            # left from the right edge without overlapping the fixed toolbar controls.
+            visible_debug = 0
+            try:
+                visible_debug = int(getattr(self, "debug_top_btn", None).width() or 0)
+            except Exception:
+                visible_debug = 0
+            static_budget = profile_w + visible_debug + 338
+            available_status = max(112, width - static_budget)
+            status_bounds = (108 if mode == "tiny" else 112, max(112, min(status_cap, available_status)))
 
             if getattr(self, "_toolbar_profile_mode", None) != mode:
                 self._toolbar_profile_mode = mode
@@ -392,6 +407,19 @@ class MainWindow(QMainWindow):
 
             if profile.width() != profile_w:
                 profile.setFixedWidth(profile_w)
+
+            debug_btn = getattr(self, "debug_top_btn", None)
+            if debug_btn is not None:
+                try:
+                    if mode == "tiny":
+                        debug_btn.setText("")
+                        debug_btn.setFixedWidth(38)
+                        debug_btn.setToolTip("Debug tools")
+                    else:
+                        debug_btn.setText("Debug")
+                        debug_btn.setFixedWidth(64)
+                except Exception:
+                    pass
 
             layout = dock.layout()
             if layout is not None:
@@ -434,15 +462,25 @@ class MainWindow(QMainWindow):
             status_text = getattr(self, "status_text", None)
             if status_pill is None or status_text is None:
                 return
-            min_w, max_w = getattr(self, "_status_pill_bounds", (112, 390))
-            text = str(status_text.text() if visible_msg is None else visible_msg)
-            text_w = status_text.fontMetrics().horizontalAdvance(text)
+            min_w, max_w = getattr(self, "_status_pill_bounds", (112, 420))
+            if visible_msg is not None:
+                full_text = str(visible_msg or "")
+                status_text.setProperty("full_text", full_text)
+            else:
+                full_text = str(status_text.property("full_text") or status_text.toolTip() or status_text.text() or "")
+            fm = status_text.fontMetrics()
+            text_w = fm.horizontalAdvance(full_text)
             icon_visible = bool(getattr(self, "status_icon", None) and self.status_icon.isVisible())
-            chrome_w = 50 if icon_visible else 28
+            chrome_w = 50 if icon_visible else 30
             target_w = max(int(min_w), min(int(max_w), int(text_w + chrome_w + 24)))
             status_pill.setMinimumWidth(int(min_w))
             status_pill.setMaximumWidth(int(max_w))
             status_pill.setFixedWidth(target_w)
+            label_w = max(16, target_w - chrome_w - 18)
+            visible = fm.elidedText(full_text, Qt.TextElideMode.ElideRight, label_w)
+            if status_text.text() != visible:
+                status_text.setText(visible)
+            status_text.setToolTip(full_text)
         except Exception:
             pass
 
@@ -3974,6 +4012,9 @@ class MainWindow(QMainWindow):
     def _clear_timeline_runtime_marks(self, clear_playing=False):
         """Clear visual-only timeline runtime state without changing macro data."""
         try:
+            if hasattr(self.timeline, "clear_runtime_visuals"):
+                self.timeline.clear_runtime_visuals(clear_playing=clear_playing)
+                return
             if clear_playing and hasattr(self.timeline, "clear_playing"):
                 self.timeline.clear_playing()
             if hasattr(self.timeline, "clear_image_states"):
@@ -3984,6 +4025,16 @@ class MainWindow(QMainWindow):
                 self.timeline.set_link_targets(-1, [])
         except Exception:
             pass
+
+    def _loop_visual_reset_cb(self):
+        self._loop_visual_reset.emit()
+
+    def _do_loop_visual_reset(self):
+        # Each playback loop pass starts visually clean while engine counters and
+        # runtime logs continue tracking the whole run.
+        self._clear_timeline_runtime_marks(clear_playing=False)
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
 
     def start(self):
         if self.engine.running:
@@ -5294,10 +5345,10 @@ class MainWindow(QMainWindow):
 
     def status(self, msg):
         full_msg = str(msg or "")
-        max_chars = 43
-        visible_msg = full_msg if len(full_msg) <= max_chars else (full_msg[: max_chars - 1].rstrip() + "…")
+        visible_msg = full_msg
         # Thread-safe: always marshal Qt widget access to main thread
         def _update():
+            self.status_text.setProperty("full_text", full_msg)
             self.status_text.setText(visible_msg)
             self.status_text.setToolTip(full_msg)
             # Update status icon based on state

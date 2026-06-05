@@ -837,16 +837,24 @@ def build_main_layout(window):
     add_body_lo.setContentsMargins(0, 0, 0, 0)
     add_body_lo.setSpacing(0)
     add_lo.addLayout(section_header("ADD ACTION", "bolt", C["accent"], add_body))
-    add_grid = QGridLayout()
+    add_grid_host = QWidget(add_body)
+    add_grid_host.setObjectName("add_action_grid_host")
+    add_grid = QGridLayout(add_grid_host)
     add_grid.setContentsMargins(0, 0, 0, 0)
-    add_grid.setHorizontalSpacing(5)
+    # Fixed-width host prevents the two small-button columns from drifting apart
+    # when the side panel has spare width; their outside edges now align with
+    # the Folder button.
+    add_grid.setHorizontalSpacing(10)
     add_grid.setVerticalSpacing(3)
     # Qt stylesheet width constraints include the 1px border on each side in
     # the final widget size, so these internal widths render as 90px / 188px.
     self._add_action_button_width = 88
     self._add_action_group_width = 186
+    add_grid_host.setFixedWidth(self._add_action_group_width)
     add_grid.setColumnMinimumWidth(0, self._add_action_button_width)
     add_grid.setColumnMinimumWidth(1, self._add_action_button_width)
+    add_grid.setColumnStretch(0, 0)
+    add_grid.setColumnStretch(1, 0)
     action_specs = [
         ("Key", self._open_key_dialog, C["key"], "key", 0, 0, 1, 1),
         ("Click", self._open_click_dialog, C["click"], "click", 0, 1, 1, 1),
@@ -868,7 +876,7 @@ def build_main_layout(window):
             add_grid.setRowMinimumHeight(3, 5)
         add_grid.setRowMinimumHeight(row, btn_h)
         add_grid.addWidget(btn, row, col, rowspan, colspan, alignment=Qt.AlignmentFlag.AlignCenter)
-    add_body_lo.addLayout(add_grid)
+    add_body_lo.addWidget(add_grid_host, 0, Qt.AlignmentFlag.AlignHCenter)
     add_lo.addWidget(add_body)
     sb_lo.addWidget(add_card)
 
@@ -1742,6 +1750,19 @@ def build_main_layout(window):
     self.menu_top_btn = self.settings_top_btn
     dock_lo.addWidget(self.settings_top_btn)
 
+    self.debug_top_btn = header_icon_button("debug_top_btn", "target", C["pause_cyan"], "Debug tools", None, width=64)
+    self.debug_top_btn.setText("Debug")
+    self.debug_top_btn.setStyleSheet(
+        f"QPushButton#debug_top_btn {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 #07172A, stop:1 #020A13); color: {C['pause_cyan']}; "
+        "border: 1px solid #15354D; border-radius: 9px; padding: 0 6px; "
+        "font-size: 10px; font-weight: 900; }}"
+        f"QPushButton#debug_top_btn:hover {{ border-color: {C['pause_cyan']}; background: {C['bg_hover']}; }}"
+        f"QPushButton#debug_top_btn:pressed {{ border-color: {C['pause_cyan']}; background: {C['bg_pressed']}; }}"
+        "QPushButton#debug_top_btn::menu-indicator { image: none; width: 0px; }"
+    )
+    dock_lo.addWidget(self.debug_top_btn)
+
     dock_lo.addStretch(1)
 
     status_pill = QFrame()
@@ -1871,6 +1892,26 @@ def build_main_layout(window):
         self.mode_filter_menu.popup(self.mode_filter_btn.mapToGlobal(self.mode_filter_btn.rect().bottomLeft()))
 
     self.mode_filter_btn.clicked.connect(_show_mode_filter_menu)
+
+    self.debug_tools_menu = QMenu(self)
+    self.debug_tools_menu.setObjectName("debug_tools_menu")
+    self.debug_tools_menu.setStyleSheet(toolbar_menu_style)
+    dbg_editor = self.debug_tools_menu.addAction("Editor")
+    dbg_health = self.debug_tools_menu.addAction("Health")
+    dbg_runtime = self.debug_tools_menu.addAction("Runtime")
+    dbg_filters = self.debug_tools_menu.addAction("Filters")
+    self.debug_tools_menu.addSeparator()
+    dbg_debug = self.debug_tools_menu.addAction("Debug")
+    dbg_editor.triggered.connect(self.open_macro_editor)
+    dbg_health.triggered.connect(self.open_preflight_report)
+    dbg_runtime.triggered.connect(lambda: self.toggle_runtime_log_panel(True))
+    dbg_filters.triggered.connect(lambda: _show_mode_filter_menu())
+    dbg_debug.triggered.connect(self.open_debug_viewer)
+
+    def _show_debug_tools_menu():
+        self.debug_tools_menu.popup(self.debug_top_btn.mapToGlobal(self.debug_top_btn.rect().bottomLeft()))
+
+    self.debug_top_btn.clicked.connect(_show_debug_tools_menu)
 
     self.tl_search_popup = QFrame(self)
     self.tl_search_popup.setObjectName("timeline_search_popup")
