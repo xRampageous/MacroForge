@@ -844,12 +844,13 @@ def build_main_layout(window):
     # Fixed-width host prevents the two small-button columns from drifting apart
     # when the side panel has spare width; their outside edges now align with
     # the Folder button.
-    add_grid.setHorizontalSpacing(8)
+    add_grid.setHorizontalSpacing(6)
     add_grid.setVerticalSpacing(3)
-    # Keep the two columns inside the fixed side panel.  The Folder button is
-    # the outside-edge reference; small buttons align to its left/right edges.
-    self._add_action_button_width = 86
-    self._add_action_group_width = 180
+    # Keep the two columns safely inside the fixed side panel.  The Folder
+    # button is the outside-edge reference; small buttons align to its left/right
+    # edges without clipping the panel border on high-DPI Windows.
+    self._add_action_button_width = 82
+    self._add_action_group_width = 170
     add_grid_host.setFixedWidth(self._add_action_group_width)
     add_grid.setColumnMinimumWidth(0, self._add_action_button_width)
     add_grid.setColumnMinimumWidth(1, self._add_action_button_width)
@@ -1300,12 +1301,15 @@ def build_main_layout(window):
     ig_outer.setContentsMargins(0, 0, 0, 0)
     ig_outer.setSpacing(6)
     group_card, ig_lo = inspector_group("GROUP SETTINGS", "folder", C["group"])
+    # Group rows now use the shared Inspector Label field as their row name.
+    # Keep ig_name as a hidden compatibility field for older autosave wiring, but
+    # do not show a duplicate "Group name" control in the group settings card.
     self.ig_name = form_input("group name")
+    self.ig_name.setVisible(False)
     self.ig_collapsed = QCheckBox("Collapsed")
     self.ig_recovery = QCheckBox("Recovery")
     self.ig_meta = QLabel("0 actions - ~0.0s")
     self.ig_meta.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
-    ig_lo.addLayout(inspector_field_row("Group name", self.ig_name))
     ig_lo.addLayout(inspector_check_row("Collapsed", self.ig_collapsed))
     ig_lo.addLayout(inspector_check_row("Recovery group", self.ig_recovery))
     ig_lo.addWidget(self.ig_meta)
@@ -1707,8 +1711,10 @@ def build_main_layout(window):
     self.runtime_log_btn = header_icon_button("runtime_log_btn", "eye", C["pause_cyan"], "Show / hide live runtime log", self.toggle_runtime_log_panel, width=35, height=34, grouped=True)
     self.runtime_log_btn.setCheckable(True)
     self.mode_filter_btn = header_icon_button("mode_filter_btn", "menu", C["accent"], "Mode filters: All actions", None, width=41, height=34, grouped=True)
+    self.debug_top_btn = header_icon_button("debug_top_btn", "bug", C["pause_cyan"], "Debug tools", None, width=35, height=34, grouped=True)
+    self.debug_top_btn.setText("")
     self.compact_view_btn = self.mode_filter_btn
-    for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.mode_filter_btn):
+    for btn in (self.editor_mode_btn, self.preflight_btn, self.runtime_log_btn, self.mode_filter_btn, self.debug_top_btn):
         tools_lo.addWidget(btn)
     dock_lo.addWidget(tools)
 
@@ -1749,10 +1755,6 @@ def build_main_layout(window):
     self.settings_top_btn = header_icon_button("settings_top_btn", "settings", C["text_dim"], "Settings", self.open_settings_dialog, width=38)
     self.menu_top_btn = self.settings_top_btn
     dock_lo.addWidget(self.settings_top_btn)
-
-    self.debug_top_btn = header_icon_button("debug_top_btn", "target", C["pause_cyan"], "Debug tools", None, width=38)
-    self.debug_top_btn.setText("")
-    dock_lo.addWidget(self.debug_top_btn)
 
     dock_lo.addStretch(1)
 

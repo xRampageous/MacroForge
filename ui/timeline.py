@@ -99,9 +99,8 @@ def _action_text(action):
         return label or "Image", ""
 
     if kind == "group":
-        name = getattr(action, "group_name", "") or label or "Group"
-        collapsed = "Collapsed" if bool(getattr(action, "group_collapsed", False)) else "Folder"
-        return name, collapsed
+        name = label or getattr(action, "group_name", "") or "Group"
+        return name, ""
 
     if kind == "loop":
         count = _safe_int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)), 2)
@@ -114,7 +113,7 @@ def _action_text(action):
     if kind == "condition":
         ctype = getattr(action, "condition_type", "none") or "none"
         if ctype == "pixel_color":
-            detail = f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}"
+            detail = f"{getattr(action, 'condition_x', 0)},{getattr(action, 'condition_y', 0)}"
         elif ctype == "variable":
             detail = f"{getattr(action, 'condition_var_name', '') or 'variable'} = {getattr(action, 'condition_var_value', '') or 'value'}"
         else:
@@ -491,7 +490,10 @@ class TimelineDelegate(QStyledItemDelegate):
             # Icon tile.
             icon_size = 28 if compact else 34
             icon_left = outer.left() + (54 if compact else 82) + child_indent
-            icon_rect = QRectF(icon_left, outer.center().y() - icon_size / 2, icon_size, icon_size)
+            if kind == "group":
+                icon_rect = QRectF(icon_left, outer.top() + (7 if compact else 8), icon_size, icon_size)
+            else:
+                icon_rect = QRectF(icon_left, outer.center().y() - icon_size / 2, icon_size, icon_size)
             path = QPainterPath(); path.addRoundedRect(icon_rect, 8, 8)
             painter.setPen(QPen(QColor(COLORS["border"]), 1))
             painter.setBrush(QBrush(QColor(COLORS["bg"])))
@@ -532,8 +534,8 @@ class TimelineDelegate(QStyledItemDelegate):
             status_max_w = 126 if compact else 154
             status_w = max(status_base_w, min(status_max_w, status_text_w + (28 if compact else 34)))
             status_x = status_right - status_w
-            conf_w = 46 if compact else 56
-            conf_gap = 7 if compact else 9
+            conf_w = 48 if compact else 58
+            conf_gap = 3 if compact else 4
             conf_rect = QRectF(status_x - conf_w - conf_gap, outer.center().y() - 8, conf_w, 16) if kind == "image" else QRectF()
             duration_w = 46 if compact else 56
             dur_x = status_right + 10
@@ -559,16 +561,7 @@ class TimelineDelegate(QStyledItemDelegate):
                     detail_color = image_match_color
             if kind == "group" and group_badge:
                 count = _safe_int(group_badge.get("count", 0), 0)
-                dur = _safe_float(group_badge.get("duration", 0.0), 0.0)
-                hidden = " hidden" if bool(getattr(action, "group_collapsed", False)) else ""
-                role = "Recovery · " if getattr(action, "group_role", "normal") == "recovery" else ""
-                detail = f"{role}{count} action{'s' if count != 1 else ''}{hidden} · ~{dur:.1f}s"
-                if hasattr(view, "group_progress"):
-                    gp = view.group_progress(row)
-                    if gp.get("active") or gp.get("progress", 0) > 0:
-                        cur = gp.get("current", "")
-                        cur_txt = f" · {cur}" if cur else ""
-                        detail = f"{gp.get('done', 0)}/{max(1, gp.get('total', count))} actions · {int(round(gp.get('progress', 0) * 100))}%{cur_txt}"
+                detail = f"{count} Action{'s' if count != 1 else ''}"
             if kind == "loop" and hasattr(view, "group_badge"):
                 target = _safe_int(getattr(action, "loop_target", -1), -1)
                 meta = view.group_badge(target) if target >= 0 else None
@@ -593,16 +586,16 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 8 if compact else 9, QFont.Weight.DemiBold))
             fm = painter.fontMetrics()
             painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(title, Qt.TextElideMode.ElideRight, int(text_w)))
-            if kind != "group":
-                painter.setPen(QColor(detail_color))
-                painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold if image_match_state else QFont.Weight.Normal))
-                fm = painter.fontMetrics()
-                painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
+            painter.setPen(QColor(detail_color))
+            painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold if image_match_state else QFont.Weight.Normal))
+            fm = painter.fontMetrics()
+            painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
             if kind == "group":
                 badge = group_badge.get("badge", "G") if group_badge else "G"
                 gcol = QColor(group_badge.get("color") if group_badge else type_color)
-                chip_rect = QRectF(text_x, outer.center().y() + 8, 28 if compact else 32, 12)
+                chip_w = max(24 if compact else 26, min(icon_rect.width(), 30))
+                chip_rect = QRectF(icon_rect.center().x() - chip_w / 2, min(outer.bottom() - 15, icon_rect.bottom() + 1), chip_w, 12)
                 self._rounded_rect(painter, chip_rect, 3, COLORS["bg"], gcol.name(), 1)
                 painter.setPen(gcol)
                 painter.setFont(QFont("Segoe UI", 6, QFont.Weight.Black))
@@ -620,7 +613,7 @@ class TimelineDelegate(QStyledItemDelegate):
                     # Plain confidence text only: no chip/background box.
                     painter.setPen(QColor(type_color))
                     painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
-                    painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
+                    painter.drawText(conf_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"≥ {conf}%")
 
             if linked_target and kind != "group":
                 link_rect = QRectF(text_x, outer.center().y() + 7, 46 if compact else 54, 14)

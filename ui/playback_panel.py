@@ -325,13 +325,17 @@ def make_playback_panel(window):
 
         check.toggled.connect(refresh)
         refresh(checked)
-        frame.mousePressEvent = lambda event, cb=check: cb.toggle()
+        def _toggle_chip(event, cb=check):
+            cb.toggle()
+            event.accept()
+        frame.mousePressEvent = _toggle_chip
+        ico.mousePressEvent = _toggle_chip
         setattr(self, attr_name, check)
         mode_row.addWidget(frame)
 
-    add_mode_check("sim_check", "Sim", "settings", C["accent"], 60, "Simulation mode")
-    add_mode_check("human_check", "Human", "target", C["success"], 72, "Humanized movement curve", checked=True)
-    add_mode_check("focus_check", "Lock", "lock", C["pause_cyan"], 66, "Refocus the locked window before each action")
+    add_mode_check("sim_check", "Sim", "play", C["accent"], 60, "Simulation mode")
+    add_mode_check("human_check", "Human", "person", C["success"], 72, "Humanized movement curve", checked=True)
+    add_mode_check("focus_check", "Lock", "lock", C["pause_cyan"], 66, "Capture the current foreground window at playback start and refocus it before each action")
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
     options_body.addLayout(loops_modes, stretch=2)
@@ -347,11 +351,11 @@ def make_playback_panel(window):
 
     self.collapse_playback_btn = QPushButton("^")
     self.collapse_playback_btn.setToolTip("Collapse playback panel")
-    self.collapse_playback_btn.setFixedSize(42, 40)
+    self.collapse_playback_btn.setFixedSize(34, 34)
     self.collapse_playback_btn.setStyleSheet(
         f"QPushButton {{ color: {C['accent']}; background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['accent_dim']}; border-radius: 9px; padding: 0; "
-        "font-size: 16px; font-weight: 950; }}"
+        "font-size: 14px; font-weight: 950; }}"
         f"QPushButton:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
     )
     self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))

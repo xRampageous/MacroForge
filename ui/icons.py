@@ -260,18 +260,19 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         p.drawLine(int(s * 0.8), int(s * 0.65), int(s * 0.5), int(s * 0.85))
 
     def _draw_settings(p, s):
+        # Bolder gear/sliders hybrid so the top-panel settings icon stays visible
+        # at 16px on the dark toolbar.
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(QRectF(s * 0.35, s * 0.35, s * 0.3, s * 0.3))
-        p.drawArc(int(s * 0.15), int(s * 0.15), int(s * 0.7), int(s * 0.7), 0, 360 * 16)
-        for ang in (0, 45, 90, 135, 180, 225, 270, 315):
-            import math
-            rad = math.radians(ang)
-            x1 = s * (0.5 + 0.22 * math.cos(rad))
-            y1 = s * (0.5 + 0.22 * math.sin(rad))
-            x2 = s * (0.5 + 0.36 * math.cos(rad))
-            y2 = s * (0.5 + 0.36 * math.sin(rad))
-            p.drawLine(int(x1), int(y1), int(x2), int(y2))
+        p.drawEllipse(QRectF(s * 0.34, s * 0.34, s * 0.32, s * 0.32))
+        p.drawArc(int(s * 0.16), int(s * 0.16), int(s * 0.68), int(s * 0.68), 0, 360 * 16)
+        for x in (0.24, 0.50, 0.76):
+            p.drawLine(int(s * x), int(s * 0.18), int(s * x), int(s * 0.82))
+        p.setBrush(brush)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QRectF(s * 0.20, s * 0.28, s * 0.08, s * 0.08))
+        p.drawEllipse(QRectF(s * 0.46, s * 0.58, s * 0.08, s * 0.08))
+        p.drawEllipse(QRectF(s * 0.72, s * 0.40, s * 0.08, s * 0.08))
 
     def _draw_browse(p, s):
         p.setPen(pen)
@@ -383,6 +384,27 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         p.setPen(Qt.PenStyle.NoPen)
         p.drawEllipse(QRectF(s * 0.46, s * 0.54, s * 0.08, s * 0.08))
 
+
+    def _draw_bug(p, s):
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QRectF(s * 0.30, s * 0.28, s * 0.40, s * 0.46))
+        p.drawEllipse(QRectF(s * 0.36, s * 0.14, s * 0.28, s * 0.22))
+        p.drawLine(int(s * 0.34), int(s * 0.18), int(s * 0.22), int(s * 0.08))
+        p.drawLine(int(s * 0.66), int(s * 0.18), int(s * 0.78), int(s * 0.08))
+        for y in (0.40, 0.56, 0.72):
+            p.drawLine(int(s * 0.30), int(s * y), int(s * 0.14), int(s * (y - 0.06)))
+            p.drawLine(int(s * 0.70), int(s * y), int(s * 0.86), int(s * (y - 0.06)))
+        p.drawLine(int(s * 0.50), int(s * 0.34), int(s * 0.50), int(s * 0.76))
+
+    def _draw_person(p, s):
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QRectF(s * 0.36, s * 0.18, s * 0.28, s * 0.28))
+        p.drawArc(int(s * 0.22), int(s * 0.48), int(s * 0.56), int(s * 0.42), 20 * 16, 140 * 16)
+        p.drawLine(int(s * 0.36), int(s * 0.58), int(s * 0.30), int(s * 0.84))
+        p.drawLine(int(s * 0.64), int(s * 0.58), int(s * 0.70), int(s * 0.84))
+
     dispatch = {
         "play": _draw_play, "pause": _draw_pause, "stop": _draw_stop,
         "magic": _draw_magic,
@@ -397,6 +419,7 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         "search": _draw_search, "eye": _draw_eye, "target": _draw_target,
         "camera": _draw_camera, "chevron": _draw_chevron, "minimize": _draw_minimize,
         "close": _draw_close, "grip": _draw_grip, "lock": _draw_lock,
+        "bug": _draw_bug, "person": _draw_person,
     }
     fn = dispatch.get(name)
     if fn:

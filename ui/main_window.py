@@ -392,7 +392,7 @@ class MainWindow(QMainWindow):
             # With the added Debug button the toolbar can get tight.  Give the
             # status pill as much real space as is available, then let it grow
             # left from the right edge without overlapping the fixed toolbar controls.
-            visible_debug = 38
+            visible_debug = 35
             static_budget = profile_w + visible_debug + 312
             available_status = max(112, width - static_budget)
             status_bounds = (108 if mode == "tiny" else 112, max(112, min(status_cap, available_status)))
@@ -408,7 +408,7 @@ class MainWindow(QMainWindow):
             if debug_btn is not None:
                 try:
                     debug_btn.setText("")
-                    debug_btn.setFixedWidth(38)
+                    debug_btn.setFixedWidth(35)
                     debug_btn.setToolTip("Debug tools")
                 except Exception:
                     pass
@@ -1905,7 +1905,7 @@ class MainWindow(QMainWindow):
                     action.group_name = name
                     changed = True
                 if getattr(action, "label", "") != name:
-                    action.label = inspector_label_text or name
+                    action.label = name
                     changed = True
                 if getattr(action, "block_depth", 0) != 0:
                     action.block_depth = 0
@@ -2583,7 +2583,9 @@ class MainWindow(QMainWindow):
                     self._populate_target_combo(self.ii_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
                 self._set_image_inspector_preview(action)
             elif action.action_type == "group":
-                self.ig_name.setText(getattr(action, "group_name", "") or getattr(action, "label", ""))
+                self.ig_name.blockSignals(True)
+                self.ig_name.setText(getattr(action, "label", "") or getattr(action, "group_name", ""))
+                self.ig_name.blockSignals(False)
                 self.ig_collapsed.setChecked(bool(getattr(action, "group_collapsed", False)))
                 if hasattr(self, "ig_recovery"):
                     self.ig_recovery.setChecked(getattr(action, "group_role", "normal") == "recovery")
@@ -2676,9 +2678,16 @@ class MainWindow(QMainWindow):
                     action.on_fail_action = self.ii_fail_mode.currentText().strip().lower().replace(" ", "_")
                     action.on_fail_target = int(self.ii_fail_target.currentData() if self.ii_fail_target.currentData() is not None else -1)
             elif action.action_type == "group":
-                name = self.ig_name.text().strip() or "Group"
+                name = inspector_label_text or getattr(action, "label", "") or getattr(action, "group_name", "") or "Group"
+                action.label = name
                 action.group_name = name
-                action.label = inspector_label_text or name
+                if hasattr(self, "ig_name"):
+                    try:
+                        self.ig_name.blockSignals(True)
+                        self.ig_name.setText(name)
+                        self.ig_name.blockSignals(False)
+                    except Exception:
+                        pass
                 action.group_collapsed = self.ig_collapsed.isChecked()
                 if hasattr(self, "ig_recovery"):
                     action.group_role = "recovery" if self.ig_recovery.isChecked() else "normal"
@@ -3806,6 +3815,8 @@ class MainWindow(QMainWindow):
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
         self.engine.focus_lock = self.focus_check.isChecked()
+        if self.engine.focus_lock:
+            self.engine.capture_focus_window()
         try:
             self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
         except ValueError:
@@ -4067,6 +4078,8 @@ class MainWindow(QMainWindow):
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
         self.engine.focus_lock = self.focus_check.isChecked()
+        if self.engine.focus_lock:
+            self.engine.capture_focus_window()
         self.engine.loops = self.loops_spin.value()
         try:
             self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
@@ -4097,12 +4110,17 @@ class MainWindow(QMainWindow):
     def _status_cb(self, msg):
         self._diag(f"[STATUS] {msg}")
         text = str(msg or "")
-        lower = text.lower()
-        # Runtime/timeline interaction status is now mirrored to the top-right
-        # status pill. The playback panel still receives the same text for local
-        # feedback, but the header pill is the single interaction status surface.
-        if getattr(self.engine, "running", False):
+        # Playback/runtime engine messages belong under the Play buttons.  The
+        # top-right status pill is reserved for app-level interaction messages
+        # such as save/load/move/filter/settings/debug feedback.
+        runtime_tokens = (
+            "running", "loop", "playing", "paused", "stopped", "done",
+            "macro complete", "waiting", "image", "found", "missed",
+            "simulate", "executing", "deploy", "action",
+        )
+        if getattr(self.engine, "running", False) or any(token in text.lower() for token in runtime_tokens):
             self._playback_feedback_msg.emit(text)
+            return
         self._status_msg.emit(text)
 
     def _set_playback_feedback(self, msg: str):
@@ -4433,6 +4451,8 @@ class MainWindow(QMainWindow):
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
         self.engine.focus_lock = self.focus_check.isChecked()
+        if self.engine.focus_lock:
+            self.engine.capture_focus_window()
         self.engine.loops = 1
         self.engine.loops_completed_count = 0
         try:
@@ -4483,6 +4503,8 @@ class MainWindow(QMainWindow):
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
         self.engine.focus_lock = self.focus_check.isChecked()
+        if self.engine.focus_lock:
+            self.engine.capture_focus_window()
         self.engine.loops = 1
         self.engine.loops_completed_count = 0
         try:
@@ -5453,6 +5475,16 @@ class MainWindow(QMainWindow):
         if not collapsed:
             restore.setVisible(False)
             dock.setVisible(True)
+
+        if not panel.isVisible():
+            panel.setFixedHeight(target_h)
+            dock.setVisible(not collapsed)
+            restore.setVisible(collapsed)
+            panel.updateGeometry()
+            if hasattr(self, "_apply_panel_size_locks"):
+                self._apply_panel_size_locks()
+            return
+
         panel.setMinimumHeight(min(start_h, target_h))
         panel.setMaximumHeight(max(start_h, target_h))
 
@@ -5777,8 +5809,9 @@ class MainWindow(QMainWindow):
             # MacroForge to one folder level and prevents nested group corruption.
             if 0 <= self.active_index < self.action_model.rowCount():
                 try:
-                    if self.timeline.group_badge(self.active_index):
-                        self.status("Cannot add a group row inside another group")
+                    active_action = self.action_model.get(self.active_index)
+                    if getattr(active_action, "action_type", "") == "group" or getattr(active_action, "group_id", "") or self.timeline.group_badge(self.active_index):
+                        self.status("Groups cannot be nested")
                         return
                 except Exception:
                     pass

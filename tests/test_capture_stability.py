@@ -345,7 +345,7 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertFalse(window.playback_dock.isVisible())
             self.assertFalse(window.playback_restore_btn.isHidden())
             window._set_playback_collapsed(False)
-            self.assertEqual(window.playback_panel.height(), 188)
+            self.assertEqual(window.playback_panel.height(), 175)
             self._dispose_window(window)
 
     def test_autosave_chip_marks_unsaved_then_saved(self):
@@ -378,7 +378,9 @@ class TestPlaybackVisibility(QtTestCase):
             window.status("Profile 'alpha' loaded")
             window.playback_feedback("Playing · Row 1 Enter")
             self.app.processEvents()
-            self.assertEqual(window.status_text.text(), "Profile 'alpha' loaded")
+            self.assertEqual(window.status_text.toolTip(), "Profile 'alpha' loaded")
+            self.assertTrue(window.status_text.text().startswith("Profile 'a"))
+            self.assertNotIn("Playing", window.status_text.text())
             self.assertEqual(window.playback_feedback_label.text(), "Playing · Row 1 Enter")
             self._dispose_window(window)
 
@@ -464,13 +466,13 @@ class TestPlaybackVisibility(QtTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
             expected = {
-                "add_key": ("Key", 90),
-                "add_click": ("Click", 90),
-                "add_pause": ("Delay", 90),
-                "add_image": ("Image", 90),
-                "add_condition": ("Condition", 90),
-                "add_loop": ("Loop", 90),
-                "add_group": ("Folder", 188),
+                "add_key": ("Key", 84),
+                "add_click": ("Click", 84),
+                "add_pause": ("Delay", 84),
+                "add_image": ("Image", 84),
+                "add_condition": ("Condition", 84),
+                "add_loop": ("Loop", 84),
+                "add_group": ("Folder", 172),
             }
             for name, (label, width) in expected.items():
                 button = window.findChild(QPushButton, name)
@@ -601,7 +603,7 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertLess(timeline_rect.bottom(), playback_rect.top())
             self.assertGreaterEqual(window.height() - playback_rect.bottom(), 0)
             self.assertLessEqual(window.height() - playback_rect.bottom(), 2)
-            self.assertEqual(dock_rect.bottom(), playback_rect.bottom() - 8)
+            self.assertEqual(dock_rect.bottom(), playback_rect.bottom() - 6)
 
             profile_x = window.profile_btn.mapToGlobal(window.profile_btn.rect().topLeft()).x()
             update_x = window.update_top_btn.mapToGlobal(window.update_top_btn.rect().topLeft()).x()
@@ -613,7 +615,7 @@ class TestPlaybackVisibility(QtTestCase):
 
             self.assertGreaterEqual(window.status_pill.width(), 108)
             self.assertLessEqual(window.status_pill.width(), 150)
-            self.assertEqual(window.playback_panel.height(), 188)
+            self.assertEqual(window.playback_panel.height(), 175)
             for widget, name in (
                 (window.profile_btn, "profile selector"),
                 (window.update_top_btn, "update button"),
@@ -637,8 +639,8 @@ class TestPlaybackVisibility(QtTestCase):
             ):
                 assert_visible(widget, name)
 
-            self.assertGreaterEqual(window.start_btn.width(), 56)
-            self.assertGreaterEqual(window.speed_combo.width(), 100)
+            self.assertGreaterEqual(window.start_btn.width(), 52)
+            self.assertGreaterEqual(window.speed_combo.width(), 50)
             self.assertLessEqual(window.playback_feedback_frame.width(), 216)
             self.assertGreaterEqual(window.playback_feedback_frame.width(), 190)
             self.assertLess(window.playback_feedback_label.width(), window.playback_feedback_frame.width())
