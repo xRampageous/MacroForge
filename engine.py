@@ -403,6 +403,10 @@ class ExecutionEngine:
                 pass
  
     def run(self, loops: int):
+        try:
+            loops = max(1, int(loops or 1))
+        except (TypeError, ValueError):
+            loops = 1
         self.running = True
         self.paused = False
         self.time_cursor = 0.0

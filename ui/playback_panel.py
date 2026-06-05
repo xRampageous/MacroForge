@@ -283,7 +283,7 @@ def make_playback_panel(window):
 
     mode_row = QHBoxLayout()
     mode_row.setContentsMargins(0, 0, 0, 0)
-    mode_row.setSpacing(5)
+    mode_row.setSpacing(4)
 
     def add_mode_check(attr_name, label, icon_name, color, width, tooltip, checked=False):
         frame = QFrame()
@@ -333,9 +333,9 @@ def make_playback_panel(window):
         setattr(self, attr_name, check)
         mode_row.addWidget(frame)
 
-    add_mode_check("sim_check", "Sim", "play", C["accent"], 60, "Simulation mode")
-    add_mode_check("human_check", "Human", "person", C["success"], 72, "Humanized movement curve", checked=True)
-    add_mode_check("focus_check", "Lock", "lock", C["pause_cyan"], 66, "Capture the current foreground window at playback start and refocus it before each action")
+    add_mode_check("sim_check", "Sim", "play", C["accent"], 58, "Simulation mode")
+    add_mode_check("human_check", "Human", "person", C["success"], 70, "Humanized movement curve", checked=True)
+    add_mode_check("focus_check", "Lock", "lock", C["pause_cyan"], 64, "Capture the current foreground window and refocus it before each action")
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
     options_body.addLayout(loops_modes, stretch=2)
@@ -368,7 +368,9 @@ def make_playback_panel(window):
 
     progress_wrap = QFrame()
     progress_wrap.setObjectName("progress_wrap")
-    progress_wrap.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    progress_wrap.setMinimumWidth(250)
+    progress_wrap.setMaximumWidth(420)
+    progress_wrap.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     progress_wrap.setFixedHeight(36)
     progress_wrap.setStyleSheet(
         f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
@@ -394,7 +396,7 @@ def make_playback_panel(window):
         f"color: {C['accent']}; font-size: 13px; font-weight: 900; min-width: 38px;"
     )
     pw_lo.addWidget(self.progress_label)
-    bottom.addWidget(progress_wrap, stretch=1)
+    bottom.addWidget(progress_wrap)
 
     self._stat_actions_w, self._stat_actions = self._make_stat_chip("bolt", "Played", "0", C["accent"], "Actions played this run")
     self._stat_loops_w, self._stat_loops = self._make_stat_chip("loop", "Loops", "0", C["neon_purple"], "Completed loops")

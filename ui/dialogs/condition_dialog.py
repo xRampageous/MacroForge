@@ -133,7 +133,7 @@ class ConditionDialog(QDialog):
         self.fail_target = QComboBox(); add_targets(self.fail_target); select_target(self.fail_target, int(getattr(existing, "on_fail_target", -1) if existing else -1))
         body_lo.addWidget(label("On false/fail")); body_lo.addWidget(self.fail_mode); body_lo.addWidget(label("Fail target")); body_lo.addWidget(self.fail_target)
 
-        hint = QLabel("Targets can point to normal rows or group headers such as G1/G2. Recovery mode jumps to the first recovery group if no target is chosen.")
+        hint = QLabel("Targets can point to normal rows or folder headers such as F1/F2. Recovery mode jumps to the first recovery folder if no target is chosen.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; background: transparent;")
         body_lo.addWidget(hint)

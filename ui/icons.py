@@ -260,19 +260,15 @@ def icon(name: str, size: int = 16, color: str = "#e0e2f0") -> QIcon:
         p.drawLine(int(s * 0.8), int(s * 0.65), int(s * 0.5), int(s * 0.85))
 
     def _draw_settings(p, s):
-        # Bolder gear/sliders hybrid so the top-panel settings icon stays visible
-        # at 16px on the dark toolbar.
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(QRectF(s * 0.34, s * 0.34, s * 0.32, s * 0.32))
-        p.drawArc(int(s * 0.16), int(s * 0.16), int(s * 0.68), int(s * 0.68), 0, 360 * 16)
-        for x in (0.24, 0.50, 0.76):
-            p.drawLine(int(s * x), int(s * 0.18), int(s * x), int(s * 0.82))
+        for y in (0.28, 0.50, 0.72):
+            p.drawLine(int(s * 0.18), int(s * y), int(s * 0.82), int(s * y))
         p.setBrush(brush)
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(QRectF(s * 0.20, s * 0.28, s * 0.08, s * 0.08))
-        p.drawEllipse(QRectF(s * 0.46, s * 0.58, s * 0.08, s * 0.08))
-        p.drawEllipse(QRectF(s * 0.72, s * 0.40, s * 0.08, s * 0.08))
+        p.drawEllipse(QRectF(s * 0.30, s * 0.20, s * 0.16, s * 0.16))
+        p.drawEllipse(QRectF(s * 0.56, s * 0.42, s * 0.16, s * 0.16))
+        p.drawEllipse(QRectF(s * 0.40, s * 0.64, s * 0.16, s * 0.16))
 
     def _draw_browse(p, s):
         p.setPen(pen)

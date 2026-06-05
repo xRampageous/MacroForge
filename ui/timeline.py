@@ -86,11 +86,10 @@ def _action_text(action):
 
     if kind == "click":
         button = (getattr(action, "click_button", "left") or "left").title()
-        mode = getattr(action, "click_coord_mode", "absolute") or "absolute"
         x, y = getattr(action, "click_x", 0), getattr(action, "click_y", 0)
         rand = _safe_int(getattr(action, "click_rand_radius", 0), 0)
         rand_txt = f" · ±{rand}px" if rand > 0 else ""
-        return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
+        return label or f"{button} Click", f"X {x}, Y {y}{rand_txt}{repeat_txt}"
 
     if kind == "image":
         # Image template filenames stay available in the inspector/action dialog.
@@ -99,7 +98,7 @@ def _action_text(action):
         return label or "Image", ""
 
     if kind == "group":
-        name = label or getattr(action, "group_name", "") or "Group"
+        name = label or getattr(action, "group_name", "") or "Folder"
         return name, ""
 
     if kind == "loop":
@@ -226,6 +225,7 @@ class TimelineDelegate(QStyledItemDelegate):
             search_query = str(getattr(view, "_search", "") or "").strip()
             search_match = bool(search_query and hasattr(view, "_row_matches_search") and view._row_matches_search(row))
             current_search_match = bool(search_match and row == getattr(view, "_search_current_row", -1))
+            invalid_group_drop = bool(group_drop_target and not getattr(view, "drop_feedback_valid", False))
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
             kind = _action_kind(action)
             if kind == "group" and hasattr(view, "group_progress"):
@@ -272,8 +272,10 @@ class TimelineDelegate(QStyledItemDelegate):
                 bg = _mix(bg, COLORS.get("accent", type_color), 0.13)
             if search_match and not playing:
                 bg = _mix(bg, COLORS.get("accent", type_color), 0.10 if not current_search_match else 0.18)
-            if group_drop_target and kind == "group" and not playing:
+            if group_drop_target and kind == "group" and not playing and not invalid_group_drop:
                 bg = _mix(bg, COLORS.get("success", type_color), 0.18)
+            if invalid_group_drop and kind == "group" and not playing:
+                bg = _mix(bg, COLORS.get("error", "#ff3142"), 0.18)
             if flashed:
                 bg = _mix(bg, type_color, 0.22 * flash_opacity)
 
@@ -292,8 +294,10 @@ class TimelineDelegate(QStyledItemDelegate):
                 border = COLORS.get("accent", type_color)
             if current_search_match:
                 border = COLORS.get("warning", COLORS.get("accent", type_color))
-            if group_drop_target and kind == "group":
+            if group_drop_target and kind == "group" and not invalid_group_drop:
                 border = COLORS.get("success", type_color)
+            if invalid_group_drop and kind == "group":
+                border = COLORS.get("error", "#ff3142")
             if dragging or flashed:
                 border = _mix(COLORS["border_light"], type_color, 0.55)
             if playing:
@@ -302,6 +306,9 @@ class TimelineDelegate(QStyledItemDelegate):
             if kind == "group" and not playing:
                 bg = _mix(COLORS["bg_card"], type_color, 0.14)
                 border = _mix(COLORS["border_light"], type_color, 0.45)
+                if invalid_group_drop:
+                    bg = _mix(COLORS["bg_card"], COLORS.get("error", "#ff3142"), 0.18)
+                    border = COLORS.get("error", "#ff3142")
 
             # Active rows use a richer action-colour gradient: strong left block,
             # soft centre glow, and dark right fade. This keeps the action colour
@@ -567,7 +574,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 meta = view.group_badge(target) if target >= 0 else None
                 count = _safe_int(getattr(action, "loop_count", getattr(action, "repeat_count", 2)), 2)
                 if meta:
-                    detail = f"Repeat x{count} · back to {meta.get('badge', 'G')} {meta.get('name', 'Group')}"
+                    detail = f"Repeat x{count} · back to {meta.get('badge', 'F')} {meta.get('name', 'Folder')}"
             depth = max(0, _safe_int(getattr(action, "block_depth", 0), 0))
             text_x = icon_rect.right() + 14 + min(depth, 4) * 12
             text_right_limit = (conf_rect.left() - 10) if kind == "image" and not conf_rect.isNull() else (status_x - 14)
@@ -592,7 +599,7 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawText(detail_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(detail, Qt.TextElideMode.ElideRight, int(text_w)))
 
             if kind == "group":
-                badge = group_badge.get("badge", "G") if group_badge else "G"
+                badge = group_badge.get("badge", "F") if group_badge else "F"
                 gcol = QColor(group_badge.get("color") if group_badge else type_color)
                 chip_w = max(24 if compact else 26, min(icon_rect.width(), 30))
                 chip_rect = QRectF(icon_rect.center().x() - chip_w / 2, min(outer.bottom() - 15, icon_rect.bottom() + 1), chip_w, 12)
@@ -844,7 +851,7 @@ class TimelineView(QListView):
             if getattr(action, "action_type", "") == "group":
                 gid = getattr(action, "group_id", "") or f"row-{row}"
                 color = getattr(action, "group_color", "") or COLORS.get("group", COLORS.get("accent", "#45c8ff"))
-                name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}"
+                name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Folder {len(headers) + 1}"
                 count = 0
                 duration = 0.0
                 for child in actions:
@@ -864,7 +871,7 @@ class TimelineView(QListView):
                         duration += _safe_float(getattr(child, "duration", 0.0), 0.0)
                 headers.append({
                     "row": row, "action": action, "gid": gid, "color": color,
-                    "name": name, "badge": f"G{len(headers) + 1}",
+                    "name": name, "badge": f"F{len(headers) + 1}",
                     "count": count, "duration": duration, "role": getattr(action, "group_role", "normal"),
                 })
         return headers
@@ -954,9 +961,9 @@ class TimelineView(QListView):
         return rows
 
     def expand_rows_for_group_blocks(self, rows):
-        """Expand selected group headers into their contiguous child blocks.
+        """Expand selected folder headers into their contiguous child blocks.
 
-        This keeps timeline block drags safe: dragging a selected group header
+        This keeps timeline block drags safe: dragging a selected folder header
         moves the folder and its visible/hidden children together, while normal
         action-only selections continue to move only those selected actions.
         """
@@ -1328,28 +1335,38 @@ class TimelineView(QListView):
             pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
             self._last_drag_pos = pos
             self._update_auto_scroll(pos)
-            group_row = self._drop_group_row(pos)
-            if group_row >= 0:
-                self.drop_group_row = group_row
+            invalid_row = self._invalid_group_nest_row(pos)
+            if invalid_row >= 0:
+                self.drop_group_row = invalid_row
                 self.drop_insert_row = -1
-                self.drop_feedback_kind = "group"
-                self.drop_feedback_valid = True
-                drag_count = len(self.drag_rows())
-                base_label = self.drop_feedback_text(group_row)
-                self.drop_feedback_label = f"Drop {drag_count} actions into group" if drag_count > 1 else base_label
+                self.drop_feedback_kind = "invalid"
+                self.drop_feedback_valid = False
+                self.drop_feedback_label = "Folders cannot be nested"
+                self.viewport().setCursor(Qt.CursorShape.ForbiddenCursor)
             else:
-                self.drop_group_row = -1
-                self.drop_insert_row = self._drop_insert_row(pos)
-                self.drop_feedback_kind = "insert"
-                self.drop_feedback_valid = self.drop_insert_row >= 0
-                if self.drop_feedback_valid:
+                self.viewport().unsetCursor()
+                group_row = self._drop_group_row(pos)
+                if group_row >= 0:
+                    self.drop_group_row = group_row
+                    self.drop_insert_row = -1
+                    self.drop_feedback_kind = "group"
+                    self.drop_feedback_valid = True
                     drag_count = len(self.drag_rows())
-                    self.drop_feedback_label = (
-                        f"Move {drag_count} actions to row {self.drop_insert_row + 1}"
-                        if drag_count > 1 else f"Move to row {self.drop_insert_row + 1}"
-                    )
+                    base_label = self.drop_feedback_text(group_row)
+                    self.drop_feedback_label = f"Drop {drag_count} actions into folder" if drag_count > 1 else base_label
                 else:
-                    self.drop_feedback_label = "Drop unavailable"
+                    self.drop_group_row = -1
+                    self.drop_insert_row = self._drop_insert_row(pos)
+                    self.drop_feedback_kind = "insert"
+                    self.drop_feedback_valid = self.drop_insert_row >= 0
+                    if self.drop_feedback_valid:
+                        drag_count = len(self.drag_rows())
+                        self.drop_feedback_label = (
+                            f"Move {drag_count} actions to row {self.drop_insert_row + 1}"
+                            if drag_count > 1 else f"Move to row {self.drop_insert_row + 1}"
+                        )
+                    else:
+                        self.drop_feedback_label = "Drop unavailable"
             self._emit_interaction_status(self.drop_feedback_label)
             self.viewport().update()
             event.acceptProposedAction()
@@ -1377,28 +1394,38 @@ class TimelineView(QListView):
         scrollbar = self.verticalScrollBar()
         scrollbar.setValue(scrollbar.value() + (18 * self._auto_scroll_direction))
         if self._last_drag_pos is not None:
-            group_row = self._drop_group_row(self._last_drag_pos)
-            if group_row >= 0:
-                self.drop_group_row = group_row
+            invalid_row = self._invalid_group_nest_row(self._last_drag_pos)
+            if invalid_row >= 0:
+                self.drop_group_row = invalid_row
                 self.drop_insert_row = -1
-                self.drop_feedback_kind = "group"
-                self.drop_feedback_valid = True
-                drag_count = len(self.drag_rows())
-                base_label = self.drop_feedback_text(group_row)
-                self.drop_feedback_label = f"Drop {drag_count} actions into group" if drag_count > 1 else base_label
+                self.drop_feedback_kind = "invalid"
+                self.drop_feedback_valid = False
+                self.drop_feedback_label = "Folders cannot be nested"
+                self.viewport().setCursor(Qt.CursorShape.ForbiddenCursor)
             else:
-                self.drop_group_row = -1
-                self.drop_insert_row = self._drop_insert_row(self._last_drag_pos)
-                self.drop_feedback_kind = "insert"
-                self.drop_feedback_valid = self.drop_insert_row >= 0
-                if self.drop_feedback_valid:
+                self.viewport().unsetCursor()
+                group_row = self._drop_group_row(self._last_drag_pos)
+                if group_row >= 0:
+                    self.drop_group_row = group_row
+                    self.drop_insert_row = -1
+                    self.drop_feedback_kind = "group"
+                    self.drop_feedback_valid = True
                     drag_count = len(self.drag_rows())
-                    self.drop_feedback_label = (
-                        f"Move {drag_count} actions to row {self.drop_insert_row + 1}"
-                        if drag_count > 1 else f"Move to row {self.drop_insert_row + 1}"
-                    )
+                    base_label = self.drop_feedback_text(group_row)
+                    self.drop_feedback_label = f"Drop {drag_count} actions into folder" if drag_count > 1 else base_label
                 else:
-                    self.drop_feedback_label = "Drop unavailable"
+                    self.drop_group_row = -1
+                    self.drop_insert_row = self._drop_insert_row(self._last_drag_pos)
+                    self.drop_feedback_kind = "insert"
+                    self.drop_feedback_valid = self.drop_insert_row >= 0
+                    if self.drop_feedback_valid:
+                        drag_count = len(self.drag_rows())
+                        self.drop_feedback_label = (
+                            f"Move {drag_count} actions to row {self.drop_insert_row + 1}"
+                            if drag_count > 1 else f"Move to row {self.drop_insert_row + 1}"
+                        )
+                    else:
+                        self.drop_feedback_label = "Drop unavailable"
             self._emit_interaction_status(self.drop_feedback_label)
             self.viewport().update()
 
@@ -1437,13 +1464,39 @@ class TimelineView(QListView):
         self.flash_row = -1
         self.viewport().update()
 
+    def _drag_contains_group(self) -> bool:
+        return any(self._row_kind(r) == "group" for r in self.drag_rows())
+
+    def _invalid_group_nest_row(self, pos) -> int:
+        if self.model() is None or self._drag_start_row < 0 or not self._drag_contains_group():
+            return -1
+        idx = self.indexAt(pos)
+        if not idx.isValid():
+            return -1
+        row = idx.row()
+        if self.is_row_collapsed_hidden(row):
+            header = self.group_header_for_row(row)
+            if not header:
+                return -1
+            row = header[0]
+            idx = self.model().index(row, 0)
+        if row in set(self.drag_rows()) or self._row_kind(row) != "group":
+            return -1
+        rect = self.visualRect(idx)
+        if not rect.isValid() or rect.height() <= 0:
+            return -1
+        rel_y = (pos.y() - rect.top()) / max(1, rect.height())
+        return row if 0.18 <= rel_y <= 0.82 else -1
+
     def _drop_group_row(self, pos) -> int:
-        """Return a group header row when the cursor is in its central drop zone.
+        """Return a folder header row when the cursor is in its central drop zone.
 
         Top/bottom edges still behave like normal reorder insertion targets, so
-        users can move rows around a group without accidentally adding them to it.
+        users can move rows around a folder without accidentally adding them to it.
         """
         if self.model() is None or self._drag_start_row < 0:
+            return -1
+        if self._invalid_group_nest_row(pos) >= 0:
             return -1
         if self._row_kind(self._drag_start_row) == "group":
             return -1
@@ -1506,6 +1559,19 @@ class TimelineView(QListView):
             self._stop_drag_feedback()
             return
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        invalid_row = self._invalid_group_nest_row(pos)
+        if invalid_row >= 0:
+            self._stop_auto_scroll()
+            self.drop_group_row = invalid_row
+            self.drop_insert_row = -1
+            self.drop_feedback_kind = "invalid"
+            self.drop_feedback_valid = False
+            self.drop_feedback_label = "Folders cannot be nested"
+            self._emit_interaction_status(self.drop_feedback_label)
+            self.flash_drop(invalid_row)
+            event.acceptProposedAction()
+            QTimer.singleShot(120, self._stop_drag_feedback)
+            return
         group_target = self._drop_group_row(pos)
         target = self._drop_insert_row(pos) if group_target < 0 else -1
         single_target = self._drop_target_row(pos) if group_target < 0 else -1
@@ -1807,7 +1873,7 @@ class TimelineView(QListView):
             "image actions": "image", "images": "image",
             "condition actions": "condition", "conditions": "condition",
             "loop actions": "loop", "loops": "loop",
-            "group headers": "group", "groups": "group",
+            "folder headers": "group", "folders": "group", "group headers": "group", "groups": "group",
         }
         target = aliases.get(filt, filt)
         if target == "delay":
@@ -1894,7 +1960,7 @@ class TimelineView(QListView):
         meta = self.group_badge(row)
         if meta:
             return f"Add to {meta.get('badge', 'G')}"
-        return "Add to group"
+        return "Add to folder"
 
     def set_search(self, text: str):
         self._search = (text or "").strip().lower()

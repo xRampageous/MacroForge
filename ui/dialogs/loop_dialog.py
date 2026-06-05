@@ -58,9 +58,9 @@ class LoopDialog(QDialog):
             self.target_combo.addItem(text, row)
         pick = default_target if 0 <= default_target < max_target else 0
         self.target_combo.setCurrentIndex(max(0, min(pick, self.target_combo.count() - 1)))
-        body_lo.addWidget(label("Jump back to row or group")); body_lo.addWidget(self.target_combo)
+        body_lo.addWidget(label("Jump back to row or folder")); body_lo.addWidget(self.target_combo)
 
-        hint = QLabel("Tip: point loops to a group header to repeat the whole folder, or to a normal row to repeat from there.")
+        hint = QLabel("Tip: point loops to a folder header to repeat the whole folder, or to a normal row to repeat from there.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; background: transparent;")
         body_lo.addWidget(hint)

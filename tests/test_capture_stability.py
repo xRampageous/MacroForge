@@ -150,6 +150,24 @@ class TestTimelineRows(QtTestCase):
         timeline.hide()
         timeline.deleteLater()
 
+    def test_folder_row_drag_over_folder_header_is_invalid(self):
+        folder_a = Action("[GROUP]", 0.0, action_type="group", label="Folder A")
+        folder_a.group_id = "folder-a"
+        folder_b = Action("[GROUP]", 0.0, action_type="group", label="Folder B")
+        folder_b.group_id = "folder-b"
+        timeline = TimelineView(model=ActionListModel([folder_a, folder_b]))
+        timeline.resize(700, 220)
+        timeline.show()
+        self.app.processEvents()
+        timeline._drag_start_row = 1
+        timeline.drag_source_rows = [1]
+        first_rect = timeline.visualRect(timeline.model().index(0, 0))
+        point = QPoint(first_rect.center().x(), first_rect.center().y())
+        self.assertEqual(timeline._invalid_group_nest_row(point), 0)
+        self.assertEqual(timeline._drop_group_row(point), -1)
+        timeline.hide()
+        timeline.deleteLater()
+
     def test_hover_highlight_clears_when_cursor_leaves_timeline(self):
         timeline = TimelineView(model=ActionListModel([Action("a", 0.1)]))
         timeline.hover_row = 0
@@ -339,7 +357,7 @@ class TestPlaybackVisibility(QtTestCase):
             ])
             window.refresh()
 
-            self.assertEqual(window.macro_summary.text(), "3 rows · 1 image · 0 groups · 0 loops · ~48s")
+            self.assertEqual(window.macro_summary.text(), "3 rows · 1 image · 0 folders · 0 loops · ~48s")
             window._set_playback_collapsed(True)
             self.assertEqual(window.playback_panel.height(), 36)
             self.assertFalse(window.playback_dock.isVisible())
@@ -485,7 +503,7 @@ class TestPlaybackVisibility(QtTestCase):
                 self.assertIn("qlineargradient", button.styleSheet(), name)
                 self.assertEqual(button.text(), "", name)
                 self.assertEqual(button.size().width(), width, name)
-                self.assertEqual(button.size().height(), 45, name)
+                self.assertEqual(button.size().height(), 42, name)
                 icon_label = button.findChild(QLabel, f"{name}_icon")
                 text_label = button.findChild(QLabel, f"{name}_label")
                 self.assertIsNotNone(icon_label, name)

@@ -3,6 +3,8 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QComboBox, QPushButton, QCheckBox
 )
+from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QCursor
 from models import Action
 from ui.theme import COLORS
 from ui.dialogs._common import dialog_stylesheet, make_header, make_buttons
@@ -16,6 +18,9 @@ class ClickDialog(QDialog):
         C = COLORS
         self._accent = C['click']
         self.setStyleSheet(dialog_stylesheet(self._accent))
+        cursor_pos = QCursor.pos()
+        start_x = str(getattr(existing, 'click_x', int(cursor_pos.x()))) if existing else str(int(cursor_pos.x()))
+        start_y = str(getattr(existing, 'click_y', int(cursor_pos.y()))) if existing else str(int(cursor_pos.y()))
 
         lo = QVBoxLayout(self)
         lo.setSpacing(9)
@@ -26,11 +31,11 @@ class ClickDialog(QDialog):
         # Coordinates
         coord = QHBoxLayout()
         coord.addWidget(QLabel("X"))
-        self.x = QLineEdit(str(getattr(existing, 'click_x', 0)) if existing else "0")
+        self.x = QLineEdit(start_x)
         self.x.setFixedWidth(60)
         coord.addWidget(self.x)
         coord.addWidget(QLabel("Y"))
-        self.y = QLineEdit(str(getattr(existing, 'click_y', 0)) if existing else "0")
+        self.y = QLineEdit(start_y)
         self.y.setFixedWidth(60)
         coord.addWidget(self.y)
         coord.addStretch()
@@ -73,6 +78,17 @@ class ClickDialog(QDialog):
 
         lo.addStretch()
         lo.addLayout(make_buttons(self, "Add Click", self._accent, self.accept, "click"))
+        self._xy_timer = QTimer(self)
+        self._xy_timer.setInterval(120)
+        self._xy_timer.timeout.connect(self._sync_cursor_xy)
+        self._xy_timer.start()
+
+    def _sync_cursor_xy(self):
+        if self.x.hasFocus() or self.y.hasFocus():
+            return
+        pos = QCursor.pos()
+        self.x.setText(str(int(pos.x())))
+        self.y.setText(str(int(pos.y())))
 
     def get_action(self):
         try:

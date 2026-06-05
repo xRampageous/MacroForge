@@ -52,7 +52,7 @@ def _details(action: Action) -> str:
     if kind == "loop":
         return f"x{getattr(action, 'loop_count', action.repeat_count)} → row {getattr(action, 'loop_target', -1) + 1 if getattr(action, 'loop_target', -1) >= 0 else 'unset'}"
     if kind == "group":
-        return getattr(action, "group_name", "") or action.label or "Group"
+        return getattr(action, "group_name", "") or action.label or "Folder"
     return kind
 
 
@@ -78,7 +78,7 @@ class MacroEditorDialog(QDialog):
 
         title = QLabel("Macro Editor Mode")
         title.setStyleSheet(f"color: {C['text']}; font-size: 20px; font-weight: 950;")
-        subtitle = QLabel("Multi-select rows to duplicate, delete, move, group, enable/disable, bulk-adjust delay, or run a chosen section.")
+        subtitle = QLabel("Multi-select rows to duplicate, delete, move, folder, enable/disable, bulk-adjust delay, or run a chosen section.")
         subtitle.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -108,7 +108,7 @@ class MacroEditorDialog(QDialog):
         self._button(row, "Delete", "trash", self.delete_selected, C["error"])
         self._button(row, "Move Up", "chevron", lambda: self.move_selected(-1), C["text_dim"])
         self._button(row, "Move Down", "chevron", lambda: self.move_selected(1), C["text_dim"])
-        self._button(row, "Group", "folder", self.group_selected, C.get("group", C["neon_purple"]))
+        self._button(row, "Folder", "folder", self.group_selected, C.get("group", C["neon_purple"]))
         self._button(row, "Bulk Delay", "clock", self.bulk_delay, C["pause"])
         row.addStretch()
         layout.addLayout(row)

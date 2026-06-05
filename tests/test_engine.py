@@ -93,6 +93,26 @@ class TestExecutionEngineLoops(unittest.TestCase):
         runner.run(1)
         self.assertEqual(played, [(0, 6.5)])
 
+    def test_invalid_top_level_loop_count_runs_once(self):
+        played = []
+        statuses = []
+        with patch("engine.PlatformInput", return_value=DummyInput()):
+            runner = ExecutionEngine(
+                statuses.append,
+                lambda idx, _duration: played.append(idx),
+                lambda: None,
+                lambda _progress: None,
+            )
+        runner.actions = [Action("enter", 0.0)]
+        runner.simulation_mode = True
+        runner.human_curve = False
+
+        runner.run(0)
+
+        self.assertEqual(played, [0])
+        self.assertEqual(runner.loops_completed_count, 1)
+        self.assertIn("Loop 1/1", statuses)
+
 
 if __name__ == "__main__":
     unittest.main()

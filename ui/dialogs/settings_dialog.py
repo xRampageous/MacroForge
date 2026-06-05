@@ -16,7 +16,7 @@ HOTKEY_ROWS = [
     ("toggle_runtime_log", "Toggle runtime log", "Ctrl+Shift+L"),
     ("profile_library", "Profile library", "Ctrl+Alt+P"),
     ("variables", "Macro variables", "Ctrl+Alt+V"),
-    ("group", "Group selected", "Ctrl+G"),
+    ("group", "Folder selected", "Ctrl+G"),
     ("ungroup", "Ungroup", "Ctrl+Shift+G"),
     ("select_all", "Select all", "Ctrl+A"),
     ("duplicate", "Duplicate selected", "Ctrl+D"),
@@ -133,7 +133,7 @@ class SettingsDialog(QDialog):
                 return inp.text().strip() or "disabled"
             self.hotkeys_preview.setText(
                 f"Playback: {val('play_pause')} start/pause · {val('stop_deselect')} stop/deselect · {val('toggle_runtime_log')} runtime log\n"
-                f"Editor: {val('select_all')} select all · {val('duplicate')} duplicate · {val('delete')} delete · {val('group')} group · {val('ungroup')} ungroup\n"
+                f"Editor: {val('select_all')} select all · {val('duplicate')} duplicate · {val('delete')} delete · {val('group')} folder · {val('ungroup')} ungroup\n"
                 f"Tools: {val('preflight')} pre-flight · {val('macro_editor')} macro editor · {val('profile_library')} library · {val('variables')} variables"
             )
         except Exception:

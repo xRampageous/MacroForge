@@ -1287,7 +1287,7 @@ def build_main_layout(window):
     image_flat_lo.addLayout(inspector_field_row("Retry delay", self.ii_retry_delay, width=68, unit_text="ms"))
 
     image_flat_lo.addLayout(flat_section_title("On Fail", "condition", C["accent"]))
-    self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Group"])
+    self.ii_fail_mode = compact_combo(["Default", "Continue", "Stop", "Jump", "Recovery Folder"])
     image_flat_lo.addLayout(inspector_field_row("On fail", self.ii_fail_mode, width=108))
 
     image_flat_lo.addLayout(flat_section_title("Fail Target", "target", C["accent"]))
@@ -1300,18 +1300,18 @@ def build_main_layout(window):
     ig_outer = QVBoxLayout(self.insp_group)
     ig_outer.setContentsMargins(0, 0, 0, 0)
     ig_outer.setSpacing(6)
-    group_card, ig_lo = inspector_group("GROUP SETTINGS", "folder", C["group"])
-    # Group rows now use the shared Inspector Label field as their row name.
+    group_card, ig_lo = inspector_group("FOLDER SETTINGS", "folder", C["group"])
+    # Folder rows now use the shared Inspector Label field as their row name.
     # Keep ig_name as a hidden compatibility field for older autosave wiring, but
-    # do not show a duplicate "Group name" control in the group settings card.
-    self.ig_name = form_input("group name")
+    # do not show a duplicate "Folder name" control in the folder settings card.
+    self.ig_name = form_input("folder name")
     self.ig_name.setVisible(False)
     self.ig_collapsed = QCheckBox("Collapsed")
     self.ig_recovery = QCheckBox("Recovery")
     self.ig_meta = QLabel("0 actions - ~0.0s")
     self.ig_meta.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px;")
     ig_lo.addLayout(inspector_check_row("Collapsed", self.ig_collapsed))
-    ig_lo.addLayout(inspector_check_row("Recovery group", self.ig_recovery))
+    ig_lo.addLayout(inspector_check_row("Recovery folder", self.ig_recovery))
     ig_lo.addWidget(self.ig_meta)
     ig_outer.addWidget(group_card)
 
@@ -1864,11 +1864,11 @@ def build_main_layout(window):
         ("Image actions", "image"),
         ("Condition actions", "condition"),
         ("Loop actions", "loop"),
-        ("Group headers", "group"), None,
+        ("Folder headers", "group"), None,
         ("Selected only", "selected"),
         ("Warnings / missing data", "warnings"),
         ("Disabled actions", "disabled"),
-        ("Current group", "current group"),
+        ("Current folder", "current group"),
     ]
     for item in filter_items:
         if item is None:

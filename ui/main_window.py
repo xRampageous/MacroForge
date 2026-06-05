@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QDialog, QPlainTextEdit, QListWidget
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QEvent, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon, QPixmap, QCursor
 
 from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager, ActionListModel, HistoryManager
@@ -181,8 +181,13 @@ class MainWindow(QMainWindow):
             pass
         QTimer.singleShot(0, self._update_responsive_panels)
         self._setup_inspector_autosave()
+        self._setup_click_xy_tracker()
         self._setup_shortcuts()
         self._setup_timeline_connections()
+        try:
+            self.focus_check.toggled.connect(self._on_focus_lock_toggled)
+        except Exception:
+            pass
         # self._setup_hotkeys()  # DISABLED — pynput global hooks interfere with Qt modal dialogs
         self._setup_tray()
 
@@ -1308,8 +1313,8 @@ class MainWindow(QMainWindow):
         btn.setText("")
         btn.setIcon(QIcon())
         btn_w = int(getattr(self, "_add_action_group_width", 205)) if action_kind == "group" else int(getattr(self, "_add_action_button_width", 100))
-        # The stylesheet box renders two pixels taller than this content value.
-        btn_h = 43
+        # The stylesheet box renders about two pixels taller than this content value.
+        btn_h = 40
         btn.setFixedSize(btn_w, btn_h)
         btn.setMinimumSize(btn_w, btn_h)
         btn.setMaximumSize(btn_w, btn_h)
@@ -1350,8 +1355,8 @@ class MainWindow(QMainWindow):
         # button: same glyph size, same vertical offsets, same label box.
         icon_size = 16
         icon_box = icon_size + 2
-        icon_y = 5
-        label_y = 22
+        icon_y = 4
+        label_y = 20
         label_h = 14
 
         icon_lbl = QLabel(btn)
@@ -1780,7 +1785,7 @@ class MainWindow(QMainWindow):
             self.status(f"{count} actions selected")
 
     def _expand_rows_for_group_blocks(self, rows):
-        """Expand selected group headers into their contiguous group blocks."""
+        """Expand selected folder headers into their contiguous folder blocks."""
         actions = self.action_model.actions()
         count = len(actions)
         expanded = set()
@@ -1900,7 +1905,7 @@ class MainWindow(QMainWindow):
                 if not getattr(action, "group_color", ""):
                     action.group_color = self._group_color_for_number(len(headers))
                     changed = True
-                name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}"
+                name = getattr(action, "group_name", "") or getattr(action, "label", "") or f"Folder {len(headers) + 1}"
                 if getattr(action, "group_name", "") != name:
                     action.group_name = name
                     changed = True
@@ -1947,9 +1952,9 @@ class MainWindow(QMainWindow):
                     "row": row,
                     "action": action,
                     "gid": getattr(action, "group_id", "") or f"row-{row}",
-                    "name": getattr(action, "group_name", "") or getattr(action, "label", "") or f"Group {len(headers) + 1}",
+                    "name": getattr(action, "group_name", "") or getattr(action, "label", "") or f"Folder {len(headers) + 1}",
                     "color": getattr(action, "group_color", "") or self._group_color_for_number(len(headers)),
-                    "badge": f"G{len(headers) + 1}",
+                    "badge": f"F{len(headers) + 1}",
                     "count": self._group_stats_for_id(getattr(action, "group_id", ""))[0],
                     "duration": self._group_stats_for_id(getattr(action, "group_id", ""))[1],
                     "role": getattr(action, "group_role", "normal"),
@@ -2027,16 +2032,16 @@ class MainWindow(QMainWindow):
         actions = self.action_model.actions()
         rows = [r for r in rows if 0 <= r < len(actions) and getattr(actions[r], "action_type", "") != "group"]
         if not rows:
-            self.status("Select one or more action rows to group")
+            self.status("Select one or more action rows to create a folder")
             return
         first, last = rows[0], rows[-1]
         if rows != list(range(first, last + 1)):
-            QMessageBox.information(self, "Create Group", "Select a contiguous block of rows to create a folder group.")
+            QMessageBox.information(self, "Create Folder", "Select a contiguous block of rows to create a folder.")
             return
-        name, ok = QInputDialog.getText(self, "Create Group", "Group name:")
+        name, ok = QInputDialog.getText(self, "Create Folder", "Folder name:")
         if not ok:
             return
-        name = name.strip() or f"Group {len(self._group_headers()) + 1}"
+        name = name.strip() or f"Folder {len(self._group_headers()) + 1}"
         scroll_position = self.timeline.scroll_position()
         self.history.push(actions, self._timeline_history_state())
         group = self._make_group_action(name)
@@ -2091,13 +2096,13 @@ class MainWindow(QMainWindow):
                 changed += 1
         self.refresh()
         self.save_session()
-        self.status(f"Removed {changed} row(s) from group")
+        self.status(f"Removed {changed} row(s) from folder")
 
     def toggle_group_collapsed(self, row=None, collapsed=None):
         row = self.active_index if row is None else row
         meta = self._group_header_for_row(row)
         if not meta:
-            self.status("Select a group header or grouped action")
+            self.status("Select a folder header or an action inside a folder")
             return
         header = meta["action"]
         self.history.push(self.action_model.actions(), self._timeline_history_state())
@@ -2113,10 +2118,10 @@ class MainWindow(QMainWindow):
         row = self.active_index if row is None else row
         meta = self._group_header_for_row(row)
         if not meta:
-            self.status("Select a group to rename")
+            self.status("Select a folder to rename")
             return
         old = meta["name"]
-        name, ok = QInputDialog.getText(self, "Rename Group", "Group name:", text=old)
+        name, ok = QInputDialog.getText(self, "Rename Folder", "Folder name:", text=old)
         if ok and name.strip():
             self.history.push(self.action_model.actions(), self._timeline_history_state())
             meta["action"].group_name = name.strip()
@@ -2127,7 +2132,7 @@ class MainWindow(QMainWindow):
         row = self.active_index if row is None else row
         meta = self._group_header_for_row(row)
         if not meta:
-            self.status("Select a group to duplicate")
+            self.status("Select a folder to duplicate")
             return
         block_rows = self._contiguous_group_block(meta["row"])
         if not block_rows:
@@ -2143,7 +2148,7 @@ class MainWindow(QMainWindow):
                 action.group_id = new_gid
                 action.group_color = new_color
             if i == 0 and getattr(action, "action_type", "") == "group":
-                action.group_name = f"{getattr(action, 'group_name', 'Group')} copy"
+                action.group_name = f"{getattr(action, 'group_name', 'Folder')} copy"
                 action.label = action.group_name
                 action.group_collapsed = False
         insert_at = block_rows[-1] + 1
@@ -2158,7 +2163,7 @@ class MainWindow(QMainWindow):
         row = self.active_index if row is None else row
         meta = self._group_header_for_row(row)
         if not meta:
-            self.status("Select a group to ungroup")
+            self.status("Select a folder to ungroup")
             return
         gid = meta["gid"]
         self.history.push(self.action_model.actions(), self._timeline_history_state())
@@ -2175,9 +2180,9 @@ class MainWindow(QMainWindow):
         row = self.active_index if row is None else row
         meta = self._group_header_for_row(row)
         if not meta:
-            self.status("Select a group to delete")
+            self.status("Select a folder to delete")
             return
-        reply = QMessageBox.question(self, "Delete group", f"Delete {meta['badge']} {meta['name']} and all actions inside it?")
+        reply = QMessageBox.question(self, "Delete Folder", f"Delete {meta['badge']} {meta['name']} and all actions inside it?")
         if reply != QMessageBox.StandardButton.Yes:
             return
         gid = meta["gid"]
@@ -2205,11 +2210,11 @@ class MainWindow(QMainWindow):
         row = self.active_index if row is None else row
         meta = self._group_header_for_row(row)
         if not meta:
-            self.status("Select a group to mark as recovery")
+            self.status("Select a folder to mark as recovery")
             return
         self.history.push(self.action_model.actions(), self._timeline_history_state())
         meta["action"].group_role = "recovery" if enabled else "normal"
-        self.refresh(); self.save_session(); self.status(("Marked" if enabled else "Cleared") + f" {meta['badge']} as recovery")
+        self.refresh(); self.save_session(); self.status(("Marked" if enabled else "Cleared") + f" {meta['badge']} as recovery folder")
 
     def _assign_group_from_position(self, row: int):
         if row < 0 or row >= self.action_model.rowCount():
@@ -2264,36 +2269,36 @@ class MainWindow(QMainWindow):
         m.addAction("Enable/Disable", lambda: self.toggle_action_enabled(index))
         m.addSeparator()
 
-        group_menu = m.addMenu("Group / folder")
-        group_menu.addAction("Create group from selection", lambda r=rows: self.create_group_from_rows(r))
-        existing = group_menu.addMenu("Add selected to existing group")
+        group_menu = m.addMenu("Folder")
+        group_menu.addAction("Create folder from selection", lambda r=rows: self.create_group_from_rows(r))
+        existing = group_menu.addMenu("Add selected to existing folder")
         headers = self._group_headers()
         if headers:
             for meta in headers:
                 existing.addAction(f"{meta['badge']}  {meta['name']}", lambda gid=meta['gid'], r=rows: self.add_rows_to_group(r, gid))
         else:
-            a = existing.addAction("No groups yet")
+            a = existing.addAction("No folders yet")
             a.setEnabled(False)
-        group_menu.addAction("Remove selected from group", lambda r=rows: self.remove_rows_from_group(r))
+        group_menu.addAction("Remove selected from folder", lambda r=rows: self.remove_rows_from_group(r))
         if group_meta:
             group_menu.addSeparator()
             header = group_meta["action"]
             group_menu.addAction(("Expand" if getattr(header, "group_collapsed", False) else "Collapse") + f" {group_meta['badge']}", lambda row=group_meta['row']: self.toggle_group_collapsed(row))
-            group_menu.addAction("Rename group…", lambda row=group_meta['row']: self.rename_group(row))
-            group_menu.addAction("Edit group…", lambda row=group_meta['row']: self._open_group_editor(row))
-            group_menu.addAction("Duplicate whole group", lambda row=group_meta['row']: self.duplicate_group(row))
+            group_menu.addAction("Rename folder…", lambda row=group_meta['row']: self.rename_group(row))
+            group_menu.addAction("Edit folder…", lambda row=group_meta['row']: self._open_group_editor(row))
+            group_menu.addAction("Duplicate whole folder", lambda row=group_meta['row']: self.duplicate_group(row))
             group_menu.addAction("Ungroup contents", lambda row=group_meta['row']: self.ungroup_group(row))
-            group_menu.addAction("Delete group only", lambda row=group_meta['row']: self.delete_action(row))
-            group_menu.addAction("Delete group + actions", lambda row=group_meta['row']: self.delete_group_with_children(row))
+            group_menu.addAction("Delete folder only", lambda row=group_meta['row']: self.delete_action(row))
+            group_menu.addAction("Delete folder + actions", lambda row=group_meta['row']: self.delete_group_with_children(row))
             group_menu.addSeparator()
-            role_txt = "Clear recovery group" if getattr(header, "group_role", "normal") == "recovery" else "Mark as recovery group"
+            role_txt = "Clear recovery folder" if getattr(header, "group_role", "normal") == "recovery" else "Mark as recovery folder"
             group_menu.addAction(role_txt, lambda row=group_meta['row'], enabled=getattr(header, "group_role", "normal") != "recovery": self.set_group_recovery_role(row, enabled))
-            color_menu = group_menu.addMenu("Change group color")
+            color_menu = group_menu.addMenu("Change folder color")
             for n, color in enumerate(self._group_palette(), 1):
                 color_menu.addAction(f"Color {n}", lambda c=color, row=group_meta['row']: self.set_group_color(row, c))
             group_menu.addSeparator()
-            move_up_g = group_menu.addAction("Move group up", lambda row=group_meta['row']: self.move_action(row, -1))
-            move_down_g = group_menu.addAction("Move group down", lambda row=group_meta['row']: self.move_action(row, 1))
+            move_up_g = group_menu.addAction("Move folder up", lambda row=group_meta['row']: self.move_action(row, -1))
+            move_down_g = group_menu.addAction("Move folder down", lambda row=group_meta['row']: self.move_action(row, 1))
             move_up_g.setEnabled(not self.engine.running and group_meta['row'] > 0)
             move_down_g.setEnabled(not self.engine.running and group_meta['row'] < self.action_model.rowCount() - 1)
         m.addSeparator()
@@ -2484,6 +2489,46 @@ class MainWindow(QMainWindow):
         if limit <= 0 or len(full_text) <= limit:
             return full_text
         return full_text[:max(0, limit - 1)].rstrip() + "…"
+
+    def _setup_click_xy_tracker(self):
+        self._click_xy_save_timer = QTimer(self)
+        self._click_xy_save_timer.setSingleShot(True)
+        self._click_xy_save_timer.timeout.connect(self.save_session)
+        self._click_xy_timer = QTimer(self)
+        self._click_xy_timer.setInterval(120)
+        self._click_xy_timer.timeout.connect(self._update_click_xy_from_cursor)
+        self._click_xy_timer.start()
+
+    def _update_click_xy_from_cursor(self):
+        try:
+            if getattr(self, "_inspector_loading", False):
+                return
+            if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
+                return
+            action = self.action_model.get(self.active_index)
+            if getattr(action, "action_type", "") != "click":
+                return
+            if not getattr(self, "insp_click", None) or not self.insp_click.isVisible():
+                return
+            if self.ic_x.hasFocus() or self.ic_y.hasFocus():
+                return
+            pos = QCursor.pos()
+            x, y = int(pos.x()), int(pos.y())
+            if int(getattr(action, "click_x", 0) or 0) == x and int(getattr(action, "click_y", 0) or 0) == y:
+                return
+            action.click_x = x
+            action.click_y = y
+            self._stamp_action_environment(action)
+            for field, value in ((self.ic_x, str(x)), (self.ic_y, str(y))):
+                field.blockSignals(True)
+                field.setText(value)
+                field.blockSignals(False)
+            idx = self.action_model.index(self.active_index, 0)
+            self.action_model.dataChanged.emit(idx, idx)
+            self.timeline.viewport().update()
+            self._click_xy_save_timer.start(800)
+        except Exception:
+            pass
 
     # ═══════════════════════════════════════════════════════
     #  SELECTION & EDITING
@@ -2678,7 +2723,7 @@ class MainWindow(QMainWindow):
                     action.on_fail_action = self.ii_fail_mode.currentText().strip().lower().replace(" ", "_")
                     action.on_fail_target = int(self.ii_fail_target.currentData() if self.ii_fail_target.currentData() is not None else -1)
             elif action.action_type == "group":
-                name = inspector_label_text or getattr(action, "label", "") or getattr(action, "group_name", "") or "Group"
+                name = inspector_label_text or getattr(action, "label", "") or getattr(action, "group_name", "") or "Folder"
                 action.label = name
                 action.group_name = name
                 if hasattr(self, "ig_name"):
@@ -2771,7 +2816,7 @@ class MainWindow(QMainWindow):
                     action.group_id = ""
                     action.group_color = ""
                     action.block_depth = 0
-            msg = "Removed group header and kept its actions"
+            msg = "Removed folder header and kept its actions"
         else:
             for idx in sorted(rows, reverse=True):
                 if 0 <= idx < self.action_model.rowCount():
@@ -2871,7 +2916,7 @@ class MainWindow(QMainWindow):
         through the normal drag reorder path.
         """
         if self.engine.running or self.timeline.playing_index >= 0:
-            self.status("Stop playback before moving actions into groups")
+            self.status("Stop playback before moving actions into folders")
             return
         if index < 0 or index >= self.action_model.rowCount():
             return
@@ -2879,7 +2924,7 @@ class MainWindow(QMainWindow):
             return
         source_action = self.action_model.get(index)
         if getattr(source_action, "action_type", "") == "group":
-            self.status("Drag the group header to move the whole folder")
+            self.status("Drag the folder header to move the whole folder")
             return
         group_meta = self._group_header_for_row(group_row)
         if not group_meta or getattr(group_meta["action"], "action_type", "") != "group":
@@ -2900,7 +2945,7 @@ class MainWindow(QMainWindow):
         try:
             header_index = next(i for i, a in enumerate(actions) if a is header_action)
         except StopIteration:
-            self.status("Target group no longer exists")
+            self.status("Target folder no longer exists")
             return
 
         target_insert = header_index + 1
@@ -2946,6 +2991,12 @@ class MainWindow(QMainWindow):
             self.timeline.set_active(active if active is not None else rows[0])
         self.active_index = active if active is not None else (rows[0] if rows else -1)
 
+    def _folder_insert_would_nest(self, remaining_actions, insert_at: int) -> bool:
+        if insert_at <= 0:
+            return False
+        previous = remaining_actions[insert_at - 1]
+        return getattr(previous, "action_type", "") == "group" or bool(getattr(previous, "group_id", ""))
+
     def move_actions_to(self, rows, target_index):
         """Move multiple selected rows as one ordered block.
 
@@ -2979,6 +3030,10 @@ class MainWindow(QMainWindow):
         remaining = [a for i, a in enumerate(actions_before) if i not in row_set]
         removed_before_target = sum(1 for r in rows if r < target_index)
         insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
+        if any(getattr(a, "action_type", "") == "group" for a in moved) and self._folder_insert_would_nest(remaining, insert_at):
+            self.status("Folders cannot be nested")
+            self._select_moved_rows(rows, active=rows[0])
+            return
 
         new_actions = remaining[:insert_at] + moved + remaining[insert_at:]
         if [id(a) for a in new_actions] == [id(a) for a in actions_before]:
@@ -3019,9 +3074,9 @@ class MainWindow(QMainWindow):
         self.status(f"Moved {len(moved)} actions")
 
     def move_actions_into_group(self, rows, group_row):
-        """Move multiple selected non-group rows into the target group."""
+        """Move multiple selected non-folder rows into the target folder."""
         if self.engine.running or self.timeline.playing_index >= 0:
-            self.status("Stop playback before moving actions into groups")
+            self.status("Stop playback before moving actions into folders")
             return
         actions_before = list(self.action_model.actions())
         count = len(actions_before)
@@ -3043,7 +3098,7 @@ class MainWindow(QMainWindow):
             if actions_before[r] is not header_action and getattr(actions_before[r], "action_type", "") != "group"
         ]
         if not movable_rows:
-            self.status("Multi-drag into group only moves action rows")
+            self.status("Multi-drag into a folder only moves action rows")
             return
 
         row_set = set(movable_rows)
@@ -3055,7 +3110,7 @@ class MainWindow(QMainWindow):
         try:
             header_index = next(i for i, a in enumerate(remaining) if a is header_action)
         except StopIteration:
-            self.status("Target group no longer exists")
+            self.status("Target folder no longer exists")
             return
 
         target_insert = header_index + 1
@@ -3109,18 +3164,21 @@ class MainWindow(QMainWindow):
         if getattr(actions[index], "action_type", "") == "group":
             block_rows = self._contiguous_group_block(index)
             if target_index in block_rows:
-                self.status("Group is already there")
+                self.status("Folder is already there")
                 return
             block = [actions[r] for r in block_rows]
             remaining = [a for i, a in enumerate(actions) if i not in set(block_rows)]
             removed_before_target = sum(1 for r in block_rows if r < target_index)
             insert_at = max(0, min(target_index - removed_before_target, len(remaining)))
+            if self._folder_insert_would_nest(remaining, insert_at):
+                self.status("Folders cannot be nested")
+                return
             new_actions = remaining[:insert_at] + block + remaining[insert_at:]
             self.action_model.set_actions(new_actions)
             new_index = insert_at
             self.active_index = new_index
             self.timeline.selected_indices = set(range(new_index, new_index + len(block)))
-            msg = "Moved group"
+            msg = "Moved folder"
         else:
             self.action_model.move_action(index, target_index)
             self.timeline.remap_after_move(index, target_index)
@@ -3245,7 +3303,7 @@ class MainWindow(QMainWindow):
         if total <= 0:
             errors.append("Timeline is empty.")
         elif not any(bool(getattr(a, "enabled", True)) and getattr(a, "action_type", "key") not in {"group", "loop"} for a in actions):
-            errors.append("Timeline has no enabled runnable actions. Group/folder and loop controller rows are skipped during playback.")
+            errors.append("Timeline has no enabled runnable actions. Folder and loop controller rows are skipped during playback.")
 
         for idx, action in enumerate(actions, start=1):
             prefix = f"Row {idx}"
@@ -3275,7 +3333,7 @@ class MainWindow(QMainWindow):
 
             if getattr(action, "action_type", "") == "group":
                 if not (getattr(action, "group_name", "") or getattr(action, "label", "")):
-                    warnings.append(f"{prefix}: group has no name.")
+                    warnings.append(f"{prefix}: folder has no name.")
                 continue
 
             if getattr(action, "action_type", "") == "loop":
@@ -3299,13 +3357,13 @@ class MainWindow(QMainWindow):
                             action.loop_target = suggested
                             if getattr(target_action, "action_type", "") == "group":
                                 group_name = getattr(target_action, "group_name", "") or getattr(target_action, "label", "") or f"row {suggested + 1}"
-                                warnings.append(f"{prefix}: loop target auto-fixed to group '{group_name}' on row {suggested + 1}.")
+                                warnings.append(f"{prefix}: loop target auto-fixed to folder '{group_name}' on row {suggested + 1}.")
                             else:
                                 warnings.append(f"{prefix}: loop target auto-fixed to row {suggested + 1}.")
                         else:
                             warnings.append(f"{prefix}: loop target can be auto-fixed to {self._row_target_text(suggested)}.")
                     else:
-                        errors.append(f"{prefix}: loop target must be an earlier row or group header.")
+                        errors.append(f"{prefix}: loop target must be an earlier row or folder header.")
                 continue
 
             if action.is_pause():
@@ -3438,7 +3496,7 @@ class MainWindow(QMainWindow):
             kind = getattr(action, "action_type", "key") or "key"
             if kind == "group":
                 if not (getattr(action, "group_name", "") or getattr(action, "label", "")):
-                    action.group_name = f"Group {idx + 1}"
+                    action.group_name = f"Folder {idx + 1}"
                     action.label = action.group_name
                     fixed += 1
             elif kind == "loop":
@@ -3810,17 +3868,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(True)
         self.status_dot.set_color(COLORS["playing"], glow=True)
         self.playback_feedback("Running selected block")
-        self.engine.infinite_loop = False
-        self.engine.loops = 1
-        self.engine.simulation_mode = self.sim_check.isChecked()
-        self.engine.human_curve = self.human_check.isChecked()
-        self.engine.focus_lock = self.focus_check.isChecked()
-        if self.engine.focus_lock:
-            self.engine.capture_focus_window()
-        try:
-            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
-        except ValueError:
-            self.engine.speed = 1.0
+        self._sync_playback_options(infinite=False, loops=1, capture_focus=True)
         self._diag(f"[PLAY] Running selected block: rows {', '.join(str(r + 1) for r in rows)}")
         self.engine.start()
 
@@ -4047,6 +4095,35 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
 
+    def _sync_playback_options(self, *, infinite=None, loops=None, capture_focus=False):
+        """Copy visible playback controls into the engine in one place."""
+        self.engine.infinite_loop = self.inf_check.isChecked() if infinite is None else bool(infinite)
+        self.engine.simulation_mode = self.sim_check.isChecked()
+        self.engine.human_curve = self.human_check.isChecked()
+        self.engine.focus_lock = self.focus_check.isChecked()
+        if capture_focus and self.engine.focus_lock:
+            self.engine.capture_focus_window()
+        try:
+            self.engine.loops = max(1, int(self.loops_spin.value() if loops is None else loops))
+        except (TypeError, ValueError):
+            self.engine.loops = 1
+        self.engine.loops_completed_count = 0
+        try:
+            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
+        except ValueError:
+            self.engine.speed = 1.0
+
+    def _on_focus_lock_toggled(self, checked):
+        try:
+            self.engine.focus_lock = bool(checked)
+            if checked:
+                self.engine.capture_focus_window()
+                self.status("Playback focus lock captured")
+            else:
+                self.status("Playback focus lock off")
+        except Exception:
+            pass
+
     def start(self):
         if self.engine.running:
             self.status("Already running")
@@ -4060,6 +4137,7 @@ class MainWindow(QMainWindow):
         # looping visually while not deploying the edited/current actions.
         self.engine.actions = self.action_model.actions()
         self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
+        self._sync_playback_options(capture_focus=True)
         if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             return
         self._diag(f"[PLAY] Starting macro: {len(self.engine.actions)} actions, loops={self.loops_spin.value()}, sim={self.sim_check.isChecked()}")
@@ -4074,17 +4152,7 @@ class MainWindow(QMainWindow):
         self.playback_feedback("Starting macro…")
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
-        self.engine.infinite_loop = self.inf_check.isChecked()
-        self.engine.simulation_mode = self.sim_check.isChecked()
-        self.engine.human_curve = self.human_check.isChecked()
-        self.engine.focus_lock = self.focus_check.isChecked()
-        if self.engine.focus_lock:
-            self.engine.capture_focus_window()
-        self.engine.loops = self.loops_spin.value()
-        try:
-            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
-        except ValueError:
-            self.engine.speed = 1.0
+        self._sync_playback_options(capture_focus=False)
         self.engine.start()
 
     def stop(self):
@@ -4447,18 +4515,7 @@ class MainWindow(QMainWindow):
 
         self.engine.actions = [action]
         self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
-        self.engine.infinite_loop = False
-        self.engine.simulation_mode = self.sim_check.isChecked()
-        self.engine.human_curve = self.human_check.isChecked()
-        self.engine.focus_lock = self.focus_check.isChecked()
-        if self.engine.focus_lock:
-            self.engine.capture_focus_window()
-        self.engine.loops = 1
-        self.engine.loops_completed_count = 0
-        try:
-            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
-        except ValueError:
-            self.engine.speed = 1.0
+        self._sync_playback_options(infinite=False, loops=1, capture_focus=True)
 
         self._diag(f"[TEST] Testing row {idx + 1}: {self._action_diag_summary(action)} sim={self.engine.simulation_mode}")
         self.engine.start()
@@ -4499,18 +4556,7 @@ class MainWindow(QMainWindow):
         self.status_dot.set_color(COLORS["playing"], glow=True)
         self.playback_feedback(f"Testing from row {idx + 1}")
 
-        self.engine.infinite_loop = False
-        self.engine.simulation_mode = self.sim_check.isChecked()
-        self.engine.human_curve = self.human_check.isChecked()
-        self.engine.focus_lock = self.focus_check.isChecked()
-        if self.engine.focus_lock:
-            self.engine.capture_focus_window()
-        self.engine.loops = 1
-        self.engine.loops_completed_count = 0
-        try:
-            self.engine.speed = float(self.speed_combo.currentText().replace("x", ""))
-        except ValueError:
-            self.engine.speed = 1.0
+        self._sync_playback_options(infinite=False, loops=1, capture_focus=True)
 
         self._diag(f"[TEST] Testing from row {idx + 1}: {len(self.engine.actions)} actions")
         self.engine.start()
@@ -4966,7 +5012,7 @@ class MainWindow(QMainWindow):
         warnings = []
         total = self.action_model.rowCount()
         if self._normalize_groups():
-            fixes.append("Normalized group ids, colors, and member badges")
+            fixes.append("Normalized folder ids, colors, and member badges")
         for idx, action in enumerate(self.action_model.actions()):
             kind = getattr(action, "action_type", "key") or "key"
             if kind == "loop":
@@ -5259,20 +5305,41 @@ class MainWindow(QMainWindow):
             logger.info(f"Opening update download window for {remote_ver}")
 
             # Progress dialog
+            from ui.dialogs._common import dialog_stylesheet, make_header
+            accent = COLORS["accent"]
             self._update_dlg = QDialog(self)
             self._update_dlg.setWindowTitle("Updating MacroForge")
-            self._update_dlg.setFixedSize(380, 140)
-            self._update_dlg.setStyleSheet(f"QDialog {{ background-color: {COLORS['bg_secondary']}; }}")
+            self._update_dlg.setFixedSize(420, 170)
+            self._update_dlg.setStyleSheet(
+                dialog_stylesheet(accent)
+                + f"""
+                QProgressBar {{
+                    background-color: {COLORS['lane']};
+                    border: 1px solid {COLORS['border']};
+                    border-radius: 6px;
+                    height: 9px;
+                    text-align: center;
+                }}
+                QProgressBar::chunk {{
+                    background-color: {accent};
+                    border-radius: 6px;
+                }}
+                """
+            )
             self._update_dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
             lo = QVBoxLayout(self._update_dlg)
-            lo.setContentsMargins(16, 16, 16, 16)
-            lo.addWidget(QLabel(f"Downloading MacroForge {remote_ver}…"))
+            lo.setContentsMargins(16, 16, 16, 14)
+            lo.setSpacing(9)
+            lo.addWidget(make_header("Downloading Update", accent, "download"))
+            title = QLabel(f"MacroForge {remote_ver}")
+            title.setStyleSheet(f"color: {COLORS['text']}; font-size: 13px; font-weight: 900; background: transparent;")
+            lo.addWidget(title)
             bar = QProgressBar()
             bar.setRange(0, 100)
-            bar.setFixedHeight(8)
+            bar.setFixedHeight(11)
             lo.addWidget(bar)
             info = QLabel("Starting…")
-            info.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px;")
+            info.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px; font-weight: 700; background: transparent;")
             lo.addWidget(info)
             self._update_dlg.show()
             self._update_dlg.raise_()
@@ -5438,7 +5505,7 @@ class MainWindow(QMainWindow):
             if bool(getattr(action, "enabled", True)) and not (action.is_group() or action.is_loop() or action.is_condition())
         )
         duration_text = f"{duration:.0f}s" if abs(duration - round(duration)) < 0.1 else f"{duration:.1f}s"
-        parts = [f"{len(actions)} rows", f"{image_checks} image", f"{groups} groups", f"{loops} loops", f"~{duration_text}"]
+        parts = [f"{len(actions)} rows", f"{image_checks} image", f"{groups} folders", f"{loops} loops", f"~{duration_text}"]
         if disabled:
             parts.insert(-1, f"{disabled} disabled")
         self.macro_summary.setText(" · ".join(parts))
@@ -5811,7 +5878,7 @@ class MainWindow(QMainWindow):
                 try:
                     active_action = self.action_model.get(self.active_index)
                     if getattr(active_action, "action_type", "") == "group" or getattr(active_action, "group_id", "") or self.timeline.group_badge(self.active_index):
-                        self.status("Groups cannot be nested")
+                        self.status("Folders cannot be nested")
                         return
                 except Exception:
                     pass
@@ -5827,7 +5894,7 @@ class MainWindow(QMainWindow):
                     self.timeline.ensure_visible(self.active_index)
                     self.refresh()
                     self.save_session()
-                    self.status("Added action group")
+                    self.status("Added action folder")
         except Exception:
             logger.exception("_open_group_dialog crashed")
 
@@ -5865,7 +5932,7 @@ class MainWindow(QMainWindow):
                 self.action_model.replace_action(index, act)
                 self.refresh()
                 self.save_session()
-                self.status("Action group updated")
+                self.status("Action folder updated")
 
     def _real_exit(self):
         try:
