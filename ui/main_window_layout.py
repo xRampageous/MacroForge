@@ -1744,8 +1744,9 @@ def build_main_layout(window):
 
     status_pill = QFrame()
     status_pill.setObjectName("status_pill")
-    self._status_pill_fixed_width = 150
-    status_pill.setFixedWidth(self._status_pill_fixed_width)
+    self._status_pill_bounds = (112, 390)
+    status_pill.setMinimumWidth(self._status_pill_bounds[0])
+    status_pill.setMaximumWidth(self._status_pill_bounds[1])
     status_pill.setFixedHeight(38)
     status_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     status_pill.setAutoFillBackground(False)

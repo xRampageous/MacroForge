@@ -370,18 +370,21 @@ class MainWindow(QMainWindow):
                 margins = (5, 5, 7, 5)
                 spacing = 2
                 separator_visible = False
+                status_bounds = (108, 150)
             elif width < 860:
                 mode = "compact"
                 profile_w = int(getattr(self, "_toolbar_profile_compact_width", 132))
                 margins = (6, 5, 8, 5)
                 spacing = 3
                 separator_visible = True
+                status_bounds = (112, 210)
             else:
                 mode = "full"
                 profile_w = int(getattr(self, "_toolbar_profile_full_width", 164))
                 margins = (7, 5, 9, 5)
                 spacing = 4
                 separator_visible = True
+                status_bounds = (112, 390)
 
             if getattr(self, "_toolbar_profile_mode", None) != mode:
                 self._toolbar_profile_mode = mode
@@ -409,7 +412,8 @@ class MainWindow(QMainWindow):
             status_pill = getattr(self, "status_pill", None)
             if status_pill is not None:
                 try:
-                    status_pill.setFixedWidth(int(getattr(self, "_status_pill_fixed_width", 150)))
+                    self._status_pill_bounds = status_bounds
+                    self._fit_status_pill_to_visible_text()
                 except Exception:
                     pass
 
@@ -421,6 +425,24 @@ class MainWindow(QMainWindow):
                 dock.layout().activate() if dock.layout() is not None else None
             except Exception:
                 pass
+        except Exception:
+            pass
+
+    def _fit_status_pill_to_visible_text(self, visible_msg=None):
+        try:
+            status_pill = getattr(self, "status_pill", None)
+            status_text = getattr(self, "status_text", None)
+            if status_pill is None or status_text is None:
+                return
+            min_w, max_w = getattr(self, "_status_pill_bounds", (112, 390))
+            text = str(status_text.text() if visible_msg is None else visible_msg)
+            text_w = status_text.fontMetrics().horizontalAdvance(text)
+            icon_visible = bool(getattr(self, "status_icon", None) and self.status_icon.isVisible())
+            chrome_w = 50 if icon_visible else 28
+            target_w = max(int(min_w), min(int(max_w), int(text_w + chrome_w + 24)))
+            status_pill.setMinimumWidth(int(min_w))
+            status_pill.setMaximumWidth(int(max_w))
+            status_pill.setFixedWidth(target_w)
         except Exception:
             pass
 
@@ -1170,29 +1192,29 @@ class MainWindow(QMainWindow):
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 50, "Loops": 50, "Seq": 66, "Time": 78}.get(title, 54))
-        chip.setFixedHeight(30)
+        chip.setFixedWidth({"Played": 72, "Loops": 72, "Seq": 88, "Time": 100}.get(title, 76))
+        chip.setFixedHeight(40)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
-            f"border: 1px solid {C['border']}; border-radius: 6px; }}"
+            f"border: 1px solid {C['border']}; border-radius: 8px; }}"
             f"QFrame#mf2_stat_chip:hover {{ border-color: {color}; }}"
         )
 
         lo = QHBoxLayout(chip)
-        lo.setContentsMargins(4, 2, 4, 2)
-        lo.setSpacing(3)
+        lo.setContentsMargins(10, 4, 10, 4)
+        lo.setSpacing(7)
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(15, 15)
-        ico.setPixmap(icon(icon_name, 14, color).pixmap(14, 14))
+        ico.setFixedSize(18, 18)
+        ico.setPixmap(icon(icon_name, 18, color).pixmap(18, 18))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 13px; background: transparent;"
+            f"color: {C['text']}; font-size: 14px; font-weight: 850; background: transparent;"
         )
         lo.addWidget(value_lbl)
         return chip, value_lbl
@@ -4028,6 +4050,33 @@ class MainWindow(QMainWindow):
                 text = str(msg or "")
                 self.playback_feedback_label.setText(text)
                 self.playback_feedback_label.setToolTip(text)
+                frame = getattr(self, "playback_feedback_frame", None)
+                if frame is not None:
+                    frame.setToolTip(text)
+                feedback_icon = getattr(self, "playback_feedback_icon", None)
+                if feedback_icon is not None:
+                    lower = text.lower()
+                    icon_name = "bolt"
+                    color = COLORS["accent"]
+                    if any(word in lower for word in ("error", "failed", "not found", "warning")):
+                        icon_name = "stop"
+                        color = COLORS["error"]
+                    elif "stopped" in lower:
+                        icon_name = "stop"
+                        color = COLORS["text_dim"]
+                    elif "complete" in lower or "ready" in lower:
+                        icon_name = "check"
+                        color = COLORS["success"]
+                    elif "paused" in lower:
+                        icon_name = "pause"
+                        color = COLORS["warning"]
+                    feedback_icon.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
+                    if frame is not None:
+                        frame.setStyleSheet(
+                            f"QFrame#playback_feedback_frame {{ background-color: {COLORS['bg_tertiary']}; "
+                            f"border: 1px solid {color if icon_name != 'bolt' else COLORS['accent_dim']}; "
+                            "border-radius: 7px; }}"
+                        )
         except Exception:
             pass
 
@@ -5239,16 +5288,6 @@ class MainWindow(QMainWindow):
         def _update():
             self.status_text.setText(visible_msg)
             self.status_text.setToolTip(full_msg)
-            # Keep the centered status capsule readable without letting it
-            # crowd the profile/update/menu cluster on narrow windows.
-            def _fit_status_pill_to_visible_text():
-                self.status_pill.setFixedWidth(int(getattr(self, "_status_pill_fixed_width", 150)))
-            try:
-                if hasattr(self, "status_pill"):
-                    _fit_status_pill_to_visible_text()
-                self._update_toolbar_containment()
-            except Exception:
-                pass
             # Update status icon based on state
             msg_lower = full_msg.lower()
             C = COLORS
@@ -5279,6 +5318,11 @@ class MainWindow(QMainWindow):
             else:
                 self.status_icon.setVisible(False)
                 self.status_dot.set_color(C["text_dim"], glow=False)
+            try:
+                self._fit_status_pill_to_visible_text(visible_msg)
+                self._update_toolbar_containment()
+            except Exception:
+                pass
             self._maybe_show_runtime_error(full_msg)
         QTimer.singleShot(0, _update)
         logger.info(full_msg)

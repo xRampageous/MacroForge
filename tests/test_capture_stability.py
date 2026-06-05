@@ -626,6 +626,8 @@ class TestPlaybackVisibility(QtTestCase):
                 (window.sim_check, "sim checkbox"),
                 (window.human_check, "human checkbox"),
                 (window.focus_check, "focus checkbox"),
+                (window.playback_feedback_frame, "playback status frame"),
+                (window.playback_feedback_icon, "playback status icon"),
                 (window.playback_feedback_label, "playback status label"),
                 (window.progress_bar, "global progress bar"),
                 (window._stat_actions_w, "played stat"),
@@ -637,9 +639,21 @@ class TestPlaybackVisibility(QtTestCase):
 
             self.assertGreaterEqual(window.start_btn.width(), 56)
             self.assertGreaterEqual(window.speed_combo.width(), 100)
-            self.assertGreaterEqual(window.playback_feedback_label.width(), 200)
+            self.assertLessEqual(window.playback_feedback_frame.width(), 216)
+            self.assertGreaterEqual(window.playback_feedback_frame.width(), 190)
+            self.assertLess(window.playback_feedback_label.width(), window.playback_feedback_frame.width())
             self.assertGreaterEqual(window.progress_bar.width(), 200)
+            self.assertEqual(window.progress_bar.parentWidget().height(), window._stat_actions_w.height())
+            self.assertEqual(window.progress_bar.parentWidget().height(), window._stat_time_w.height())
+            self.assertLessEqual(window.progress_bar.height(), 12)
             self.assertGreaterEqual(window._stat_time_w.width(), 78)
+            window.status("Ready")
+            self.app.processEvents()
+            short_status_w = window.status_pill.width()
+            window.status("Profile SP Farm loaded and playback options synced")
+            self.app.processEvents()
+            self.assertGreater(window.status_pill.width(), short_status_w)
+            self.assertLessEqual(window.status_pill.width(), 390)
             self.assertGreater(window.timeline.model().rowCount(), 0)
             window.hide()
             self._dispose_window(window)
