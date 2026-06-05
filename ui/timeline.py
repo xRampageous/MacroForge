@@ -93,10 +93,10 @@ def _action_text(action):
         return label or f"{button} Click", f"{mode.title()} · X {x}, Y {y}{rand_txt}{repeat_txt}"
 
     if kind == "image":
-        # Keep confidence/timeout metadata in their dedicated row columns.  The
-        # detail line stays clean so image rows do not collide with the status
-        # and threshold badge columns at compact widths.
-        return label or "Image", "Template.png"
+        # Image template filenames stay available in the inspector/action dialog.
+        # The timeline row hides them so the compact placement has room for
+        # confidence metadata and the status column.
+        return label or "Image", ""
 
     if kind == "group":
         name = getattr(action, "group_name", "") or label or "Group"
@@ -328,7 +328,10 @@ class TimelineDelegate(QStyledItemDelegate):
             # supported window size; only the progress rail flexes horizontally.
             compact = outer.width() < 760
             child_group = group_badge if group_badge and kind != "group" else None
-            child_indent = 22 if child_group and compact else (28 if child_group else 0)
+            # Child rows are indented internally only; row size and height stay
+            # untouched. The extra pixels make room for connector rail -> stripe
+            # -> drag grip without clipping the grip on grouped rows.
+            child_indent = 28 if child_group and compact else (34 if child_group else 0)
 
             # Left type accent stripe and active play marker. Active playback fills
             # the row's left end with the action's own gradient colour.
@@ -363,10 +366,10 @@ class TimelineDelegate(QStyledItemDelegate):
             if child_group:
                 actions = view._actions() if hasattr(view, "_actions") else []
                 gid = child_group.get("gid", "")
-                rail_x = outer.left() + (12 if compact else 16)
-                node_r = 4.0 if compact else 4.5
+                rail_x = outer.left() + (11 if compact else 15)
+                node_r = 3.5 if compact else 4.0
                 rail_col = QColor(child_group.get("color") or type_color)
-                rail_col.setAlpha(155)
+                rail_col.setAlpha(150)
 
                 def same_visible_child(candidate_row: int) -> bool:
                     if candidate_row < 0 or candidate_row >= len(actions):
@@ -385,11 +388,14 @@ class TimelineDelegate(QStyledItemDelegate):
                 has_next = same_visible_child(row + 1)
                 has_prev = same_visible_child(row - 1)
                 painter.setPen(QPen(rail_col, 1.35, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                top_y = outer.top() - 3 if has_prev else outer.top() + 2
-                bottom_y = outer.bottom() + 3 if has_next else outer.center().y()
-                painter.drawLine(QPointF(rail_x, top_y), QPointF(rail_x, outer.center().y()))
-                painter.drawLine(QPointF(rail_x, outer.center().y()), QPointF(rail_x, bottom_y))
-                painter.drawLine(QPointF(rail_x, outer.center().y()), QPointF(outer.left() + child_indent - 3, outer.center().y()))
+                top_y = outer.top() - 2 if has_prev else outer.top() + 7
+                bottom_y = outer.bottom() + 2 if has_next else outer.center().y()
+                center_y = outer.center().y()
+                painter.drawLine(QPointF(rail_x, top_y), QPointF(rail_x, center_y))
+                painter.drawLine(QPointF(rail_x, center_y), QPointF(rail_x, bottom_y))
+                # Short branch stops before the stripe/grip area, avoiding the
+                # previous overlap with the grouped-row drag handle.
+                painter.drawLine(QPointF(rail_x, center_y), QPointF(outer.left() + child_indent - 8, center_y))
                 painter.setPen(Qt.PenStyle.NoPen)
                 node_fill = QColor(COLORS["bg_card"])
                 node_fill.setAlpha(245)
@@ -412,8 +418,9 @@ class TimelineDelegate(QStyledItemDelegate):
                     QPointF(tri_x, tri_y - 5), QPointF(tri_x, tri_y + 5), QPointF(tri_x + 8, tri_y)
                 ])
 
-            # Drag grip.
-            grip_x = outer.left() + (12 if compact else 16)
+            # Drag grip. Grouped child rows move the grip after the coloured
+            # stripe so the dots are no longer clipped by the connector gutter.
+            grip_x = (stripe.right() + (6 if compact else 8)) if child_group else (outer.left() + (12 if compact else 16))
             grip_y = outer.center().y() - 8
             painter.setPen(Qt.PenStyle.NoPen)
             grip_color = "#000000" if playing else (COLORS["border_light"] if getattr(view, "playing_index", -1) >= 0 else COLORS["text_dark"])
@@ -448,9 +455,9 @@ class TimelineDelegate(QStyledItemDelegate):
 
             status_w = 76 if compact else 92
             status_x = outer.left() + (216 if compact else 300)
-            conf_w = 46 if compact else 54
+            conf_w = 42 if compact else 50
             conf_gap = 8 if compact else 10
-            conf_rect = QRectF(status_x - conf_w - conf_gap, outer.center().y() - 7, conf_w, 14) if kind == "image" else QRectF()
+            conf_rect = QRectF(status_x - conf_w - conf_gap, outer.center().y() - 8, conf_w, 16) if kind == "image" else QRectF()
             duration_w = 46 if compact else 56
             dur_x = status_x + status_w + 10
             bar_x = dur_x + duration_w + 10
@@ -503,10 +510,10 @@ class TimelineDelegate(QStyledItemDelegate):
             if kind == "group":
                 badge = group_badge.get("badge", "G") if group_badge else "G"
                 gcol = QColor(group_badge.get("color") if group_badge else type_color)
-                chip_rect = QRectF(text_x, outer.center().y() + 7, 42 if compact else 48, 16)
-                self._rounded_rect(painter, chip_rect, 4, COLORS["bg"], gcol.name(), 1)
+                chip_rect = QRectF(text_x, outer.center().y() + 8, 32 if compact else 36, 13)
+                self._rounded_rect(painter, chip_rect, 3, COLORS["bg"], gcol.name(), 1)
                 painter.setPen(gcol)
-                painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.Black))
+                painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.Black))
                 painter.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, badge)
 
             if kind == "image":
@@ -529,7 +536,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 # It now lives in the status area, directly left of Pending.
                 conf = int(round(_safe_float(getattr(action, "similarity", 0.95), 0.95) * 100))
                 if not conf_rect.isNull() and conf_rect.right() > text_x + 10:
-                    self._rounded_rect(painter, conf_rect, 4, COLORS["bg"], type_color, 1)
+                    # Plain confidence text only: no chip/background box.
                     painter.setPen(QColor(type_color))
                     painter.setFont(QFont("Segoe UI", 6 if compact else 7, QFont.Weight.DemiBold))
                     painter.drawText(conf_rect, Qt.AlignmentFlag.AlignCenter, f"≥ {conf}%")
@@ -603,8 +610,8 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.setFont(QFont("Segoe UI", 7 if compact else 8, QFont.Weight.DemiBold))
             painter.drawText(QRectF(pct_x, outer.top(), pct_w, outer.height()), Qt.AlignmentFlag.AlignVCenter, pct)
 
-            # Image threshold metadata chip intentionally removed. Image rows now
-            # show the template name in the detail text, avoiding cramped metadata.
+            # Image threshold metadata is drawn as plain text before the status
+            # pill; no extra chip is drawn later in the row.
 
             if group_drop_target and kind == "group":
                 feedback = self.drop_feedback_text(row) if hasattr(self, "drop_feedback_text") else "Add to group"
