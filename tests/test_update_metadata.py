@@ -23,6 +23,14 @@ from version import VERSION
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def write_legacy_exe(dist: Path, content: bytes = b"exe") -> Path:
+    exe_dir = dist / "MacroForge"
+    exe_dir.mkdir(exist_ok=True)
+    exe_path = exe_dir / "MacroForge.exe"
+    exe_path.write_bytes(content)
+    return exe_path
+
+
 class TestUpdateMetadata(unittest.TestCase):
     def test_checked_in_update_json_has_zip_and_legacy_exe_url(self):
         data = json.loads((REPO_ROOT / "update.json").read_text(encoding="utf-8"))
@@ -120,6 +128,7 @@ class TestUpdateMetadata(unittest.TestCase):
             )
             dist = root / "dist"
             dist.mkdir()
+            write_legacy_exe(dist)
             zip_path = dist / "MacroForge-v9.9.9.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
                 zf.writestr("MacroForge.exe", "exe")
@@ -146,6 +155,7 @@ class TestUpdateMetadata(unittest.TestCase):
             )
             dist = root / "dist"
             dist.mkdir()
+            write_legacy_exe(dist)
             zip_path = dist / "MacroForge-v9.9.9.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
                 zf.writestr("MacroForge.exe", "exe")
@@ -177,17 +187,34 @@ class TestUpdateMetadata(unittest.TestCase):
             )
             dist = root / "dist"
             dist.mkdir()
+            exe_path = write_legacy_exe(dist)
             zip_path = dist / "MacroForge-v9.9.9.zip"
             zip_path.write_bytes(b"release zip")
-            digest = build_helper.sha256_file(str(zip_path))
+            zip_digest = build_helper.sha256_file(str(zip_path))
+            sidecar_path = Path(f"{zip_path}.sha256")
+            sidecar_path.write_text(f"{zip_digest}  MacroForge-v9.9.9.zip\n", encoding="utf-8")
             release = {
                 "tagName": "v9.9.9",
-                "assets": [{
-                    "name": "MacroForge-v9.9.9.zip",
-                    "url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge-v9.9.9.zip",
-                    "size": zip_path.stat().st_size,
-                    "digest": f"sha256:{digest}",
-                }],
+                "assets": [
+                    {
+                        "name": "MacroForge.exe",
+                        "url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge.exe",
+                        "size": exe_path.stat().st_size,
+                        "digest": f"sha256:{build_helper.sha256_file(str(exe_path))}",
+                    },
+                    {
+                        "name": "MacroForge-v9.9.9.zip",
+                        "url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge-v9.9.9.zip",
+                        "size": zip_path.stat().st_size,
+                        "digest": f"sha256:{zip_digest}",
+                    },
+                    {
+                        "name": "MacroForge-v9.9.9.zip.sha256",
+                        "url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge-v9.9.9.zip.sha256",
+                        "size": sidecar_path.stat().st_size,
+                        "digest": f"sha256:{build_helper.sha256_file(str(sidecar_path))}",
+                    },
+                ],
             }
 
             errors, warnings = post_release_verify.verify_post_release(root, "9.9.9", release)

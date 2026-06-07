@@ -57,6 +57,12 @@ def validate_release(root: Path, require_clean: bool = True) -> tuple[list[str],
     if not str(manifest.get("notes", "")).strip():
         errors.append("update.json notes must not be empty")
 
+    exe_path = root / "dist" / "MacroForge" / "MacroForge.exe"
+    if not exe_path.exists():
+        errors.append(f"legacy EXE asset missing: {exe_path}")
+    elif exe_path.stat().st_size <= 0:
+        errors.append(f"legacy EXE asset is empty: {exe_path}")
+
     zip_path = root / "dist" / f"MacroForge-v{version}.zip"
     if not zip_path.exists():
         errors.append(f"release ZIP missing: {zip_path}")

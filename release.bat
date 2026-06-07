@@ -124,6 +124,17 @@ if %errorlevel% neq 0 (
 )
 
 :: Upload assets
+if not exist "dist\MacroForge\MacroForge.exe" (
+    del /f /q _release_notes.txt >nul 2>&1
+    echo [ERROR] Legacy EXE asset missing: dist\MacroForge\MacroForge.exe
+    pause & exit /b 1
+)
+gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge\MacroForge.exe" >nul 2>&1
+if %errorlevel% neq 0 (
+    del /f /q _release_notes.txt >nul 2>&1
+    echo [ERROR] Legacy EXE upload failed.
+    pause & exit /b 1
+)
 gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge-v!VER!.zip" >nul 2>&1
 if %errorlevel% neq 0 (
     del /f /q _release_notes.txt >nul 2>&1
@@ -144,6 +155,11 @@ echo        Verifying published release...
 python post_release_verify.py !VER!
 if %errorlevel% neq 0 (
     echo [ERROR] Post-release verification failed.
+    pause & exit /b 1
+)
+python release_doctor.py !VER!
+if %errorlevel% neq 0 (
+    echo [ERROR] Release doctor failed.
     pause & exit /b 1
 )
 
