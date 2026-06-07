@@ -1,6 +1,6 @@
 {
-  "version": "3.8.0",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.8.0/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.8.0/MacroForge-v3.8.0.zip",
-  "notes": "Release v3.8.0"
+  "version": "3.9.0",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.0/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.0/MacroForge-v3.9.0.zip",
+  "notes": "Release v3.9.0 - Major refactoring with new controllers, hotkey improvements, action presets, recording overlay, error handling, and search improvements"
 }
