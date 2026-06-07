@@ -31,14 +31,13 @@ from version import VERSION
 # from hotkeys import start_hotkeys, stop_hotkeys  # DISABLED — pynput causes Qt dialog crashes
 from debugger import logger, DebugViewer
 from ui.theme import build_stylesheet, COLORS
-from ui.hotkey_manager import HotkeyManager, create_hotkey_manager
+from ui.hotkey_manager import create_hotkey_manager
+from ui.toolbar_controller import create_toolbar_controller
+from ui.inspector_controller import create_inspector_controller
+from ui.playback_controller import create_playback_controller
+from ui.timeline_interactions import create_timeline_interactions
 from ui.hotkey_settings import open_hotkey_settings
-from ui.toolbar_controller import ToolbarController, create_toolbar_controller
-from ui.inspector_controller import InspectorController, create_inspector_controller
-from ui.playback_controller import PlaybackController, create_playback_controller
-from ui.timeline_interactions import TimelineInteractions, create_timeline_interactions
 from ui.recording_overlay import show_recording_overlay, show_post_recording_dialog
-from action_presets import ActionPresetManager, get_preset_manager
 from ui.status_dot import StatusDot
 from ui.timeline import TimelineView
 from ui.icons import icon
@@ -128,10 +127,8 @@ class MainWindow(QMainWindow):
         self._save_session_timer.setInterval(500)
         self._save_session_timer.timeout.connect(self._do_save_session)
         self._inspector_loading = False
-        self._inspector_autosave_timer = QTimer(self)
-        self._inspector_autosave_timer.setSingleShot(True)
-        self._inspector_autosave_timer.setInterval(350)
-        self._inspector_autosave_timer.timeout.connect(self._autosave_inspector_edits)
+        self._inspector_ctrl = create_inspector_controller(self)
+        self._inspector_autosave_timer = self._inspector_ctrl._inspector_autosave_timer
         # One-shot unlocked selection reveal state.  Timeline clicks may briefly
         # ask the side panel/Inspector to fit the newly clicked action, but a
         # merely selected row must not keep fighting vertical window resize.
@@ -188,6 +185,10 @@ class MainWindow(QMainWindow):
         self._init_hotkey_manager()
 
         self._build_ui()
+        self._toolbar_ctrl = create_toolbar_controller(self)
+        self._playback_ctrl = create_playback_controller(self)
+        self._playback_ctrl.set_engine(self.engine)
+        self._playback_ctrl.set_callbacks(self.playback_feedback, self.status)
         try:
             QApplication.instance().installEventFilter(self)
         except Exception:
@@ -205,28 +206,6 @@ class MainWindow(QMainWindow):
             self.lock_window_combo.currentIndexChanged.connect(self._on_lock_window_changed)
         except Exception:
             pass
-        # self._setup_hotkeys()  # DISABLED — pynput global hooks interfere with Qt modal dialogs
-
-        # Setup new controllers
-        self._toolbar_ctrl = create_toolbar_controller(self)
-        self._inspector_ctrl = create_inspector_controller(self)
-        self._playback_ctrl = create_playback_controller(self)
-        self._timeline_ctrl = create_timeline_interactions(self)
-        self._preset_mgr = get_preset_manager()
-
-        # Wire up controller callbacks
-        self._playback_ctrl.set_engine(self.engine)
-        self._playback_ctrl.set_callbacks(
-            feedback_cb=self.playback_feedback,
-            status_cb=self.status
-        )
-        self._timeline_ctrl.set_timeline(self.timeline)
-        self._timeline_ctrl.set_action_model(self.action_model)
-        self._timeline_ctrl.set_callbacks(
-            on_selection_changed=self._on_timeline_selection_changed,
-            on_row_moved=self._on_rows_moved,
-            on_show_context_menu=self._show_timeline_context_menu
-        )
 
         self._setup_tray()
 
@@ -381,19 +360,10 @@ class MainWindow(QMainWindow):
 
     def _toolbar_profile_text(self):
         """Return profile button text for the current toolbar width mode."""
-        try:
-            name = str(self.session_manager.active or "Default")
-        except Exception:
-            name = "Default"
-        mode = str(getattr(self, "_toolbar_profile_mode", "full"))
-        if mode == "tiny":
-            shown = name if len(name) <= 8 else f"{name[:7]}…"
-            return f"{shown}  ▾"
-        if mode == "compact":
-            shown = name if len(name) <= 11 else f"{name[:10]}…"
-            return f"{shown}  ▾"
-        shown = name if len(name) <= 18 else f"{name[:15]}..."
-        return f"{shown}  ▾"
+        ctrl = getattr(self, "_toolbar_ctrl", None)
+        if ctrl is not None:
+            return ctrl._toolbar_profile_text()
+        return "Default  ▾"
 
     def _update_toolbar_containment(self):
         """Keep the redesigned top toolbar contained in the visible header dock.
@@ -403,95 +373,9 @@ class MainWindow(QMainWindow):
         itself, then compact non-status controls first so the right status pill
         stays inside the rounded top panel.
         """
-        try:
-            dock = getattr(self, "header_dock", None)
-            profile = getattr(self, "profile_btn", None)
-            if dock is None or profile is None:
-                return
-            width = int(dock.width() or self.width())
-            if width <= 0:
-                return
-
-            if width < 760:
-                mode = "tiny"
-                profile_w = int(getattr(self, "_toolbar_profile_tiny_width", 116))
-                margins = (5, 5, 7, 5)
-                spacing = 2
-                separator_visible = False
-                status_cap = 230
-            elif width < 860:
-                mode = "compact"
-                profile_w = int(getattr(self, "_toolbar_profile_compact_width", 132))
-                margins = (6, 5, 8, 5)
-                spacing = 3
-                separator_visible = True
-                status_cap = 310
-            else:
-                mode = "full"
-                profile_w = int(getattr(self, "_toolbar_profile_full_width", 164))
-                margins = (7, 5, 9, 5)
-                spacing = 4
-                separator_visible = True
-                status_cap = 420
-
-            # With the added Debug button the toolbar can get tight.  Give the
-            # status pill as much real space as is available, then let it grow
-            # left from the right edge without overlapping the fixed toolbar controls.
-            visible_debug = 35
-            static_budget = profile_w + visible_debug + 312
-            available_status = max(112, width - static_budget)
-            status_bounds = (108 if mode == "tiny" else 112, max(112, min(status_cap, available_status)))
-
-            if getattr(self, "_toolbar_profile_mode", None) != mode:
-                self._toolbar_profile_mode = mode
-                profile.setText(self._toolbar_profile_text())
-
-            if profile.width() != profile_w:
-                profile.setFixedWidth(profile_w)
-
-            debug_btn = getattr(self, "debug_top_btn", None)
-            if debug_btn is not None:
-                try:
-                    debug_btn.setText("")
-                    debug_btn.setFixedWidth(35)
-                    debug_btn.setToolTip("Debug tools")
-                except Exception:
-                    pass
-
-            layout = dock.layout()
-            if layout is not None:
-                left, top, right, bottom = layout.contentsMargins().left(), layout.contentsMargins().top(), layout.contentsMargins().right(), layout.contentsMargins().bottom()
-                target_left, target_top, target_right, target_bottom = margins
-                if (left, top, right, bottom) != margins:
-                    layout.setContentsMargins(target_left, target_top, target_right, target_bottom)
-                if layout.spacing() != spacing:
-                    layout.setSpacing(spacing)
-
-            for sep in getattr(self, "toolbar_separators", []):
-                try:
-                    sep.setVisible(separator_visible)
-                    sep.setFixedWidth(1 if separator_visible else 0)
-                except Exception:
-                    pass
-
-            status_pill = getattr(self, "status_pill", None)
-            if status_pill is not None:
-                try:
-                    self._status_pill_bounds = status_bounds
-                    self._fit_status_pill_to_visible_text()
-                except Exception:
-                    pass
-
-            # Keep right-side status geometry inside the dock after any compact
-            # profile/separator change.  This is intentionally a layout refresh,
-            # not a status-pill resize.
-            try:
-                dock.updateGeometry()
-                dock.layout().activate() if dock.layout() is not None else None
-            except Exception:
-                pass
-        except Exception:
-            pass
+        ctrl = getattr(self, "_toolbar_ctrl", None)
+        if ctrl is not None:
+            ctrl.update_toolbar_containment()
 
     def _fit_status_pill_to_visible_text(self, visible_msg=None):
         try:
@@ -1443,38 +1327,9 @@ class MainWindow(QMainWindow):
         return row
 
     def _show_inspector(self, show=True, action_type="key"):
-        for w in (
-            self.insp_key, self.insp_pause, self.insp_click, self.insp_image,
-            self.insp_group, self.insp_loop, self.insp_condition,
-        ):
-            w.setVisible(False)
-
-        if hasattr(self, "inspector_action_row"):
-            self.inspector_action_row.setVisible(bool(show))
-
-        self.insp_empty.setVisible(False)
-        if not show:
-            self.insp_empty.setText("Select an action to inspect")
-            self.insp_empty.setVisible(True)
-            self._autosize_inspector_panel()
-            return
-
-        mapping = {
-            "key": self.insp_key,
-            "pause": self.insp_pause,
-            "click": self.insp_click,
-            "image": self.insp_image,
-            "group": self.insp_group,
-            "loop": self.insp_loop,
-            "condition": self.insp_condition,
-        }
-        pane = mapping.get(action_type)
-        if pane is not None:
-            pane.setVisible(True)
-        else:
-            self.insp_empty.setText("Use Edit for this block")
-            self.insp_empty.setVisible(True)
-        self._autosize_inspector_panel()
+        ctrl = getattr(self, "_inspector_ctrl", None)
+        if ctrl is not None:
+            ctrl.show_inspector(show, action_type)
 
     def _autosize_inspector_panel(self, force=False):
         """Resize Inspector to the selected action pane instead of stretching.
@@ -1685,48 +1540,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Capture Error", str(exc))
 
     def _setup_inspector_autosave(self):
-        widgets = [
-            getattr(self, name, None)
-            for name in (
-                "inspector_label",
-                "ik_key", "ik_dur", "ik_repeat", "ik_label", "ik_hold",
-                "ip_dur", "ip_label",
-                "ic_x", "ic_y", "ic_btn", "ic_rand", "ic_repeat", "ic_label",
-                "ii_sim", "ii_sim_slider", "ii_wait", "ii_retry_count", "ii_retry_delay", "ii_fail_mode", "ii_fail_target",
-                "ig_name", "ig_collapsed", "ig_recovery",
-                "il_label", "il_count", "il_target",
-                "ico_label", "ico_type", "ico_x", "ico_y", "ico_color",
-                "ico_true", "ico_false", "ico_retry_count", "ico_retry_delay", "ico_fail_mode", "ico_fail_target",
-            )
-        ]
-        for widget in widgets:
-            if widget is None:
-                continue
-            try:
-                if isinstance(widget, QLineEdit):
-                    widget.textEdited.connect(self._queue_inspector_autosave)
-                elif isinstance(widget, QComboBox):
-                    widget.currentIndexChanged.connect(self._queue_inspector_autosave)
-                elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
-                    widget.valueChanged.connect(self._queue_inspector_autosave)
-                elif isinstance(widget, QCheckBox):
-                    widget.toggled.connect(self._queue_inspector_autosave)
-                elif isinstance(widget, QSlider):
-                    widget.valueChanged.connect(self._queue_inspector_autosave)
-            except Exception:
-                pass
+        ctrl = getattr(self, "_inspector_ctrl", None)
+        if ctrl is not None:
+            ctrl.setup_inspector_autosave()
 
     def _queue_inspector_autosave(self, *args):
-        if getattr(self, "_inspector_loading", False):
-            return
-        if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
-            return
-        self._inspector_autosave_timer.start()
+        ctrl = getattr(self, "_inspector_ctrl", None)
+        if ctrl is not None:
+            ctrl.queue_inspector_autosave(*args)
 
     def _autosave_inspector_edits(self):
-        if getattr(self, "_inspector_loading", False):
-            return
-        self._apply_inspector(autosave=True)
+        ctrl = getattr(self, "_inspector_ctrl", None)
+        if ctrl is not None:
+            ctrl._autosave_inspector_edits()
 
     # ═══════════════════════════════════════════════════════
     #  KEYBOARD SHORTCUTS
@@ -1855,23 +1681,32 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def _setup_timeline_connections(self):
-        self.timeline.action_clicked.connect(self._select_from_timeline_click)
-        self.timeline.action_double_clicked.connect(self._open_active_dialog)
-        self.timeline.action_dragged.connect(self.move_action_to)
-        if hasattr(self.timeline, "action_dragged_many"):
-            self.timeline.action_dragged_many.connect(self.move_actions_to)
+        self._timeline_ctrl = create_timeline_interactions(self)
+        self._timeline_ctrl.set_action_model(self.action_model)
+        self._timeline_ctrl.set_callbacks(
+            on_selection_changed=lambda rows, _active=None: self._timeline_selection_summary_changed(rows),
+            on_action_clicked=self._select_from_timeline_click,
+            on_action_double_clicked=self._open_active_dialog,
+            on_row_moved=self._move_timeline_rows,
+            on_show_context_menu=self._timeline_context_menu,
+        )
+        self._timeline_ctrl.set_timeline(self.timeline)
         if hasattr(self.timeline, "action_dropped_into_group"):
             self.timeline.action_dropped_into_group.connect(self.move_action_into_group)
         if hasattr(self.timeline, "action_dropped_many_into_group"):
             self.timeline.action_dropped_many_into_group.connect(self.move_actions_into_group)
-        self.timeline.action_context_menu.connect(self._timeline_context_menu)
         self.timeline.group_toggle_requested.connect(self.toggle_group_collapsed)
-        if hasattr(self.timeline, "selection_summary_changed"):
-            self.timeline.selection_summary_changed.connect(self._timeline_selection_summary_changed)
         if hasattr(self.timeline, "interaction_status_changed"):
             self.timeline.interaction_status_changed.connect(self.status)
         if hasattr(self.timeline, "zoom_changed"):
             self.timeline.zoom_changed.connect(self._on_timeline_zoom_changed)
+
+    def _move_timeline_rows(self, rows, target_index):
+        rows = list(rows or [])
+        if len(rows) == 1:
+            self.move_action_to(rows[0], target_index)
+        else:
+            self.move_actions_to(rows, target_index)
 
     def _on_timeline_zoom_changed(self, zoom):
         try:
@@ -1881,27 +1716,6 @@ class MainWindow(QMainWindow):
             self.status(f"Timeline zoom {zoom:.2f}x")
         except Exception:
             pass
-
-    # ═══════════════════════════════════════════════════════
-    #  TIMELINE CONTROLLER CALLBACKS
-    # ═══════════════════════════════════════════════════════
-
-    def _on_timeline_selection_changed(self, rows, active_row):
-        """Handle timeline selection change from controller."""
-        if active_row >= 0:
-            self.select(active_row)
-        self.timeline.refresh()
-
-    def _on_rows_moved(self, rows, to_row):
-        """Handle row drag/drop from controller."""
-        if len(rows) == 1:
-            self.move_action_to(rows[0], to_row)
-        else:
-            self.move_actions_to(rows, to_row)
-
-    def _show_timeline_context_menu(self, row, global_pos):
-        """Show timeline context menu from controller."""
-        self._timeline_context_menu(row, global_pos)
 
     def reset_timeline_zoom(self):
         try:
@@ -2904,7 +2718,10 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════
 
     def select(self, index):
-        self._inspector_loading = True
+        if getattr(self, "_inspector_ctrl", None) is not None:
+            self._inspector_ctrl.set_loading(True)
+        else:
+            self._inspector_loading = True
         try:
             if index is None or index < 0 or index >= self.action_model.rowCount():
                 self.active_index = -1
@@ -3054,7 +2871,10 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         finally:
-            self._inspector_loading = False
+            if getattr(self, "_inspector_ctrl", None) is not None:
+                self._inspector_ctrl.set_loading(False)
+            else:
+                self._inspector_loading = False
             if bool(getattr(self, "_side_panel_locked", False)) or bool(getattr(self, "_bottom_panel_locked", False)):
                 QTimer.singleShot(0, self._apply_panel_size_locks)
                 QTimer.singleShot(35, self._apply_panel_size_locks)
@@ -4806,7 +4626,7 @@ class MainWindow(QMainWindow):
         self.status_dot.set_color(COLORS["text_dark"])
         self.playback_feedback("Stopped")
         if self.session_start_time:
-            self.session_elapsed_time += time.time() - self.session_start_time
+            self._playback_ctrl.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
         self.update_statistics(immediate=True)
 
@@ -4901,7 +4721,7 @@ class MainWindow(QMainWindow):
                     self.timeline.refresh()
         except Exception:
             pass
-        self.actions_played += 1
+        self._playback_ctrl.increment_actions_played()
         speed = max(self.engine.speed_multiplier, 0.01)
         adjusted_dur = dur / speed
         self.timeline.set_playing(display_idx, adjusted_dur)
@@ -4979,7 +4799,7 @@ class MainWindow(QMainWindow):
         self._run_from_index = 0
         self._run_index_map = []
         if self.session_start_time:
-            self.session_elapsed_time += time.time() - self.session_start_time
+            self._playback_ctrl.session_elapsed_time += time.time() - self.session_start_time
             self.session_start_time = None
         self.update_statistics(immediate=True)
 
@@ -6267,22 +6087,8 @@ class MainWindow(QMainWindow):
         self._stat_time.setText(self._format_hms(session_time))
 
     # ═══════════════════════════════════════════════════════
-    #  HOTKEYS & SYSTRAY
+    #  SYSTRAY
     # ═══════════════════════════════════════════════════════
-
-    def _setup_hotkeys(self):
-        # DISABLED — pynput global hooks interfere with Qt modal dialogs
-        logger.info("Hotkeys disabled (pynput causes Qt dialog crashes)")
-        pass
-
-    def _hotkey_toggle_play(self):
-        if self.engine.running:
-            self.stop()
-        else:
-            self.start()
-
-    def _hotkey_record(self):
-        self._toggle_record()
 
     def _setup_tray(self):
         try:

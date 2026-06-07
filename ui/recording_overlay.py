@@ -43,6 +43,9 @@ class RecordingOverlay(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         
+        # Prevent any default frame drawing
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        
         self._recording = False
         self._paused = False
         self._start_time = 0.0
@@ -145,14 +148,8 @@ class RecordingOverlay(QFrame):
         
         layout.addLayout(btn_layout)
         
-        # Background styling
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['bg']};
-                border: 2px solid {COLORS['border']};
-                border-radius: 12px;
-            }}
-        """)
+        # Background styling - transparent to allow custom paintEvent
+        self.setStyleSheet("background: transparent; border: none;")
     
     def _setup_animation(self):
         """Set up pulsing animation timer."""
@@ -230,6 +227,32 @@ class RecordingOverlay(QFrame):
         if not self._recording:
             return 0.0
         return time.time() - self._start_time
+    
+    def paintEvent(self, event):
+        """Custom paint event to draw rounded translucent background."""
+        from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Create rounded rect path
+        path = QPainterPath()
+        rect = self.rect().adjusted(1, 1, -1, -1)
+        path.addRoundedRect(rect, 12, 12)
+        
+        # Fill with semi-transparent background
+        bg_color = QColor(COLORS['bg'])
+        bg_color.setAlpha(240)  # Slight transparency
+        painter.fillPath(path, bg_color)
+        
+        # Draw border
+        border_color = QColor(COLORS['border'])
+        border_color.setAlpha(200)
+        pen = QPen(border_color, 2)
+        painter.setPen(pen)
+        painter.drawPath(path)
+        
+        painter.end()
 
 
 class PostRecordingDialog(QDialog):

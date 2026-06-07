@@ -208,6 +208,61 @@ class PlaybackController:
         self.engine.start()
         return True
     
+    def run_selected_actions(self, actions, rows, infinite=False, loops=1, capture_focus=True):
+        """Run a selected block of actions.
+        
+        Args:
+            actions: List of actions to run
+            rows: List of row indices (for display/logging)
+            infinite: Run in infinite loop
+            loops: Number of loops (ignored if infinite=True)
+            capture_focus: Capture focus window at start
+        
+        Returns:
+            True if started successfully, False otherwise
+        """
+        if not self.engine:
+            self._status("No engine set")
+            return False
+        
+        if self.engine.running:
+            self._status("Stop playback before running selected block")
+            return False
+        
+        if not actions:
+            self._status("No actions to run")
+            return False
+        
+        # Reset statistics
+        self.actions_played = 0
+        self.session_elapsed_time = 0.0
+        self.session_start_time = time.time()
+        
+        # Set actions
+        self.engine.actions = actions
+        
+        # Update UI state
+        self._set_buttons_running()
+        self._set_status_dot("playing")
+        self._set_progress(0)
+        self._feedback("Running selected block")
+        
+        # Sync engine options
+        self.engine.loops = 1 if infinite else loops
+        self.engine.infinite_loop = infinite
+        
+        if capture_focus:
+            self.engine.capture_focus_window()
+        
+        # Start engine
+        self.engine.start()
+        
+        # Log
+        row_str = ', '.join(str(r + 1) for r in rows)
+        logger.info(f"[PLAY] Running selected block: rows {row_str}")
+        
+        return True
+    
     # ═══════════════════════════════════════════════════════
     #  UI UPDATES
     # ═══════════════════════════════════════════════════════
