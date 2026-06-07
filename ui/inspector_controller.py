@@ -3,7 +3,7 @@
 Manages the side panel inspector for editing action properties.
 """
 
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtCore import Qt, QTimer, QSize, QObject
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QCheckBox,
@@ -27,8 +27,9 @@ class InspectorController:
     - Inspector type switching (key, image, click, pause, group, condition, loop)
     """
     
-    def __init__(self, window):
+    def __init__(self, window, timer_factory=QTimer):
         self.window = window
+        self._timer_factory = timer_factory
         self._inspector_loading = False
         self._inspector_autosave_timer = None
         self._image_preview_pixmap = None
@@ -36,7 +37,8 @@ class InspectorController:
     
     def _setup_autosave_timer(self):
         """Set up the autosave timer for inspector edits."""
-        self._inspector_autosave_timer = QTimer(self.window)
+        parent = self.window if isinstance(self.window, QObject) else None
+        self._inspector_autosave_timer = self._timer_factory(parent)
         self._inspector_autosave_timer.setSingleShot(True)
         self._inspector_autosave_timer.setInterval(350)
         self._inspector_autosave_timer.timeout.connect(self._autosave_inspector_edits)
@@ -135,6 +137,6 @@ class InspectorController:
         return getattr(self, "_inspector_loading", False)
 
 
-def create_inspector_controller(window):
+def create_inspector_controller(window, timer_factory=QTimer):
     """Factory function to create and initialize an InspectorController."""
-    return InspectorController(window)
+    return InspectorController(window, timer_factory=timer_factory)

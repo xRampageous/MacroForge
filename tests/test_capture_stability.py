@@ -20,8 +20,10 @@ from PyQt6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QMenu, QPushB
 from debugger import DebugLogger
 from models import Action, ActionListModel, ProfileManager, SettingsManager
 from ui.dialogs.click_dialog import ClickDialog
+from ui.dialogs.condition_dialog import ConditionDialog
 from ui.dialogs.image_dialog import ImageDialog
 from ui.main_window import MainWindow
+from ui.theme import COLORS
 from ui.timeline import TIMELINE_MULTI_SELECT_RAIL_WIDTH, TIMELINE_PROGRESS_COLUMN_SHIFT, TimelineView, _action_text
 
 
@@ -100,6 +102,17 @@ class TestTimelineRows(QtTestCase):
         title, detail = _action_text(Action("[DELAY]", 4.0, action_type="pause"))
         self.assertEqual(title, "Delay")
         self.assertEqual(detail, "")
+
+    def test_condition_pixel_detail_names_coordinates(self):
+        action = Action("[CONDITION]", 0.0, action_type="condition")
+        action.condition_type = "pixel_color"
+        action.condition_x = 12
+        action.condition_y = 34
+
+        title, detail = _action_text(action)
+
+        self.assertEqual(title, "Condition")
+        self.assertEqual(detail, "Pixel 12,34")
 
     def test_running_duration_column_counts_down(self):
         timeline = TimelineView(model=ActionListModel([Action("[DELAY]", 4.0, action_type="pause")]))
@@ -368,6 +381,51 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertEqual(window.playback_panel.height(), 175)
             self._dispose_window(window)
 
+    def test_playback_panel_lock_blocks_collapse(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window._playback_panel_locked = True
+            window._set_playback_panel_lock_button_state()
+            window._set_playback_collapsed(True)
+
+            self.assertFalse(window._playback_collapsed)
+            self.assertEqual(window.playback_panel.height(), 175)
+            self.assertIn("locked", window.playback_panel_lock_btn.toolTip().lower())
+            self._dispose_window(window)
+
+    def test_selection_chip_shows_count_and_quick_actions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            actions = [Action(str(i), 0.1) for i in range(4)]
+            window.action_model.set_actions(actions)
+            window.timeline.set_selected_rows([1, 2], active=1)
+            self.app.processEvents()
+
+            self.assertFalse(window.selection_chip.isHidden())
+            self.assertEqual(window.selection_count_label.text(), "2 selected")
+            with patch.object(window, "run_selected_actions") as run_mock:
+                window.selection_run_btn.click()
+            run_mock.assert_called_once_with([1, 2])
+
+            window.disable_selected_actions()
+
+            self.assertFalse(actions[1].enabled)
+            self.assertFalse(actions[2].enabled)
+            self.assertTrue(actions[0].enabled)
+            self._dispose_window(window)
+
+    def test_timeline_bottom_safe_margin_tracks_playback_height(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            window._playback_collapsed = False
+            window._update_timeline_bottom_safe_margin(175)
+            self.assertEqual(window.timeline.viewportMargins().bottom(), 0)
+
+            window._playback_collapsed = True
+            window._update_timeline_bottom_safe_margin(36)
+            self.assertEqual(window.timeline.viewportMargins().bottom(), 0)
+            self._dispose_window(window)
+
     def test_autosave_chip_marks_unsaved_then_saved(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             profile_manager = ProfileManager()
@@ -399,9 +457,18 @@ class TestPlaybackVisibility(QtTestCase):
             window.playback_feedback("Playing · Row 1 Enter")
             self.app.processEvents()
             self.assertEqual(window.status_text.toolTip(), "Profile 'alpha' loaded")
+            self.assertEqual(window.status_pill.toolTip(), "Profile 'alpha' loaded")
+            self.assertEqual(window.status_pill.property("status_state"), "saved")
+            self.assertFalse(window.status_icon.isHidden())
+            self.assertIn("border-radius: 12px", window.status_pill.styleSheet())
             self.assertTrue(window.status_text.text().startswith("Profile 'a"))
             self.assertNotIn("Playing", window.status_text.text())
             self.assertEqual(window.playback_feedback_label.text(), "Playing · Row 1 Enter")
+            self.assertEqual(window.playback_feedback_frame.property("feedback_state"), "running")
+            window.playback_feedback("Paused")
+            self.app.processEvents()
+            self.assertEqual(window.playback_feedback_frame.property("feedback_state"), "paused")
+            self.assertIn("border-radius: 8px", window.playback_feedback_frame.styleSheet())
             self._dispose_window(window)
 
     def test_image_inspector_uses_editor_cards_and_ms_fields(self):
@@ -532,7 +599,7 @@ class TestPlaybackVisibility(QtTestCase):
         last = timeline.multi_selection_visual_state(3)
         outside = timeline.multi_selection_visual_state(4)
 
-        self.assertEqual(TIMELINE_MULTI_SELECT_RAIL_WIDTH, 4)
+        self.assertEqual(TIMELINE_MULTI_SELECT_RAIL_WIDTH, 6)
         self.assertTrue(first["active"])
         self.assertFalse(first["has_previous"])
         self.assertTrue(first["has_next"])
@@ -544,7 +611,44 @@ class TestPlaybackVisibility(QtTestCase):
         self.assertFalse(outside["active"])
         timeline.deleteLater()
 
-    def test_image_inspector_reserves_full_image_settings_height(self):
+    def test_timeline_ctrl_click_adds_to_multi_selection(self):
+        timeline = TimelineView(model=ActionListModel([Action(str(i), 0.1) for i in range(5)]))
+        timeline.resize(700, 360)
+        timeline.show()
+        self.app.processEvents()
+        timeline.set_selected_rows([0], active=0)
+
+        row_two_rect = timeline.visualRect(timeline.model().index(2, 0))
+        QTest.mouseClick(
+            timeline.viewport(),
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.ControlModifier,
+            row_two_rect.center(),
+        )
+        self.app.processEvents()
+
+        self.assertEqual(timeline.selected_rows(), [0, 2])
+        timeline.hide()
+        timeline.deleteLater()
+
+    def test_timeline_search_highlight_persists_after_clearing_search(self):
+        timeline = TimelineView(model=ActionListModel([
+            Action("alpha", 0.1),
+            Action("beta", 0.1),
+            Action("alpha two", 0.1),
+        ]))
+        timeline.set_search("alpha")
+
+        self.assertEqual(timeline.search_match_rows(), [0, 2])
+        self.assertEqual(timeline._search_highlight_rows, {0, 2})
+
+        timeline.set_search("")
+
+        self.assertEqual(timeline.search_match_rows(), [0, 1, 2])
+        self.assertEqual(timeline._search_highlight_rows, {0, 2})
+        timeline.deleteLater()
+
+    def test_image_inspector_allows_image_settings_to_collapse_under_height_pressure(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             window = self._make_window(tmpdir)
             action = Action(
@@ -562,11 +666,37 @@ class TestPlaybackVisibility(QtTestCase):
             window.show()
             self.app.processEvents()
 
-            image_hint = max(window.ii_image_card.sizeHint().height(), window.ii_image_card.minimumSizeHint().height())
-            self.assertGreater(image_hint, 0)
-            self.assertGreaterEqual(window.ii_image_card.minimumHeight(), image_hint)
-            self.assertGreaterEqual(window.insp_image.minimumHeight(), image_hint)
+            self.assertIn("inspector_group_image_settings_body", window._panel_collapse_controls)
+            self.assertEqual(window.ii_image_card.minimumHeight(), 0)
+            self.assertEqual(window.insp_image.minimumHeight(), 0)
             self.assertGreaterEqual(window.insp_card.maximumHeight(), window.insp_card.minimumSizeHint().height())
+            self._dispose_window(window)
+
+    def test_image_settings_uses_shared_collapsible_inspector_body(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action("[IMAGE]", 0.05, action_type="image", image_data=PNG_1X1)
+            window.action_model.set_actions([action])
+            window.select(0)
+
+            body, caret = window._panel_collapse_controls["inspector_group_image_settings_body"]
+            window._set_collapsible_panel("inspector_group_image_settings_body", True)
+            for _ in range(20):
+                self.app.processEvents()
+                if body.isHidden():
+                    break
+                QTest.qWait(20)
+
+            self.assertTrue(caret.property("collapsed"))
+            self.assertTrue(body.isHidden())
+            window._set_collapsible_panel("inspector_group_image_settings_body", False)
+            for _ in range(20):
+                self.app.processEvents()
+                if not body.isHidden():
+                    break
+                QTest.qWait(20)
+            self.assertFalse(caret.property("collapsed"))
+            self.assertFalse(body.isHidden())
             self._dispose_window(window)
 
     def test_condition_inspector_controls_are_compact_and_aligned(self):
@@ -755,6 +885,11 @@ class TestPlaybackVisibility(QtTestCase):
                 (window.sim_check, "sim checkbox"),
                 (window.human_check, "human checkbox"),
                 (window.focus_check, "focus checkbox"),
+                (window.lock_window_combo, "lock target selector"),
+                (window.lock_window_health, "lock target health"),
+                (window.lock_window_refresh_btn, "lock target refresh"),
+                (window.lock_window_pick_btn, "lock target picker"),
+                (window.playback_panel_lock_btn, "playback panel lock"),
                 (window.playback_feedback_frame, "playback status frame"),
                 (window.playback_feedback_icon, "playback status icon"),
                 (window.playback_feedback_label, "playback status label"),
@@ -767,6 +902,26 @@ class TestPlaybackVisibility(QtTestCase):
                 assert_visible(widget, name)
 
             self.assertGreaterEqual(window.start_btn.width(), 52)
+            self.assertEqual(window.human_check.text(), "Humanize")
+            self.assertEqual(window.focus_check.text(), "Window")
+            self.assertLess(
+                window.loops_spin.mapToGlobal(window.loops_spin.rect().topLeft()).x(),
+                window.speed_combo.mapToGlobal(window.speed_combo.rect().topLeft()).x(),
+            )
+            loops_bottom = window.loops_spin.mapToGlobal(window.loops_spin.rect().bottomLeft()).y()
+            speed_combo_right = window.speed_combo.mapToGlobal(window.speed_combo.rect().topRight()).x()
+            speed_slider_left = window.speed_slider.mapToGlobal(window.speed_slider.rect().topLeft()).x()
+            speed_bottom = window.speed_combo.mapToGlobal(window.speed_combo.rect().bottomLeft()).y()
+            target_top = window.lock_window_combo.mapToGlobal(window.lock_window_combo.rect().topLeft()).y()
+            target_bottom = window.lock_window_combo.mapToGlobal(window.lock_window_combo.rect().bottomLeft()).y()
+            modes_top = window.sim_check.mapToGlobal(window.sim_check.rect().topLeft()).y()
+            modes_bottom = window.focus_check.mapToGlobal(window.focus_check.rect().bottomLeft()).y()
+            progress_top = window.progress_bar.parentWidget().mapToGlobal(window.progress_bar.parentWidget().rect().topLeft()).y()
+            self.assertLessEqual(speed_combo_right, speed_slider_left)
+            self.assertLess(loops_bottom, modes_top)
+            self.assertLess(speed_bottom, target_top)
+            self.assertLess(target_bottom, progress_top)
+            self.assertLess(modes_bottom, progress_top)
             self.assertGreaterEqual(window.speed_combo.width(), 50)
             self.assertLessEqual(window.playback_feedback_frame.width(), 216)
             self.assertGreaterEqual(window.playback_feedback_frame.width(), 190)
@@ -1130,6 +1285,47 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertTrue(window._save_session_timer.isActive())
             self._dispose_window(window)
 
+    def test_condition_coordinate_capture_updates_selected_condition_only_on_command(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action("[CONDITION]", 0.0, action_type="condition")
+            action.condition_type = "pixel_color"
+            action.condition_x = 10
+            action.condition_y = 20
+            window.action_model.set_actions([action])
+            window.show()
+            self.app.processEvents()
+            window.select(0)
+
+            with patch("ui.main_window.QCursor.pos", return_value=QPoint(333, 444)):
+                window._update_click_xy_readout()
+                self.assertEqual((action.condition_x, action.condition_y), (10, 20))
+                self.assertIn("333, 444", window.ico_cursor_pos.text())
+                window._capture_condition_coordinates_from_cursor()
+
+            self.assertEqual((action.condition_x, action.condition_y), (333, 444))
+            self.assertEqual(window.ico_x.text(), "333")
+            self.assertEqual(window.ico_y.text(), "444")
+            self.assertTrue(window._save_session_timer.isActive())
+            self._dispose_window(window)
+
+    def test_coordinate_hotkey_dispatch_updates_condition_inspector(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            action = Action("[CONDITION]", 0.0, action_type="condition")
+            action.condition_type = "pixel_color"
+            window.action_model.set_actions([action])
+            window.show()
+            self.app.processEvents()
+            window.select(0)
+
+            with patch("ui.main_window.QCursor.pos", return_value=QPoint(555, 666)):
+                window._capture_active_coordinates_from_cursor()
+
+            self.assertEqual((action.condition_x, action.condition_y), (555, 666))
+            self.assertEqual((window.ico_x.text(), window.ico_y.text()), ("555", "666"))
+            self._dispose_window(window)
+
     def test_click_dialog_shows_hotkey_hint_without_auto_overwriting_fields(self):
         class Parent(QWidget):
             def _hotkey(self, name, default):
@@ -1151,6 +1347,43 @@ class TestPlaybackVisibility(QtTestCase):
         self.assertIn("Ctrl+Shift+M", dialog.hotkey_hint.text())
         dialog.deleteLater()
         parent.deleteLater()
+
+    def test_condition_dialog_shows_live_coords_and_hotkey_capture(self):
+        class Parent(QWidget):
+            def _hotkey(self, name, default):
+                return "Ctrl+Shift+M"
+
+        parent = Parent()
+        dialog = ConditionDialog(parent=parent)
+
+        dialog.x_spin.setValue(1)
+        dialog.y_spin.setValue(2)
+        with patch("ui.dialogs.condition_dialog.QCursor.pos", return_value=QPoint(30, 40)):
+            dialog._sync_cursor_xy()
+            self.assertEqual((dialog.x_spin.value(), dialog.y_spin.value()), (1, 2))
+            self.assertIn("30, 40", dialog.cursor_pos.text())
+            dialog._capture_cursor_xy()
+
+        self.assertEqual((dialog.x_spin.value(), dialog.y_spin.value()), (30, 40))
+        self.assertIn("Ctrl+Shift+M", dialog.hotkey_hint.text())
+        dialog.deleteLater()
+        parent.deleteLater()
+
+    def test_lock_to_window_dropdown_sets_engine_target(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            with patch.object(window, "_enumerate_target_windows", return_value=[(12345, "Target App · app.exe")]):
+                window.refresh_lock_windows()
+
+            self.assertEqual(window.lock_window_combo.count(), 2)
+            window.lock_window_combo.setCurrentIndex(1)
+            window.focus_check.setChecked(True)
+
+            self.assertEqual(window.engine._focus_hwnd, 12345)
+            self.assertIn("Target", window.lock_window_status.text())
+            self.assertEqual(window.lock_window_health.toolTip(), "Window target missing")
+            self.assertIn(COLORS["error"], window.lock_window_health.styleSheet())
+            self._dispose_window(window)
 
     def test_profile_switch_loads_actions_and_exact_speed_settings(self):
         with tempfile.TemporaryDirectory() as tmpdir:

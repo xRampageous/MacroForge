@@ -14,7 +14,7 @@ from ui.theme import COLORS, TYPE_COLORS
 from models import ActionListModel
 
 TIMELINE_PROGRESS_COLUMN_SHIFT = 20
-TIMELINE_MULTI_SELECT_RAIL_WIDTH = 4
+TIMELINE_MULTI_SELECT_RAIL_WIDTH = 6
 
 
 def _safe_float(value, default=0.0):
@@ -115,7 +115,7 @@ def _action_text(action):
     if kind == "condition":
         ctype = getattr(action, "condition_type", "none") or "none"
         if ctype == "pixel_color":
-            detail = f"{getattr(action, 'condition_x', 0)},{getattr(action, 'condition_y', 0)}"
+            detail = f"Pixel {getattr(action, 'condition_x', 0)},{getattr(action, 'condition_y', 0)}"
         elif ctype == "variable":
             detail = f"{getattr(action, 'condition_var_name', '') or 'variable'} = {getattr(action, 'condition_var_value', '') or 'value'}"
         else:
@@ -232,7 +232,11 @@ class TimelineDelegate(QStyledItemDelegate):
             linked_source = row == getattr(view, "link_source_row", -1)
             linked_target = row in getattr(view, "link_target_rows", set())
             search_query = str(getattr(view, "_search", "") or "").strip()
-            search_match = bool(search_query and hasattr(view, "_row_matches_search") and view._row_matches_search(row))
+            remembered_search_match = row in getattr(view, "_search_highlight_rows", set())
+            search_match = bool(
+                (search_query and hasattr(view, "_row_matches_search") and view._row_matches_search(row))
+                or remembered_search_match
+            )
             current_search_match = bool(search_match and row == getattr(view, "_search_current_row", -1))
             invalid_group_drop = bool(group_drop_target and not getattr(view, "drop_feedback_valid", False))
             progress = _clamp(view.action_progress(row) if hasattr(view, "action_progress") else 0.0)
@@ -266,7 +270,7 @@ class TimelineDelegate(QStyledItemDelegate):
             if hovered:
                 bg = _mix(bg, COLORS["bg_hover"], 0.5)
             if multi_selected and not playing:
-                bg = _mix(bg, COLORS.get("accent", type_color), 0.16)
+                bg = _mix(bg, COLORS.get("accent", type_color), 0.24)
             if selected and hovered:
                 bg = _mix(bg, type_color, 0.12)
             if queued or active_group:
@@ -282,7 +286,8 @@ class TimelineDelegate(QStyledItemDelegate):
             if linked_target and not playing:
                 bg = _mix(bg, COLORS.get("accent", type_color), 0.13)
             if search_match and not playing:
-                bg = _mix(bg, COLORS.get("accent", type_color), 0.10 if not current_search_match else 0.18)
+                strength = 0.07 if remembered_search_match and not search_query else 0.10
+                bg = _mix(bg, COLORS.get("accent", type_color), strength if not current_search_match else 0.18)
             if group_drop_target and kind == "group" and not playing and not invalid_group_drop:
                 bg = _mix(bg, COLORS.get("success", type_color), 0.18)
             if invalid_group_drop and kind == "group" and not playing:
@@ -303,7 +308,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 border = _mix(COLORS["border_light"], type_color, 0.55)
             if linked_target:
                 border = COLORS.get("accent", type_color)
-            if search_match:
+            if search_match and search_query:
                 border = COLORS.get("accent", type_color)
             if current_search_match:
                 border = COLORS.get("warning", COLORS.get("accent", type_color))
@@ -366,8 +371,8 @@ class TimelineDelegate(QStyledItemDelegate):
             if multi_selected:
                 painter.save()
                 rail_col = QColor(COLORS.get("accent", type_color))
-                rail_col.setAlpha(236 if selected else 205)
-                rail_x = outer.left() + (7 if compact else 9)
+                rail_col.setAlpha(255 if selected else 232)
+                rail_x = outer.left() + (6 if compact else 8)
                 rail_w = TIMELINE_MULTI_SELECT_RAIL_WIDTH
                 rail_top = outer.top() + (0 if multi_select.get("has_previous") else 7)
                 rail_bottom = outer.bottom() - (0 if multi_select.get("has_next") else 7)
@@ -376,7 +381,7 @@ class TimelineDelegate(QStyledItemDelegate):
                 painter.setBrush(rail_col)
                 painter.drawRoundedRect(rail, rail_w / 2, rail_w / 2)
 
-                node_r = 4.0 if compact else 4.5
+                node_r = 4.8 if compact else 5.4
                 node = QRectF(
                     rail_x + rail_w / 2 - node_r,
                     outer.center().y() - node_r,
@@ -390,8 +395,8 @@ class TimelineDelegate(QStyledItemDelegate):
 
                 if selected:
                     glow = QColor(COLORS.get("accent", type_color))
-                    glow.setAlpha(96)
-                    painter.setPen(QPen(glow, 1.4))
+                    glow.setAlpha(135)
+                    painter.setPen(QPen(glow, 1.8))
                     painter.setBrush(Qt.BrushStyle.NoBrush)
                     painter.drawRoundedRect(QRectF(outer).adjusted(1.5, 1.5, -1.5, -1.5), 7, 7)
                 painter.restore()
@@ -819,6 +824,7 @@ class TimelineView(QListView):
         self.zoom = 1.0
         self.selected_indices = set()
         self._selection_anchor_row = -1
+        self._modifier_click_row = -1
         self.playing_index = -1
         self.next_index = -1
         self.active_group_id = ""
@@ -827,6 +833,7 @@ class TimelineView(QListView):
         self._search = ""
         self._quick_filter = "all"
         self._search_current_row = -1
+        self._search_highlight_rows = set()
         self._drag_start_row = -1
         self._drag_allowed = False
         self.drag_source_row = -1
@@ -1072,7 +1079,11 @@ class TimelineView(QListView):
         if rows:
             active = rows[0] if active is None or int(active) not in rows else int(active)
             self._selection_anchor_row = int(active)
-            self.setCurrentIndex(self.model().index(active, 0))
+            active_idx = self.model().index(active, 0)
+            if sel is not None:
+                sel.setCurrentIndex(active_idx, QItemSelectionModel.SelectionFlag.NoUpdate)
+            else:
+                self.setCurrentIndex(active_idx)
         else:
             self._selection_anchor_row = -1
             self.setCurrentIndex(QModelIndex())
@@ -1231,6 +1242,9 @@ class TimelineView(QListView):
 
     def _on_clicked(self, index):
         if index.isValid():
+            if int(getattr(self, "_modifier_click_row", -1)) == index.row():
+                self._modifier_click_row = -1
+                return
             self.sync_selection()
             if not self.selected_indices:
                 self.selected_indices = {index.row()}
@@ -1277,6 +1291,7 @@ class TimelineView(QListView):
             self._selection_anchor_row = row
 
         self.set_selected_rows(rows, active=active if active >= 0 else None)
+        self._modifier_click_row = row
         if active >= 0:
             self.action_clicked.emit(active)
         else:
@@ -2037,6 +2052,8 @@ class TimelineView(QListView):
     def set_search(self, text: str):
         self._search = (text or "").strip().lower()
         rows = self.search_match_rows()
+        if self._search:
+            self._search_highlight_rows = set(rows)
         first = rows[0] if rows else -1
         self._search_current_row = first if self._search and first >= 0 else -1
         if first >= 0 and self._search:

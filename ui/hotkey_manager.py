@@ -44,6 +44,7 @@ class HotkeyManager:
         "paste": "Ctrl+V",
         "duplicate": "Ctrl+D",
         "delete": "Delete",
+        "delete_alt": "Ctrl+Delete",
         "select_all": "Ctrl+A",
         "group": "Ctrl+G",
         "ungroup": "Ctrl+Shift+G",
@@ -177,6 +178,7 @@ class HotkeyManager:
             key_sequence: New key sequence (e.g., "Ctrl+Shift+P")
         """
         self._hotkeys[name] = key_sequence
+        self.save_hotkeys()
         
         # Re-setup if already initialized
         if self._shortcuts:
@@ -248,14 +250,17 @@ class HotkeyManager:
 
 
 # Convenience factory function
-def create_hotkey_manager(window, settings_manager=None, 
-                       callbacks: Optional[Dict[str, Callable]] = None) -> HotkeyManager:
+def create_hotkey_manager(window, settings_manager=None,
+                       callbacks: Optional[Dict[str, Callable]] = None,
+                       enable_global: bool = False) -> HotkeyManager:
     """Create and configure a HotkeyManager.
     
     Args:
         window: Main window (QMainWindow)
         settings_manager: SettingsManager for persistence
         callbacks: Optional dict of {name: callback} to register
+        enable_global: Enable pynput-backed global hotkeys. Disabled by default
+            because global hooks can interfere with Qt modal dialogs.
     
     Returns:
         Configured HotkeyManager instance
@@ -268,7 +273,7 @@ def create_hotkey_manager(window, settings_manager=None,
     
     mgr.setup_shortcuts()
     
-    # Try to enable global hotkeys (may fail if pynput unavailable)
-    mgr.enable_global_hotkeys(True)
+    if enable_global:
+        mgr.enable_global_hotkeys(True)
     
     return mgr

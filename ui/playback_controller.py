@@ -70,6 +70,7 @@ class PlaybackController:
         """
         if not self.engine:
             logger.error("Cannot start: no engine set")
+            self._status("No engine set")
             return False
         
         if self.engine.running:

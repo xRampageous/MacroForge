@@ -31,6 +31,14 @@ from version import VERSION
 # from hotkeys import start_hotkeys, stop_hotkeys  # DISABLED — pynput causes Qt dialog crashes
 from debugger import logger, DebugViewer
 from ui.theme import build_stylesheet, COLORS
+from ui.hotkey_manager import HotkeyManager, create_hotkey_manager
+from ui.hotkey_settings import open_hotkey_settings
+from ui.toolbar_controller import ToolbarController, create_toolbar_controller
+from ui.inspector_controller import InspectorController, create_inspector_controller
+from ui.playback_controller import PlaybackController, create_playback_controller
+from ui.timeline_interactions import TimelineInteractions, create_timeline_interactions
+from ui.recording_overlay import show_recording_overlay, show_post_recording_dialog
+from action_presets import ActionPresetManager, get_preset_manager
 from ui.status_dot import StatusDot
 from ui.timeline import TimelineView
 from ui.icons import icon
@@ -175,6 +183,10 @@ class MainWindow(QMainWindow):
         self._action_menu = None
         self._profile_menu = None
 
+        # Setup unified hotkey manager FIRST (before _setup_shortcuts needs it)
+        self._hotkey_mgr = None
+        self._init_hotkey_manager()
+
         self._build_ui()
         try:
             QApplication.instance().installEventFilter(self)
@@ -189,7 +201,33 @@ class MainWindow(QMainWindow):
             self.focus_check.toggled.connect(self._on_focus_lock_toggled)
         except Exception:
             pass
+        try:
+            self.lock_window_combo.currentIndexChanged.connect(self._on_lock_window_changed)
+        except Exception:
+            pass
         # self._setup_hotkeys()  # DISABLED — pynput global hooks interfere with Qt modal dialogs
+
+        # Setup new controllers
+        self._toolbar_ctrl = create_toolbar_controller(self)
+        self._inspector_ctrl = create_inspector_controller(self)
+        self._playback_ctrl = create_playback_controller(self)
+        self._timeline_ctrl = create_timeline_interactions(self)
+        self._preset_mgr = get_preset_manager()
+
+        # Wire up controller callbacks
+        self._playback_ctrl.set_engine(self.engine)
+        self._playback_ctrl.set_callbacks(
+            feedback_cb=self.playback_feedback,
+            status_cb=self.status
+        )
+        self._timeline_ctrl.set_timeline(self.timeline)
+        self._timeline_ctrl.set_action_model(self.action_model)
+        self._timeline_ctrl.set_callbacks(
+            on_selection_changed=self._on_timeline_selection_changed,
+            on_row_moved=self._on_rows_moved,
+            on_show_context_menu=self._show_timeline_context_menu
+        )
+
         self._setup_tray()
 
         # Wire update-check signals for thread-safe UI callbacks
@@ -339,6 +377,7 @@ class MainWindow(QMainWindow):
         self._update_toolbar_containment()
         self._autosize_inspector_panel()
         self._apply_panel_size_locks()
+        self._update_timeline_bottom_safe_margin()
 
     def _toolbar_profile_text(self):
         """Return profile button text for the current toolbar width mode."""
@@ -567,33 +606,12 @@ class MainWindow(QMainWindow):
                     ctl = controls.get(body_name)
                     return bool(ctl and ctl[1] and ctl[1].property("collapsed"))
 
-                # Active image rows must keep Image Settings fully drawn.  Under
-                # height pressure, collapse the less important side-panel cards
-                # first instead of folding the selected image editor.
-                try:
-                    active_kind = ""
-                    if 0 <= int(getattr(self, "active_index", -1)) < self.action_model.rowCount():
-                        active_kind = getattr(self.action_model.get(self.active_index), "action_type", "") or ""
-                    image_settings_visible = bool(
-                        getattr(self, "insp_image", None) is not None
-                        and not self.insp_image.isHidden()
-                        and active_kind == "image"
-                        and "inspector_group_image_settings_body" in controls
-                    )
-                except Exception:
-                    image_settings_visible = False
-                if image_settings_visible:
-                    collapse_steps = [
-                        ("recorder_body", True),
-                        ("add_action_body", True),
-                    ]
-                else:
-                    collapse_steps = [
-                        ("inspector_group_image_settings_body", False),
-                        ("inspector_body", True),
-                        ("recorder_body", True),
-                        ("add_action_body", True),
-                    ]
+                collapse_steps = [
+                    ("inspector_group_image_settings_body", True),
+                    ("inspector_body", True),
+                    ("recorder_body", True),
+                    ("add_action_body", True),
+                ]
                 active_steps = [step for step in collapse_steps if bool(step[1])]
 
                 restore_margin = max(0, int(getattr(self, "_side_panel_bottom_restore_margin", 32)))
@@ -714,6 +732,7 @@ class MainWindow(QMainWindow):
                 if (
                     height <= int(getattr(self, "_height_auto_playback_collapse", 1100))
                     and not bool(getattr(self, "_playback_collapsed", False))
+                    and not bool(getattr(self, "_playback_panel_locked", False))
                 ):
                     self._set_playback_collapsed(True, auto=True)
                 elif (
@@ -811,6 +830,29 @@ class MainWindow(QMainWindow):
         )
         self.status("Fixed window height enabled" if locked else "Fixed window height disabled")
         self._apply_panel_size_locks()
+
+    def _set_playback_panel_lock_button_state(self):
+        btn = getattr(self, "playback_panel_lock_btn", None)
+        if btn is None:
+            return
+        locked = bool(getattr(self, "_playback_panel_locked", False))
+        C = COLORS
+        color = C["accent"] if locked else C["text_dim"]
+        btn.setIcon(icon("lock", 15, color))
+        btn.setToolTip("Playback panel locked expanded" if locked else "Keep playback panel expanded")
+        btn.setStyleSheet(
+            f"QPushButton#playback_panel_lock_btn {{ color: {color}; background-color: {C['bg_tertiary']}; "
+            f"border: 1px solid {C['accent'] if locked else C['border']}; border-radius: 9px; padding: 0; }}"
+            f"QPushButton#playback_panel_lock_btn:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
+        )
+
+    def _toggle_playback_panel_lock(self):
+        locked = not bool(getattr(self, "_playback_panel_locked", False))
+        self._playback_panel_locked = locked
+        if locked and bool(getattr(self, "_playback_collapsed", False)):
+            self._set_playback_collapsed(False)
+        self._set_playback_panel_lock_button_state()
+        self.status("Playback panel locked open" if locked else "Playback panel can collapse")
 
     def _preferred_panel_lock_height(self):
         """Fixed window height while locked, following the current side-panel size.
@@ -1653,7 +1695,8 @@ class MainWindow(QMainWindow):
                 "ii_sim", "ii_sim_slider", "ii_wait", "ii_retry_count", "ii_retry_delay", "ii_fail_mode", "ii_fail_target",
                 "ig_name", "ig_collapsed", "ig_recovery",
                 "il_label", "il_count", "il_target",
-                "ico_label", "ico_type", "ico_true", "ico_false", "ico_retry_count", "ico_retry_delay", "ico_fail_mode", "ico_fail_target",
+                "ico_label", "ico_type", "ico_x", "ico_y", "ico_color",
+                "ico_true", "ico_false", "ico_retry_count", "ico_retry_delay", "ico_fail_mode", "ico_fail_target",
             )
         ]
         for widget in widgets:
@@ -1699,54 +1742,59 @@ class MainWindow(QMainWindow):
         except Exception:
             return default
 
+    def _init_hotkey_manager(self):
+        """Initialize the unified hotkey manager with all callbacks."""
+        callbacks = {
+            "undo": self.undo,
+            "redo": self.redo,
+            "copy": self.copy_action,
+            "paste": self.paste_action,
+            "duplicate": self._duplicate_inspector,
+            "delete": self._delete_selected,
+            "delete_alt": self._delete_selected,
+            "select_all": self._select_all_actions,
+            "group": lambda: self.create_group_from_rows(),
+            "ungroup": self._ungroup_selected,
+            "play_pause": self._toggle_play_pause_shortcut,
+            "stop_deselect": self._stop_or_deselect,
+            "save": lambda: (self._do_save_session(), self.status("Session saved")),
+            "search": lambda: (self._show_timeline_search_popup() if hasattr(self, "_show_timeline_search_popup") else self.tl_search.setFocus()),
+            "run_from_selected": self.test_from_selected_row,
+            "macro_editor": self.open_macro_editor,
+            "record": self._toggle_record,
+            "preflight": self.open_preflight_report,
+            "toggle_runtime_log": self.toggle_runtime_log_panel,
+            "variables": self.open_variables_dialog,
+            "profile_library": self.open_profile_library,
+            "set_click_coordinates": self._capture_active_coordinates_from_cursor,
+            "reset_timeline_zoom": self.reset_timeline_zoom,
+        }
+        self._hotkey_mgr = create_hotkey_manager(self, self.settings_manager, callbacks)
+        logger.info("Hotkey manager initialized")
+
     def _setup_shortcuts(self):
-        # Keep shortcut objects alive and make them reloadable from Settings.
-        for sc in getattr(self, "_shortcuts", []):
-            try:
-                sc.setEnabled(False)
-                sc.setParent(None)
-            except Exception:
-                pass
-        self._shortcuts = []
+        """Set up keyboard shortcuts via hotkey manager.
 
-        def bind(name, default, slot):
-            seq = self._hotkey(name, default)
-            if not seq:
-                return
-            try:
-                shortcut = QShortcut(QKeySequence(seq), self)
-                shortcut.activated.connect(slot)
-                self._shortcuts.append(shortcut)
-            except Exception as exc:
-                logger.debug(f"Shortcut bind failed for {name}={seq}: {exc}")
-
-        bind("undo", "Ctrl+Z", self.undo)
-        bind("redo", "Ctrl+Y", self.redo)
-        bind("copy", "Ctrl+C", self.copy_action)
-        bind("paste", "Ctrl+V", self.paste_action)
-        bind("duplicate", "Ctrl+D", self._duplicate_inspector)
-        bind("delete", "Delete", self._delete_selected)
-        bind("delete_alt", "Ctrl+Delete", self._delete_selected)
-        bind("select_all", "Ctrl+A", self._select_all_actions)
-        bind("group", "Ctrl+G", lambda: self.create_group_from_rows())
-        bind("ungroup", "Ctrl+Shift+G", self._ungroup_selected)
-        bind("play_pause", "Space", self._toggle_play_pause_shortcut)
-        bind("stop_deselect", "Escape", self._stop_or_deselect)
-        bind("save", "Ctrl+S", lambda: (self._do_save_session(), self.status("Session saved")))
-        bind("search", "Ctrl+F", lambda: (self._show_timeline_search_popup() if hasattr(self, "_show_timeline_search_popup") else self.tl_search.setFocus()))
-        bind("run_from_selected", "Ctrl+Enter", self.test_from_selected_row)
-        bind("macro_editor", "Ctrl+E", self.open_macro_editor)
-        bind("record", "F7", self._toggle_record)
-        bind("preflight", "Ctrl+Shift+P", self.open_preflight_report)
-        bind("toggle_runtime_log", "Ctrl+Shift+L", self.toggle_runtime_log_panel)
-        bind("variables", "Ctrl+Alt+V", self.open_variables_dialog)
-        bind("profile_library", "Ctrl+Alt+P", self.open_profile_library)
-        bind("set_click_coordinates", "Ctrl+Shift+M", self._capture_click_coordinates_from_cursor)
-        bind("reset_timeline_zoom", "Ctrl+0", self.reset_timeline_zoom)
+        Note: This is now handled by _init_hotkey_manager.
+        Kept for backward compatibility with external callers.
+        """
+        if self._hotkey_mgr:
+            self._hotkey_mgr.setup_shortcuts()
 
     def reload_shortcuts(self):
-        self._setup_shortcuts()
-        self.status("Hotkeys updated")
+        """Reload hotkeys from settings."""
+        if self._hotkey_mgr:
+            self._hotkey_mgr.reload()
+            self.status("Hotkeys updated")
+
+    def open_hotkey_settings_dialog(self):
+        """Open the hotkey configuration dialog."""
+        def on_hotkeys_changed(hotkeys):
+            if self._hotkey_mgr:
+                self._hotkey_mgr.update_hotkeys(hotkeys)
+                self.status("Hotkeys updated")
+
+        open_hotkey_settings(self, self.settings_manager, on_hotkeys_changed)
 
     def _deselect(self):
         self.select(-1)
@@ -1834,6 +1882,27 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    # ═══════════════════════════════════════════════════════
+    #  TIMELINE CONTROLLER CALLBACKS
+    # ═══════════════════════════════════════════════════════
+
+    def _on_timeline_selection_changed(self, rows, active_row):
+        """Handle timeline selection change from controller."""
+        if active_row >= 0:
+            self.select(active_row)
+        self.timeline.refresh()
+
+    def _on_rows_moved(self, rows, to_row):
+        """Handle row drag/drop from controller."""
+        if len(rows) == 1:
+            self.move_action_to(rows[0], to_row)
+        else:
+            self.move_actions_to(rows, to_row)
+
+    def _show_timeline_context_menu(self, row, global_pos):
+        """Show timeline context menu from controller."""
+        self._timeline_context_menu(row, global_pos)
+
     def reset_timeline_zoom(self):
         try:
             if hasattr(self.timeline, "set_zoom"):
@@ -1850,8 +1919,52 @@ class MainWindow(QMainWindow):
             count = len(rows or [])
         except Exception:
             count = 0
+        self._update_selection_chip(rows or [])
         if count > 1:
             self.status(f"{count} actions selected")
+
+    def _update_selection_chip(self, rows=None):
+        try:
+            rows = sorted({int(r) for r in (rows if rows is not None else self._selected_rows()) if 0 <= int(r) < self.action_model.rowCount()})
+            count = len(rows)
+            chip = getattr(self, "selection_chip", None)
+            if chip is None:
+                return
+            chip.setVisible(count > 1)
+            if hasattr(self, "selection_count_label"):
+                self.selection_count_label.setText(f"{count} selected")
+            if hasattr(self, "selection_run_btn"):
+                self.selection_run_btn.setEnabled(count > 0 and not self.engine.running)
+            if hasattr(self, "selection_disable_btn"):
+                self.selection_disable_btn.setEnabled(count > 0)
+            self._update_toolbar_containment()
+        except Exception:
+            pass
+
+    def _run_selected_rows_from_chip(self):
+        self.run_selected_actions(self._selected_rows(self.active_index))
+
+    def disable_selected_actions(self):
+        rows = self._selected_rows(self.active_index)
+        if not rows:
+            self.status("No selected actions to disable")
+            return
+        self.history.push(self.action_model.actions(), self._timeline_history_state())
+        actions = self.action_model.actions()
+        changed = 0
+        for row in rows:
+            if 0 <= row < len(actions) and bool(getattr(actions[row], "enabled", True)):
+                actions[row].enabled = False
+                changed += 1
+        self.refresh()
+        try:
+            self.timeline.set_selected_rows(rows, active=self.active_index if self.active_index in rows else rows[0])
+        except Exception:
+            self.timeline.selected_indices = set(rows)
+        self.update_statistics()
+        self.save_session()
+        self._update_selection_chip(rows)
+        self.status(f"Disabled {changed} selected row(s)" if changed else "Selected rows already disabled")
 
     def _expand_rows_for_group_blocks(self, rows):
         """Expand selected folder headers into their contiguous folder blocks."""
@@ -2573,6 +2686,59 @@ class MainWindow(QMainWindow):
             return full_text
         return full_text[:max(0, limit - 1)].rstrip() + "…"
 
+    def _status_pill_state(self, text):
+        msg = str(text or "").lower()
+        C = COLORS
+        if "record" in msg:
+            return "recording", "record", C["error"], True
+        if "error" in msg or "failed" in msg or "blocked" in msg:
+            return "error", "cross", C["error"], True
+        if "warning" in msg or "warn" in msg:
+            return "warning", "pause", C["warning"], False
+        if "playing" in msg or "running" in msg:
+            return "running", "play", C["playing"], True
+        if "paused" in msg:
+            return "paused", "pause", C["warning"], False
+        if any(word in msg for word in ("saved", "imported", "applied", "recovered", "loaded", "updated")):
+            return "saved", "save", C["accent"], False
+        if "ready" in msg or "idle" in msg or not msg:
+            return "ready", "check", C["success"], False
+        return "info", "bolt", C["accent"], False
+
+    def _apply_status_pill_state(self, text):
+        try:
+            state, icon_name, color, glow = self._status_pill_state(text)
+            pill = getattr(self, "status_pill", None)
+            status_text = getattr(self, "status_text", None)
+            status_icon = getattr(self, "status_icon", None)
+            if status_icon is not None:
+                status_icon.setPixmap(icon(icon_name, 16, color).pixmap(16, 16))
+                status_icon.setVisible(True)
+                status_icon.setStyleSheet(
+                    f"QLabel {{ background-color: {COLORS['bg_secondary']}; "
+                    f"border: 1px solid {color}; border-radius: 6px; padding: 1px; }}"
+                )
+            if status_text is not None:
+                status_text.setStyleSheet(
+                    f"QLabel#status_text {{ background: transparent; border: none; color: {color}; "
+                    "font-size: 11px; font-weight: 900; }}"
+                )
+            if pill is not None:
+                pill.setProperty("status_state", state)
+                pill.setStyleSheet(
+                    f"QFrame#status_pill {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+                    f"stop:0 {COLORS['accent_glow'] if glow else COLORS['bg_secondary']}, "
+                    f"stop:0.62 {COLORS['bg_tertiary']}, stop:1 #020A13); "
+                    f"border: 1px solid {color}; border-radius: 12px; }}"
+                    "QFrame#status_pill QLabel { background: transparent; }"
+                    "QFrame#status_pill QWidget { background: transparent; border: none; }"
+                )
+                pill.style().unpolish(pill)
+                pill.style().polish(pill)
+            self.status_dot.set_color(color, glow=glow)
+        except Exception:
+            pass
+
     def _setup_click_xy_tracker(self):
         self._click_xy_timer = QTimer(self)
         self._click_xy_timer.setInterval(120)
@@ -2581,20 +2747,32 @@ class MainWindow(QMainWindow):
 
     def _update_click_xy_readout(self):
         try:
-            label = getattr(self, "ic_cursor_pos", None)
-            if label is None:
+            click_label = getattr(self, "ic_cursor_pos", None)
+            condition_label = getattr(self, "ico_cursor_pos", None)
+            if click_label is None and condition_label is None:
                 return
+            pos = QCursor.pos()
+            mouse_text = f"Mouse: {int(pos.x())}, {int(pos.y())}"
             if (
                 self.active_index < 0
                 or self.active_index >= self.action_model.rowCount()
-                or getattr(self.action_model.get(self.active_index), "action_type", "") != "click"
-                or not getattr(self, "insp_click", None)
-                or not self.insp_click.isVisible()
             ):
-                label.setText("Mouse: -")
+                if click_label is not None:
+                    click_label.setText("Mouse: -")
+                if condition_label is not None:
+                    condition_label.setText("Mouse: -")
                 return
-            pos = QCursor.pos()
-            label.setText(f"Mouse: {int(pos.x())}, {int(pos.y())}")
+            action_type = getattr(self.action_model.get(self.active_index), "action_type", "")
+            if click_label is not None:
+                if action_type == "click" and getattr(self, "insp_click", None) and self.insp_click.isVisible():
+                    click_label.setText(mouse_text)
+                else:
+                    click_label.setText("Mouse: -")
+            if condition_label is not None:
+                if action_type == "condition" and getattr(self, "insp_condition", None) and self.insp_condition.isVisible():
+                    condition_label.setText(mouse_text)
+                else:
+                    condition_label.setText("Mouse: -")
         except Exception:
             pass
 
@@ -2611,6 +2789,12 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _set_condition_field_invalid(self, field, invalid):
+        try:
+            field.setStyleSheet(self._click_field_invalid_style() if invalid else "")
+        except Exception:
+            pass
+
     def _validate_click_xy_fields(self):
         valid = True
         for field in (getattr(self, "ic_x", None), getattr(self, "ic_y", None)):
@@ -2622,6 +2806,20 @@ class MainWindow(QMainWindow):
                 self._set_click_field_invalid(field, False)
             except (TypeError, ValueError):
                 self._set_click_field_invalid(field, True)
+                valid = False
+        return valid
+
+    def _validate_condition_xy_fields(self):
+        valid = True
+        for field in (getattr(self, "ico_x", None), getattr(self, "ico_y", None)):
+            if field is None:
+                valid = False
+                continue
+            try:
+                int(str(field.text()).strip())
+                self._set_condition_field_invalid(field, False)
+            except (TypeError, ValueError):
+                self._set_condition_field_invalid(field, True)
                 valid = False
         return valid
 
@@ -2653,6 +2851,51 @@ class MainWindow(QMainWindow):
             self.save_session()
             self._update_click_xy_readout()
             self.status(f"Click coordinates set to {x}, {y}")
+        except Exception:
+            pass
+
+    def _capture_condition_coordinates_from_cursor(self):
+        try:
+            if (
+                self.active_index < 0
+                or self.active_index >= self.action_model.rowCount()
+                or getattr(self.action_model.get(self.active_index), "action_type", "") != "condition"
+                or not getattr(self, "insp_condition", None)
+                or not self.insp_condition.isVisible()
+            ):
+                self.status("Select a condition action to set X/Y")
+                return
+            action = self.action_model.get(self.active_index)
+            pos = QCursor.pos()
+            x, y = int(pos.x()), int(pos.y())
+            for field, value in ((self.ico_x, str(x)), (self.ico_y, str(y))):
+                field.blockSignals(True)
+                field.setText(value)
+                field.blockSignals(False)
+                self._set_condition_field_invalid(field, False)
+            action.condition_x = x
+            action.condition_y = y
+            idx = self.action_model.index(self.active_index, 0)
+            self.action_model.dataChanged.emit(idx, idx)
+            self.timeline.viewport().update()
+            self.save_session()
+            self._update_click_xy_readout()
+            self.status(f"Condition coordinates set to {x}, {y}")
+        except Exception:
+            pass
+
+    def _capture_active_coordinates_from_cursor(self):
+        try:
+            if self.active_index < 0 or self.active_index >= self.action_model.rowCount():
+                self.status("Select a click or condition action to set X/Y")
+                return
+            action_type = getattr(self.action_model.get(self.active_index), "action_type", "")
+            if action_type == "click":
+                self._capture_click_coordinates_from_cursor()
+            elif action_type == "condition":
+                self._capture_condition_coordinates_from_cursor()
+            else:
+                self.status("Select a click or condition action to set X/Y")
         except Exception:
             pass
 
@@ -2780,6 +3023,12 @@ class MainWindow(QMainWindow):
                     self.ico_retry_delay.setText(str(getattr(action, "retry_delay", 0.25)))
                     self.ico_fail_mode.setCurrentText(getattr(action, "on_fail_action", "default") or "default")
                     self._populate_target_combo(self.ico_fail_target, int(getattr(action, "on_fail_target", -1) or -1), include_next=True)
+                if hasattr(self, "ico_x"):
+                    self.ico_x.setText(str(getattr(action, "condition_x", 0)))
+                    self.ico_y.setText(str(getattr(action, "condition_y", 0)))
+                    self.ico_color.setText(str(getattr(action, "condition_color", "") or ""))
+                    self._validate_condition_xy_fields()
+                    self._update_click_xy_readout()
                 ctype = getattr(action, "condition_type", "none") or "none"
                 if ctype == "pixel_color":
                     self.ico_rule.setText(f"Pixel @ {getattr(action, 'condition_x', 0)}, {getattr(action, 'condition_y', 0)} = {getattr(action, 'condition_color', '') or 'color'}")
@@ -2876,6 +3125,14 @@ class MainWindow(QMainWindow):
             elif action.action_type == "condition":
                 action.label = inspector_label_text
                 action.condition_type = self.ico_type.currentText()
+                if hasattr(self, "ico_x"):
+                    if not self._validate_condition_xy_fields():
+                        if not autosave:
+                            QMessageBox.critical(self, "Invalid Input", "Condition X and Y must be whole numbers.")
+                        return
+                    action.condition_x = int(self.ico_x.text())
+                    action.condition_y = int(self.ico_y.text())
+                    action.condition_color = self.ico_color.text().strip()
                 action.condition_jump_true = int(self.ico_true.currentData() if self.ico_true.currentData() is not None else -1)
                 action.condition_jump_false = int(self.ico_false.currentData() if self.ico_false.currentData() is not None else -1)
                 if hasattr(self, "ico_retry_count"):
@@ -3414,13 +3671,15 @@ class MainWindow(QMainWindow):
             lines.append("Ready to run — no validation issues found.")
         return "\n".join(lines)
 
-    def run_preflight_check(self, show_success=True, allow_warning_prompt=True, auto_fix=True):
+    def run_preflight_check(self, show_success=True, allow_warning_prompt=True, auto_fix=True, actions=None, row_labels=None):
         """Validate the visible timeline before playback.
 
         Returns True when playback may continue. Errors block playback;
         warnings are shown but can be continued through.
         """
-        actions = self.action_model.actions()
+        using_override = actions is not None
+        actions = list(actions) if using_override else self.action_model.actions()
+        row_labels = list(row_labels or [])
         errors = []
         warnings = []
         total = len(actions)
@@ -3428,6 +3687,8 @@ class MainWindow(QMainWindow):
 
         def begin_autofix():
             nonlocal autofix_started
+            if using_override:
+                return
             if not autofix_started:
                 self.history.push(self.action_model.actions(), self._timeline_history_state())
                 autofix_started = True
@@ -3438,7 +3699,8 @@ class MainWindow(QMainWindow):
             errors.append("Timeline has no enabled runnable actions. Folder and loop controller rows are skipped during playback.")
 
         for idx, action in enumerate(actions, start=1):
-            prefix = f"Row {idx}"
+            label = row_labels[idx - 1] if idx - 1 < len(row_labels) else idx
+            prefix = f"Row {label}"
             try:
                 duration = float(getattr(action, "duration", 0.0) or 0.0)
             except (TypeError, ValueError):
@@ -3575,14 +3837,16 @@ class MainWindow(QMainWindow):
             else:
                 warnings.append(f"{prefix}: unknown action type '{kind}' — engine may skip or treat it as a key.")
 
-        if autofix_started:
+        if autofix_started and not using_override:
             self.refresh()
             self.save_session()
 
         if self.sim_check.isChecked():
             warnings.append("Simulation mode is enabled; actions will animate/log but not deploy to Windows.")
-        if self.focus_check.isChecked() and not getattr(self.engine, "_focus_hwnd", None):
-            warnings.append("Focus lock is enabled but no target window is currently captured.")
+        if self.focus_check.isChecked():
+            self.engine.set_focus_window(self._selected_focus_hwnd())
+            if not self.engine.focus_window_valid():
+                errors.append("Lock to window is enabled but no valid target window is selected.")
 
         self._last_preflight = {"errors": errors, "warnings": warnings}
         self._diag(f"[CHECK] Pre-flight complete: {len(errors)} error(s), {len(warnings)} warning(s)")
@@ -3971,6 +4235,44 @@ class MainWindow(QMainWindow):
             self.runtime_log_edit.clear()
         self.status("Runtime log cleared")
 
+    def _selected_playback_actions(self, rows):
+        """Return selected actions with internal row references remapped.
+
+        Selected-row playback runs a temporary action list, so original timeline
+        row numbers cannot be used directly for jumps, loops, or smart-fail
+        targets. Targets that stay inside the selection are remapped to the
+        temporary block; targets outside the selection are reported as errors.
+        """
+        source_rows = sorted(r for r in set(rows or []) if 0 <= r < self.action_model.rowCount())
+        row_map = {row: index for index, row in enumerate(source_rows)}
+        actions = [deepcopy(self.action_model.get(row)) for row in source_rows]
+        errors = []
+
+        def remap_target(action, attr, label, source_row):
+            try:
+                target = int(getattr(action, attr, -1) or -1)
+            except (TypeError, ValueError):
+                setattr(action, attr, -1)
+                return
+            if target < 0:
+                return
+            if target in row_map:
+                setattr(action, attr, row_map[target])
+                return
+            errors.append(f"Row {source_row + 1}: {label} target row {target + 1} is outside the selected block.")
+
+        for source_row, action in zip(source_rows, actions):
+            remap_target(action, "loop_target", "loop", source_row)
+            remap_target(action, "jump_to_on_found", "image found jump", source_row)
+            remap_target(action, "jump_to_on_not_found", "image not-found jump", source_row)
+            remap_target(action, "condition_jump_true", "condition true jump", source_row)
+            remap_target(action, "condition_jump_false", "condition false jump", source_row)
+            mode = (getattr(action, "on_fail_action", "default") or "default").lower()
+            if mode in {"jump", "recovery_group"}:
+                remap_target(action, "on_fail_target", "smart-fail", source_row)
+
+        return actions, source_rows, errors
+
     def run_selected_actions(self, rows):
         if self.engine.running:
             self.status("Stop playback before running selected block")
@@ -3979,14 +4281,24 @@ class MainWindow(QMainWindow):
         if not rows:
             self.status("No selected actions to run")
             return
+        selected_actions, source_rows, selection_errors = self._selected_playback_actions(rows)
+        if selection_errors:
+            QMessageBox.critical(self, "MacroForge selected run", self._format_preflight_report(selection_errors, []))
+            self.status(f"Selected run blocked: {len(selection_errors)} reference error(s)")
+            return
         self._single_test_active = False
         self._single_test_index = -1
         self._run_from_index = 0
-        self._run_index_map = rows
-        self.engine.actions = [deepcopy(self.action_model.get(r)) for r in rows]
+        self._run_index_map = source_rows
+        self.engine.actions = selected_actions
         self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
-        # Validate the whole macro first so references are still caught.
-        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
+        if not self.run_preflight_check(
+            show_success=False,
+            allow_warning_prompt=True,
+            auto_fix=False,
+            actions=selected_actions,
+            row_labels=[row + 1 for row in source_rows],
+        ):
             self._run_index_map = []
             return
         self.actions_played = 0
@@ -4001,7 +4313,7 @@ class MainWindow(QMainWindow):
         self.status_dot.set_color(COLORS["playing"], glow=True)
         self.playback_feedback("Running selected block")
         self._sync_playback_options(infinite=False, loops=1, capture_focus=True)
-        self._diag(f"[PLAY] Running selected block: rows {', '.join(str(r + 1) for r in rows)}")
+        self._diag(f"[PLAY] Running selected block: rows {', '.join(str(r + 1) for r in source_rows)}")
         self.engine.start()
 
     def scale_actions_to_current_screen(self):
@@ -4227,14 +4539,199 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_label.setText("0%")
 
+    def _own_window_handles(self):
+        handles = set()
+        try:
+            handles.add(int(self.winId()))
+        except Exception:
+            pass
+        try:
+            for widget in QApplication.topLevelWidgets():
+                try:
+                    handles.add(int(widget.winId()))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return {hwnd for hwnd in handles if hwnd}
+
+    def _window_process_name(self, hwnd):
+        return ""
+
+    def _target_window_title(self, hwnd):
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = int(hwnd or 0)
+            if not hwnd or not user32.IsWindow(hwnd):
+                return ""
+            length = max(1, int(user32.GetWindowTextLengthW(hwnd)))
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            return str(buf.value or "").strip()
+        except Exception:
+            return ""
+
+    def _target_window_valid(self, hwnd):
+        try:
+            hwnd = int(hwnd or 0)
+            return bool(hwnd and ctypes.windll.user32.IsWindow(hwnd))
+        except Exception:
+            return bool(hwnd)
+
+    def _format_target_window_label(self, hwnd, title=None):
+        title = (title if title is not None else self._target_window_title(hwnd)).strip()
+        proc = self._window_process_name(hwnd)
+        if proc and title:
+            return f"{title} · {proc}"
+        return title or proc or f"Window {int(hwnd)}"
+
+    def _enumerate_target_windows(self):
+        try:
+            user32 = ctypes.windll.user32
+        except Exception:
+            return []
+        own_handles = self._own_window_handles()
+        windows = []
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        def _enum_proc(hwnd, _lparam):
+            try:
+                hwnd = int(hwnd or 0)
+                if not hwnd or hwnd in own_handles:
+                    return True
+                if not user32.IsWindowVisible(hwnd):
+                    return True
+                length = int(user32.GetWindowTextLengthW(hwnd))
+                if length <= 0:
+                    return True
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                title = str(buf.value or "").strip()
+                if not title or title == self.windowTitle():
+                    return True
+                windows.append((hwnd, self._format_target_window_label(hwnd, title)))
+            except Exception:
+                pass
+            return True
+
+        try:
+            user32.EnumWindows(_enum_proc, 0)
+        except Exception:
+            return []
+        deduped = {}
+        for hwnd, label in windows:
+            deduped.setdefault(hwnd, label)
+        return sorted(deduped.items(), key=lambda item: item[1].lower())
+
+    def _selected_focus_hwnd(self):
+        combo = getattr(self, "lock_window_combo", None)
+        if combo is None:
+            return 0
+        try:
+            return int(combo.currentData() or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _set_lock_window_status(self, text=None):
+        label = getattr(self, "lock_window_status", None)
+        combo = getattr(self, "lock_window_combo", None)
+        health = getattr(self, "lock_window_health", None)
+        if label is None and combo is None:
+            return
+        hwnd = self._selected_focus_hwnd()
+        enabled = bool(getattr(self, "focus_check", None) and self.focus_check.isChecked())
+        valid = bool(hwnd and self._target_window_valid(hwnd))
+        if text is None:
+            if hwnd and valid:
+                text = f"Target: {self._target_window_title(hwnd) or 'selected window'}"
+            elif hwnd:
+                text = "Target window is unavailable"
+            else:
+                text = "No target window"
+        if label is not None:
+            label.setText(self._status_pill_display_text(text, 42))
+            label.setToolTip(text)
+        if combo is not None:
+            combo.setToolTip(text)
+        if health is not None:
+            C = COLORS
+            if enabled and valid:
+                color = C["success"]
+                tip = "Window target ready"
+            elif enabled:
+                color = C["error"]
+                tip = "Window target missing"
+            elif valid:
+                color = C["pause_cyan"]
+                tip = "Window target selected"
+            else:
+                color = C["text_dark"]
+                tip = "Window target not selected"
+            health.setToolTip(tip)
+            health.setStyleSheet(
+                f"QLabel#lock_window_health {{ background-color: {color}; "
+                f"border: 1px solid {color}; border-radius: 5px; }}"
+            )
+
+    def refresh_lock_windows(self, select_hwnd=None):
+        combo = getattr(self, "lock_window_combo", None)
+        if combo is None:
+            return
+        try:
+            current = int(select_hwnd or combo.currentData() or 0)
+        except (TypeError, ValueError):
+            current = 0
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Choose target window", 0)
+        picked_index = 0
+        for hwnd, label in self._enumerate_target_windows():
+            combo.addItem(label, int(hwnd))
+            if int(hwnd) == current:
+                picked_index = combo.count() - 1
+        combo.setCurrentIndex(picked_index)
+        combo.blockSignals(False)
+        self._on_lock_window_changed(combo.currentIndex())
+
+    def _on_lock_window_changed(self, _index=0):
+        hwnd = self._selected_focus_hwnd()
+        if bool(getattr(self, "focus_check", None) and self.focus_check.isChecked()):
+            try:
+                self.engine.set_focus_window(hwnd)
+            except Exception:
+                pass
+        self._set_lock_window_status()
+
+    def _capture_foreground_lock_window(self):
+        try:
+            self.status("Switch to the target window now...")
+
+            def _capture():
+                try:
+                    hwnd = int(ctypes.windll.user32.GetForegroundWindow() or 0)
+                except Exception:
+                    hwnd = 0
+                if not hwnd or hwnd in self._own_window_handles():
+                    self.status("No external foreground window captured")
+                    self._set_lock_window_status()
+                    return
+                self.refresh_lock_windows(select_hwnd=hwnd)
+                if getattr(self, "focus_check", None) is not None:
+                    self.focus_check.setChecked(True)
+                self.status("Lock to window target selected")
+
+            QTimer.singleShot(900, _capture)
+        except Exception:
+            pass
+
     def _sync_playback_options(self, *, infinite=None, loops=None, capture_focus=False):
         """Copy visible playback controls into the engine in one place."""
         self.engine.infinite_loop = self.inf_check.isChecked() if infinite is None else bool(infinite)
         self.engine.simulation_mode = self.sim_check.isChecked()
         self.engine.human_curve = self.human_check.isChecked()
         self.engine.focus_lock = self.focus_check.isChecked()
-        if capture_focus and self.engine.focus_lock:
-            self.engine.capture_focus_window()
+        if self.engine.focus_lock:
+            self.engine.set_focus_window(self._selected_focus_hwnd())
         try:
             self.engine.loops = max(1, int(self.loops_spin.value() if loops is None else loops))
         except (TypeError, ValueError):
@@ -4249,10 +4746,16 @@ class MainWindow(QMainWindow):
         try:
             self.engine.focus_lock = bool(checked)
             if checked:
-                self.engine.capture_focus_window()
-                self.status("Playback focus lock captured")
+                hwnd = self._selected_focus_hwnd()
+                self.engine.set_focus_window(hwnd)
+                if hwnd:
+                    self.status("Lock to window enabled")
+                else:
+                    self.status("Choose a target window")
             else:
-                self.status("Playback focus lock off")
+                self.engine.set_focus_window(0)
+                self.status("Lock to window off")
+            self._set_lock_window_status()
         except Exception:
             pass
 
@@ -4337,25 +4840,43 @@ class MainWindow(QMainWindow):
                     lower = text.lower()
                     icon_name = "bolt"
                     color = COLORS["accent"]
+                    state = "running"
                     if any(word in lower for word in ("error", "failed", "not found", "warning")):
                         icon_name = "stop"
                         color = COLORS["error"]
+                        state = "error"
                     elif "stopped" in lower:
                         icon_name = "stop"
                         color = COLORS["text_dim"]
+                        state = "stopped"
                     elif "complete" in lower or "ready" in lower:
                         icon_name = "check"
                         color = COLORS["success"]
+                        state = "ready"
                     elif "paused" in lower:
                         icon_name = "pause"
                         color = COLORS["warning"]
+                        state = "paused"
                     feedback_icon.setPixmap(icon(icon_name, 15, color).pixmap(15, 15))
+                    feedback_icon.setStyleSheet(
+                        f"QLabel#playback_feedback_icon {{ background-color: {COLORS['bg_secondary']}; "
+                        f"border: 1px solid {color}; border-radius: 6px; }}"
+                    )
+                    self.playback_feedback_label.setStyleSheet(
+                        f"QLabel#playback_feedback {{ color: {color}; "
+                        "font-size: 11px; font-weight: 900; background: transparent; border: none; }}"
+                    )
                     if frame is not None:
+                        frame.setProperty("feedback_state", state)
                         frame.setStyleSheet(
-                            f"QFrame#playback_feedback_frame {{ background-color: {COLORS['bg_tertiary']}; "
+                            f"QFrame#playback_feedback_frame {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+                            f"stop:0 {COLORS['accent_glow'] if state == 'running' else COLORS['bg_secondary']}, "
+                            f"stop:1 {COLORS['bg_tertiary']}); "
                             f"border: 1px solid {color if icon_name != 'bolt' else COLORS['accent_dim']}; "
-                            "border-radius: 7px; }}"
+                            "border-radius: 8px; }}"
                         )
+                        frame.style().unpolish(frame)
+                        frame.style().polish(frame)
         except Exception:
             pass
 
@@ -5576,36 +6097,11 @@ class MainWindow(QMainWindow):
             self.status_text.setProperty("full_text", full_msg)
             self.status_text.setText(visible_msg)
             self.status_text.setToolTip(full_msg)
-            # Update status icon based on state
-            msg_lower = full_msg.lower()
-            C = COLORS
-            if "ready" in msg_lower or "idle" in msg_lower:
-                self.status_icon.setPixmap(icon("check", 16, C["success"]).pixmap(16, 16))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["success"], glow=False)
-            elif "playing" in msg_lower or "running" in msg_lower:
-                self.status_icon.setPixmap(icon("play", 16, C["playing"]).pixmap(16, 16))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["playing"], glow=True)
-            elif "paused" in msg_lower:
-                self.status_icon.setPixmap(icon("pause", 16, C["warning"]).pixmap(16, 16))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["warning"], glow=False)
-            elif "record" in msg_lower:
-                self.status_icon.setPixmap(icon("record", 16, C["error"]).pixmap(16, 16))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["error"], glow=True)
-            elif "error" in msg_lower or "failed" in msg_lower:
-                self.status_icon.setPixmap(icon("cross", 16, C["error"]).pixmap(16, 16))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["error"], glow=True)
-            elif "saved" in msg_lower or "imported" in msg_lower or "applied" in msg_lower:
-                self.status_icon.setPixmap(icon("save", 16, C["accent"]).pixmap(16, 16))
-                self.status_icon.setVisible(True)
-                self.status_dot.set_color(C["accent"], glow=False)
-            else:
-                self.status_icon.setVisible(False)
-                self.status_dot.set_color(C["text_dim"], glow=False)
+            try:
+                self.status_pill.setToolTip(full_msg)
+            except Exception:
+                pass
+            self._apply_status_pill_state(full_msg)
             try:
                 self._fit_status_pill_to_visible_text(visible_msg)
                 self._update_toolbar_containment()
@@ -5647,6 +6143,11 @@ class MainWindow(QMainWindow):
         auto = bool(auto)
         if auto and bool(getattr(self, "_bottom_panel_locked", False)):
             return
+        if collapsed and bool(getattr(self, "_playback_panel_locked", False)):
+            if not auto:
+                self.status("Playback panel is locked open")
+            self._set_playback_panel_lock_button_state()
+            return
         if auto:
             self._playback_auto_collapsed = collapsed
         else:
@@ -5680,6 +6181,7 @@ class MainWindow(QMainWindow):
             dock.setVisible(not collapsed)
             restore.setVisible(collapsed)
             panel.updateGeometry()
+            self._update_timeline_bottom_safe_margin(target_h)
             if hasattr(self, "_apply_panel_size_locks"):
                 self._apply_panel_size_locks()
             return
@@ -5699,6 +6201,7 @@ class MainWindow(QMainWindow):
                 h = int(value)
                 panel.setFixedHeight(h)
                 panel.updateGeometry()
+                self._update_timeline_bottom_safe_margin(h)
             except Exception:
                 pass
 
@@ -5708,6 +6211,7 @@ class MainWindow(QMainWindow):
                 dock.setVisible(not collapsed)
                 restore.setVisible(collapsed)
                 panel.updateGeometry()
+                self._update_timeline_bottom_safe_margin(target_h)
                 if hasattr(self, "_apply_panel_size_locks"):
                     self._apply_panel_size_locks()
             except Exception:
@@ -5722,6 +6226,28 @@ class MainWindow(QMainWindow):
         anim.valueChanged.connect(_tick)
         anim.finished.connect(_finished)
         anim.start()
+
+    def _update_timeline_bottom_safe_margin(self, playback_height=None):
+        try:
+            timeline = getattr(self, "timeline", None)
+            if timeline is None:
+                return
+            panel = getattr(self, "playback_panel", None)
+            if playback_height is None:
+                playback_height = int(panel.height() if panel is not None else 0)
+            playback_height = max(0, int(playback_height or 0))
+            collapsed = bool(getattr(self, "_playback_collapsed", False))
+            # The playback panel is part of the layout, not an overlay. It
+            # should be the only thing blocking timeline space, with no extra
+            # scroll-area spacer creating an empty box above it.
+            safe = 0
+            current = getattr(timeline, "viewportMargins", lambda: None)()
+            if current is not None and current.bottom() == safe:
+                return
+            timeline.setViewportMargins(0, 0, 0, safe)
+            timeline.viewport().update()
+        except Exception:
+            pass
 
     @staticmethod
     def _format_hms(seconds: float) -> str:

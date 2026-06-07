@@ -99,6 +99,24 @@ class ExecutionEngine:
         except Exception:
             self._focus_hwnd = None
 
+    def set_focus_window(self, hwnd):
+        """Use an explicit target window handle for focus lock."""
+        try:
+            hwnd = int(hwnd or 0)
+        except (TypeError, ValueError):
+            hwnd = 0
+        self._focus_hwnd = hwnd if hwnd else None
+
+    def focus_window_valid(self):
+        """Return True when the stored focus-lock window still exists."""
+        if not self._focus_hwnd:
+            return False
+        try:
+            import ctypes
+            return bool(ctypes.windll.user32.IsWindow(int(self._focus_hwnd)))
+        except Exception:
+            return bool(self._focus_hwnd)
+
     def _refocus(self):
         """Bring the locked window back to foreground."""
         if not self.focus_lock or not self._focus_hwnd:

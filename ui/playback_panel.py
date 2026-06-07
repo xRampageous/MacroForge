@@ -137,18 +137,25 @@ def make_playback_panel(window):
     feedback_frame = QFrame()
     feedback_frame.setObjectName("playback_feedback_frame")
     feedback_frame.setFixedSize(204, 26)
+    feedback_frame.setProperty("feedback_state", "ready")
     feedback_frame.setToolTip("Playback status")
     feedback_frame.setStyleSheet(
-        f"QFrame#playback_feedback_frame {{ background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['accent_dim']}; border-radius: 7px; }}"
+        f"QFrame#playback_feedback_frame {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+        f"stop:0 {C['accent_glow']}, stop:1 {C['bg_tertiary']}); "
+        f"border: 1px solid {C['accent_dim']}; border-radius: 8px; }}"
     )
     feedback_lo = QHBoxLayout(feedback_frame)
-    feedback_lo.setContentsMargins(8, 0, 8, 0)
+    feedback_lo.setContentsMargins(6, 0, 8, 0)
     feedback_lo.setSpacing(6)
     self.playback_feedback_icon = QLabel()
     self.playback_feedback_icon.setObjectName("playback_feedback_icon")
-    self.playback_feedback_icon.setFixedSize(15, 15)
+    self.playback_feedback_icon.setFixedSize(20, 18)
+    self.playback_feedback_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.playback_feedback_icon.setPixmap(icon("bolt", 15, C["accent"]).pixmap(15, 15))
+    self.playback_feedback_icon.setStyleSheet(
+        f"QLabel#playback_feedback_icon {{ background-color: {C['bg_secondary']}; "
+        f"border: 1px solid {C['accent_dim']}; border-radius: 6px; }}"
+    )
     feedback_lo.addWidget(self.playback_feedback_icon)
 
     self.playback_feedback_label = QLabel("Playback ready")
@@ -199,8 +206,6 @@ def make_playback_panel(window):
         "QComboBox::drop-down { border: none; width: 0px; }"
         "QComboBox::down-arrow { image: none; width: 0px; height: 0px; }"
     )
-    speed_box.addWidget(self.speed_combo)
-
     self.speed_slider = QSlider(Qt.Orientation.Horizontal)
     self.speed_slider.setObjectName("playback_speed_slider")
     self.speed_slider.setRange(0, self.speed_combo.count() - 1)
@@ -217,23 +222,27 @@ def make_playback_panel(window):
     )
     self.speed_slider.valueChanged.connect(lambda value: self.speed_combo.setCurrentIndex(int(value)))
     self.speed_combo.currentIndexChanged.connect(lambda index: self.speed_slider.setValue(int(index)))
-    speed_box.addWidget(self.speed_slider)
+
+    speed_control_row = QHBoxLayout()
+    speed_control_row.setContentsMargins(0, 0, 0, 0)
+    speed_control_row.setSpacing(7)
+    speed_control_row.addWidget(self.speed_combo)
+    speed_control_row.addWidget(self.speed_slider, stretch=1)
+    speed_box.addLayout(speed_control_row)
 
     speed_scale = QHBoxLayout()
     speed_scale.setContentsMargins(0, 0, 0, 0)
     speed_scale.setSpacing(0)
+    speed_scale.addSpacing(57)
     for text, align in (("0.1x", Qt.AlignmentFlag.AlignLeft), ("1x", Qt.AlignmentFlag.AlignCenter), ("4x", Qt.AlignmentFlag.AlignRight)):
         scale_lbl = QLabel(text)
         scale_lbl.setAlignment(align)
         scale_lbl.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; font-weight: 800; background: transparent;")
         speed_scale.addWidget(scale_lbl, stretch=1)
     speed_box.addLayout(speed_scale)
-    options_body.addLayout(speed_box, stretch=2)
-    options_body.addWidget(vertical_rule())
-
     loops_modes = QVBoxLayout()
     loops_modes.setContentsMargins(0, 0, 0, 0)
-    loops_modes.setSpacing(5)
+    loops_modes.setSpacing(3)
 
     loops_header = QHBoxLayout()
     loops_header.setContentsMargins(0, 0, 0, 0)
@@ -248,11 +257,11 @@ def make_playback_panel(window):
     self.inf_check = QCheckBox("∞")
     self.inf_check.setObjectName("playback_inf_toggle")
     self.inf_check.setToolTip("Infinite loop")
-    self.inf_check.setFixedSize(52, 30)
+    self.inf_check.setFixedSize(46, 26)
     self.inf_check.setStyleSheet(
         f"QCheckBox#playback_inf_toggle {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
-        f"border: 1px solid {C['border']}; border-radius: 7px; padding-left: 12px; "
-        "font-size: 18px; font-weight: 800; }}"
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding-left: 10px; "
+        "font-size: 16px; font-weight: 800; }}"
         f"QCheckBox#playback_inf_toggle:hover {{ border-color: {C['border_light']}; }}"
         f"QCheckBox#playback_inf_toggle::indicator {{ width: 0px; height: 0px; }}"
         f"QCheckBox#playback_inf_toggle:checked {{ border-color: {C['accent']}; background-color: {C['accent_glow']}; }}"
@@ -261,8 +270,8 @@ def make_playback_panel(window):
     self.loops_spin = QSpinBox()
     self.loops_spin.setRange(1, 9999)
     self.loops_spin.setValue(1)
-    self.loops_spin.setFixedHeight(30)
-    self.loops_spin.setFixedWidth(60)
+    self.loops_spin.setFixedHeight(26)
+    self.loops_spin.setFixedWidth(56)
     self.loops_spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     self.loops_spin.setStyleSheet(
         f"QSpinBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
@@ -271,34 +280,87 @@ def make_playback_panel(window):
         f"QSpinBox:hover {{ border-color: {C['accent_dim']}; }}"
         "QSpinBox::up-button, QSpinBox::down-button { border: none; background: transparent; width: 0px; }"
     )
-    loop_count = QVBoxLayout()
-    loop_count.setContentsMargins(0, 0, 0, 0)
-    loop_count.setSpacing(2)
-    loop_count.addWidget(self.loops_spin)
-    loops_hint = QLabel("# loops")
-    loops_hint.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 750; background: transparent;")
-    loop_count.addWidget(loops_hint)
-    loop_row.addLayout(loop_count, stretch=1)
+    loop_row.addWidget(self.loops_spin)
+    loop_row.addStretch()
     loops_modes.addLayout(loop_row)
+
+    target_row = QHBoxLayout()
+    target_row.setContentsMargins(0, 0, 0, 0)
+    target_row.setSpacing(4)
+    self.lock_window_combo = QComboBox()
+    self.lock_window_combo.setObjectName("lock_window_combo")
+    self.lock_window_combo.setToolTip("Target window for Lock to window")
+    self.lock_window_combo.addItem("Choose target window", 0)
+    self.lock_window_combo.setFixedHeight(24)
+    self.lock_window_combo.setMinimumWidth(118)
+    self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    self.lock_window_combo.setStyleSheet(
+        f"QComboBox#lock_window_combo {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 7px; "
+        "font-size: 10px; font-weight: 800; }}"
+        f"QComboBox#lock_window_combo:hover {{ border-color: {C['pause_cyan']}; }}"
+        "QComboBox#lock_window_combo::drop-down { border: none; width: 18px; }"
+    )
+    self.lock_window_health = QLabel()
+    self.lock_window_health.setObjectName("lock_window_health")
+    self.lock_window_health.setFixedSize(10, 10)
+    self.lock_window_health.setToolTip("Window target not selected")
+    self.lock_window_health.setStyleSheet(
+        f"QLabel#lock_window_health {{ background-color: {C['text_dark']}; "
+        f"border: 1px solid {C['border']}; border-radius: 5px; }}"
+    )
+    target_row.addWidget(self.lock_window_health)
+    target_row.addWidget(self.lock_window_combo, stretch=1)
+
+    def tiny_icon_btn(icon_name, tip, slot):
+        btn = QPushButton()
+        btn.setObjectName("lock_window_tool_btn")
+        btn.setIcon(icon(icon_name, 14, C["pause_cyan"]))
+        btn.setIconSize(QSize(14, 14))
+        btn.setToolTip(tip)
+        btn.setFixedSize(24, 24)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(slot)
+        btn.setStyleSheet(
+            f"QPushButton#lock_window_tool_btn {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 0; }}"
+            f"QPushButton#lock_window_tool_btn:hover {{ border-color: {C['pause_cyan']}; background-color: {C['bg_hover']}; }}"
+        )
+        return btn
+
+    self.lock_window_refresh_btn = tiny_icon_btn("loop", "Refresh running windows", self.refresh_lock_windows)
+    self.lock_window_pick_btn = tiny_icon_btn("target", "Pick foreground window after a short delay", self._capture_foreground_lock_window)
+    target_row.addWidget(self.lock_window_refresh_btn)
+    target_row.addWidget(self.lock_window_pick_btn)
+    speed_box.addLayout(target_row)
+
+    self.lock_window_status = QLabel("No target window")
+    self.lock_window_status.setObjectName("lock_window_status")
+    self.lock_window_status.setFixedHeight(12)
+    self.lock_window_status.setVisible(False)
+    self.lock_window_status.setStyleSheet(
+        f"color: {C['text_dark']}; font-size: 9px; font-weight: 750; background: transparent;"
+    )
+    speed_box.addWidget(self.lock_window_status)
 
     mode_row = QHBoxLayout()
     mode_row.setContentsMargins(0, 0, 0, 0)
-    mode_row.setSpacing(4)
+    mode_row.setSpacing(3)
 
-    def add_mode_check(attr_name, label, icon_name, color, width, tooltip, checked=False):
+    def add_mode_check(attr_name, label, icon_name, color, width, tooltip, checked=False, target_layout=None):
         frame = QFrame()
         frame.setObjectName(f"{attr_name}_chip")
-        frame.setFixedSize(width, 30)
+        frame.setFixedSize(width, 26)
         frame.setProperty("checked", "true" if checked else "false")
         frame.setCursor(Qt.CursorShape.PointingHandCursor)
         frame.setToolTip(tooltip)
         frame.setStyleSheet(chip_style(f"{attr_name}_chip", color))
         frame_lo = QHBoxLayout(frame)
-        frame_lo.setContentsMargins(7, 0, 7, 0)
-        frame_lo.setSpacing(4)
+        frame_lo.setContentsMargins(6, 0, 6, 0)
+        frame_lo.setSpacing(3)
 
         ico = QLabel()
-        ico.setFixedSize(16, 16)
+        ico.setFixedSize(14, 14)
         frame_lo.addWidget(ico)
 
         check = QCheckBox(label)
@@ -306,7 +368,7 @@ def make_playback_panel(window):
         check.setToolTip(tooltip)
         check.setChecked(checked)
         check.setStyleSheet(
-            f"QCheckBox#playback_mode_toggle {{ color: {C['text']}; font-size: 11px; font-weight: 850; spacing: 0px; }}"
+            f"QCheckBox#playback_mode_toggle {{ color: {C['text']}; font-size: 10px; font-weight: 850; spacing: 0px; }}"
             "QCheckBox#playback_mode_toggle::indicator { width: 0px; height: 0px; }"
         )
         frame_lo.addWidget(check, stretch=1)
@@ -315,9 +377,9 @@ def make_playback_panel(window):
             frame.setProperty("checked", "true" if is_checked else "false")
             active_col = color if is_checked else C["text_dim"]
             label_col = C["text"] if is_checked else C["text_dim"]
-            ico.setPixmap(icon(icon_name, 16, active_col).pixmap(16, 16))
+            ico.setPixmap(icon(icon_name, 14, active_col).pixmap(14, 14))
             check.setStyleSheet(
-                f"QCheckBox#playback_mode_toggle {{ color: {label_col}; font-size: 11px; font-weight: 850; spacing: 0px; }}"
+                f"QCheckBox#playback_mode_toggle {{ color: {label_col}; font-size: 10px; font-weight: 850; spacing: 0px; }}"
                 "QCheckBox#playback_mode_toggle::indicator { width: 0px; height: 0px; }"
             )
             frame.style().unpolish(frame)
@@ -331,23 +393,22 @@ def make_playback_panel(window):
         frame.mousePressEvent = _toggle_chip
         ico.mousePressEvent = _toggle_chip
         setattr(self, attr_name, check)
-        mode_row.addWidget(frame)
+        if target_layout is not None:
+            target_layout.insertWidget(0, frame)
+        else:
+            mode_row.addWidget(frame)
 
-    add_mode_check("sim_check", "Sim", "play", C["accent"], 58, "Simulation mode")
-    add_mode_check("human_check", "Human", "person", C["success"], 70, "Humanized movement curve", checked=True)
-    add_mode_check("focus_check", "Lock", "lock", C["pause_cyan"], 64, "Capture the current foreground window and refocus it before each action")
+    add_mode_check("sim_check", "Sim", "play", C["accent"], 52, "Simulation mode")
+    add_mode_check("human_check", "Humanize", "person", C["success"], 76, "Humanized movement curve", checked=True)
+    add_mode_check("focus_check", "Window", "lock", C["pause_cyan"], 72, "Lock playback to the selected target window", target_layout=target_row)
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
+
     options_body.addLayout(loops_modes, stretch=2)
+    options_body.addWidget(vertical_rule())
+    options_body.addLayout(speed_box, stretch=2)
     opt_lo.addLayout(options_body)
     top.addWidget(options_section, stretch=1)
-
-    self.bottom_panel_lock_btn = QPushButton(panel)
-    self.bottom_panel_lock_btn.setObjectName("panel_lock_btn")
-    self.bottom_panel_lock_btn.setToolTip("Lock bottom panel height")
-    self.bottom_panel_lock_btn.setFixedSize(1, 1)
-    self.bottom_panel_lock_btn.clicked.connect(self._toggle_bottom_panel_lock)
-    self.bottom_panel_lock_btn.setVisible(False)
 
     self.collapse_playback_btn = QPushButton("^")
     self.collapse_playback_btn.setToolTip("Collapse playback panel")
@@ -359,7 +420,26 @@ def make_playback_panel(window):
         f"QPushButton:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
     )
     self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))
-    top.addWidget(self.collapse_playback_btn, alignment=Qt.AlignmentFlag.AlignTop)
+
+    playback_collapse_tools = QHBoxLayout()
+    playback_collapse_tools.setContentsMargins(0, 0, 0, 0)
+    playback_collapse_tools.setSpacing(4)
+    self.playback_panel_lock_btn = QPushButton()
+    self.playback_panel_lock_btn.setObjectName("playback_panel_lock_btn")
+    self.playback_panel_lock_btn.setIcon(icon("lock", 15, C["text_dim"]))
+    self.playback_panel_lock_btn.setIconSize(QSize(15, 15))
+    self.playback_panel_lock_btn.setToolTip("Keep playback panel expanded")
+    self.playback_panel_lock_btn.setFixedSize(30, 34)
+    self.playback_panel_lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    self.playback_panel_lock_btn.clicked.connect(self._toggle_playback_panel_lock)
+    self.playback_panel_lock_btn.setStyleSheet(
+        f"QPushButton#playback_panel_lock_btn {{ color: {C['text_dim']}; background-color: {C['bg_tertiary']}; "
+        f"border: 1px solid {C['border']}; border-radius: 9px; padding: 0; }}"
+        f"QPushButton#playback_panel_lock_btn:hover {{ border-color: {C['accent']}; background-color: {C['bg_hover']}; }}"
+    )
+    playback_collapse_tools.addWidget(self.playback_panel_lock_btn)
+    playback_collapse_tools.addWidget(self.collapse_playback_btn)
+    top.addLayout(playback_collapse_tools)
     dlo.addLayout(top, stretch=1)
 
     bottom = QHBoxLayout()

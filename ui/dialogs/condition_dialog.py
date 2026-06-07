@@ -1,10 +1,12 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
-    QSpinBox, QFrame
+    QSpinBox, QFrame, QPushButton
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtGui import QCursor, QKeySequence, QShortcut
 
 from models import Action
+from ui.icons import icon
 from ui.theme import COLORS
 from ui.dialogs._common import dialog_stylesheet, make_header, make_buttons
 
@@ -26,6 +28,7 @@ class ConditionDialog(QDialog):
         self._accepted = False
         self._existing = existing
         self._row_count = max(0, int(row_count or 0))
+        self._set_coords_hotkey = self._hotkey_text(parent, "set_click_coordinates", "Ctrl+Shift+M")
 
         lo = QVBoxLayout(self)
         lo.setContentsMargins(16, 16, 16, 16)
@@ -92,9 +95,31 @@ class ConditionDialog(QDialog):
         self.y_spin = style_spin(QSpinBox()); self.y_spin.setRange(-99999, 99999)
         self.x_spin.setValue(int(getattr(existing, "condition_x", 0) if existing else 0))
         self.y_spin.setValue(int(getattr(existing, "condition_y", 0) if existing else 0))
-        xy.addWidget(self.x_spin); xy.addWidget(self.y_spin)
+        self.capture_xy_btn = QPushButton()
+        self.capture_xy_btn.setIcon(icon("target", 14, C["condition"]))
+        self.capture_xy_btn.setIconSize(QSize(14, 14))
+        self.capture_xy_btn.setToolTip("Set X/Y from current mouse position")
+        self.capture_xy_btn.setFixedSize(34, 34)
+        self.capture_xy_btn.clicked.connect(self._capture_cursor_xy)
+        self.capture_xy_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 0; }}"
+            f"QPushButton:hover {{ border-color: {C['condition']}; background-color: {C['bg_hover']}; }}"
+        )
+        xy.addWidget(self.x_spin); xy.addWidget(self.y_spin); xy.addWidget(self.capture_xy_btn); xy.addStretch()
         body_lo.addWidget(label("Pixel X / Y"))
         body_lo.addLayout(xy)
+        self.cursor_pos = QLabel("Mouse: -")
+        self.cursor_pos.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px; font-weight: 750; background: transparent;")
+        body_lo.addWidget(self.cursor_pos)
+        hint_text = (
+            f"Press {self._set_coords_hotkey} to set X/Y from the current mouse position"
+            if self._set_coords_hotkey else
+            "Set coordinates shortcut is disabled"
+        )
+        self.hotkey_hint = QLabel(hint_text)
+        self.hotkey_hint.setStyleSheet(f"color: {C['text_dark']}; font-size: 10px; font-weight: 700; background: transparent;")
+        body_lo.addWidget(self.hotkey_hint)
 
         self.color_edit = field(getattr(existing, "condition_color", "") if existing else "")
         self.color_edit.setPlaceholderText("#RRGGBB")
@@ -169,6 +194,31 @@ class ConditionDialog(QDialog):
 
         lo.addWidget(body)
         lo.addLayout(make_buttons(self, "Save Condition", C["condition"], self._on_ok, "check"))
+        self._xy_timer = QTimer(self)
+        self._xy_timer.setInterval(120)
+        self._xy_timer.timeout.connect(self._sync_cursor_xy)
+        self._xy_timer.start()
+        self._set_coords_shortcut = None
+        if self._set_coords_hotkey:
+            self._set_coords_shortcut = QShortcut(QKeySequence(self._set_coords_hotkey), self)
+            self._set_coords_shortcut.activated.connect(self._capture_cursor_xy)
+
+    def _hotkey_text(self, parent, name, default):
+        try:
+            if parent is not None and hasattr(parent, "_hotkey"):
+                return parent._hotkey(name, default)
+        except Exception:
+            pass
+        return default
+
+    def _sync_cursor_xy(self):
+        pos = QCursor.pos()
+        self.cursor_pos.setText(f"Mouse: {int(pos.x())}, {int(pos.y())}")
+
+    def _capture_cursor_xy(self):
+        pos = QCursor.pos()
+        self.x_spin.setValue(int(pos.x()))
+        self.y_spin.setValue(int(pos.y()))
 
     def _on_ok(self):
         self._accepted = True

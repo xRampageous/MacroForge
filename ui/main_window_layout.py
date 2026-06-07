@@ -1357,6 +1357,38 @@ def build_main_layout(window):
     self.ico_retry_delay.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.ico_fail_mode = compact_combo(["default", "continue", "stop", "jump", "recovery_group"])
     self.ico_fail_target = compact_combo()
+    self.ico_x = form_input("X", "0")
+    self.ico_y = form_input("Y", "0")
+    self.ico_color = form_input("#RRGGBB", "")
+    for coord_field in (self.ico_x, self.ico_y):
+        coord_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        coord_field.setFixedWidth(48)
+    self.ico_color.setFixedWidth(82)
+    self.ico_capture_xy_btn = QPushButton()
+    self.ico_capture_xy_btn.setObjectName("condition_coord_btn")
+    self.ico_capture_xy_btn.setIcon(icon("target", 13, C["condition"]))
+    self.ico_capture_xy_btn.setIconSize(QSize(13, 13))
+    self.ico_capture_xy_btn.setToolTip("Set X/Y from current mouse position")
+    self.ico_capture_xy_btn.setFixedSize(28, 30)
+    self.ico_capture_xy_btn.clicked.connect(self._capture_condition_coordinates_from_cursor)
+    self.ico_capture_xy_btn.setStyleSheet(
+        f"QPushButton#condition_coord_btn {{ color: {C['condition']}; background-color: {C['bg_secondary']}; "
+        f"border: 1px solid {C['border']}; border-radius: 7px; padding: 0; }}"
+        f"QPushButton#condition_coord_btn:hover {{ border-color: {C['condition']}; background-color: {C['bg_hover']}; }}"
+    )
+    condition_coord_row = QHBoxLayout()
+    condition_coord_row.setContentsMargins(0, 0, 0, 0)
+    condition_coord_row.setSpacing(5)
+    condition_coord_row.addWidget(self.ico_x)
+    condition_coord_row.addWidget(self.ico_y)
+    condition_coord_row.addWidget(self.ico_capture_xy_btn)
+    condition_coord_row.addStretch()
+    self.ico_cursor_pos = QLabel("Mouse: -")
+    self.ico_cursor_pos.setObjectName("condition_cursor_pos")
+    self.ico_cursor_pos.setFixedHeight(14)
+    self.ico_cursor_pos.setStyleSheet(
+        f"color: {C['text_dim']}; font-size: 10px; font-weight: 750; background: transparent;"
+    )
     self.ico_rule = QLabel("Edit for pixel/variable values")
     self.ico_rule.setWordWrap(True)
     self.ico_rule.setMinimumHeight(30)
@@ -1380,6 +1412,9 @@ def build_main_layout(window):
     ico_lo.addLayout(inspector_field_row("Retry / delay", ico_retry, width=condition_value_width))
     ico_lo.addLayout(inspector_field_row("On false", self.ico_fail_mode, width=condition_value_width))
     ico_lo.addLayout(inspector_field_row("Fail target", self.ico_fail_target, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("Pixel X / Y", condition_coord_row, width=condition_value_width))
+    ico_lo.addLayout(inspector_field_row("Colour", self.ico_color, width=condition_value_width))
+    ico_lo.addWidget(self.ico_cursor_pos)
     ico_lo.addWidget(self.ico_rule)
     ico_outer.addWidget(condition_card)
 
@@ -1411,6 +1446,8 @@ def build_main_layout(window):
     self._side_panel_user_collapsed = False
     self._side_panel_locked = False
     self._bottom_panel_locked = False
+    self._playback_panel_locked = False
+    self._playback_collapsed = False
     self._side_panel_expanded_width = 260
     self._side_panel_collapsed_width = 22
     self._side_panel_expand_restore_window_width = 920
@@ -1736,6 +1773,43 @@ def build_main_layout(window):
         tools_lo.addWidget(btn)
     dock_lo.addWidget(tools)
 
+    self.selection_chip = QFrame()
+    self.selection_chip.setObjectName("selection_chip")
+    self.selection_chip.setFixedHeight(38)
+    self.selection_chip.setVisible(False)
+    self.selection_chip.setStyleSheet(
+        f"QFrame#selection_chip {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+        f"stop:0 {C['accent_glow']}, stop:1 {C['bg_tertiary']}); "
+        f"border: 1px solid {C['accent_dim']}; border-radius: 12px; }}"
+        f"QLabel#selection_count_label {{ color: {C['accent']}; font-size: 11px; font-weight: 900; }}"
+        f"QPushButton#selection_action_btn {{ background-color: {C['bg_secondary']}; color: {C['text']}; "
+        f"border: 1px solid {C['border']}; border-radius: 8px; padding: 0 7px; font-size: 10px; font-weight: 850; }}"
+        f"QPushButton#selection_action_btn:hover {{ border-color: {C['accent']}; color: {C['accent_hover']}; }}"
+    )
+    selection_chip_lo = QHBoxLayout(self.selection_chip)
+    selection_chip_lo.setContentsMargins(8, 0, 8, 0)
+    selection_chip_lo.setSpacing(5)
+    self.selection_count_label = QLabel("0 selected")
+    self.selection_count_label.setObjectName("selection_count_label")
+    selection_chip_lo.addWidget(self.selection_count_label)
+
+    def selection_action_btn(text, icon_name, tip, slot):
+        btn = QPushButton(text)
+        btn.setObjectName("selection_action_btn")
+        btn.setIcon(icon(icon_name, 12, C["accent"]))
+        btn.setIconSize(QSize(12, 12))
+        btn.setToolTip(tip)
+        btn.setFixedHeight(26)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(slot)
+        return btn
+
+    self.selection_run_btn = selection_action_btn("Run", "play", "Run selected rows", self._run_selected_rows_from_chip)
+    self.selection_disable_btn = selection_action_btn("Disable", "stop", "Disable selected rows", self.disable_selected_actions)
+    selection_chip_lo.addWidget(self.selection_run_btn)
+    selection_chip_lo.addWidget(self.selection_disable_btn)
+    dock_lo.addWidget(self.selection_chip)
+
     dock_lo.addSpacing(4)
     dock_lo.addWidget(header_separator())
     dock_lo.addSpacing(4)
@@ -1918,6 +1992,9 @@ def build_main_layout(window):
     dbg_runtime.triggered.connect(lambda: self.toggle_runtime_log_panel(True))
     dbg_filters.triggered.connect(lambda: _show_mode_filter_menu())
     dbg_debug.triggered.connect(self.open_debug_viewer)
+    self.debug_tools_menu.addSeparator()
+    dbg_hotkeys = self.debug_tools_menu.addAction("Hotkey Settings...")
+    dbg_hotkeys.triggered.connect(self.open_hotkey_settings_dialog)
 
     def _show_debug_tools_menu():
         self.debug_tools_menu.popup(self.debug_top_btn.mapToGlobal(self.debug_top_btn.rect().bottomLeft()))
@@ -2113,4 +2190,6 @@ def build_main_layout(window):
 
     self.playback_panel = self._make_playback_panel()
     content_lo.addWidget(self.playback_panel)
+    QTimer.singleShot(0, self._update_timeline_bottom_safe_margin)
+    QTimer.singleShot(0, self._set_playback_panel_lock_button_state)
     main_lo.addWidget(content, stretch=1)
