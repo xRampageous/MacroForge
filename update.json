@@ -1,6 +1,6 @@
 {
-  "version": "3.9.2",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.2/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.2/MacroForge-v3.9.2.zip",
-  "notes": "Release v3.9.2 - Fixed recording overlay black box, complete playback controller refactoring"
+  "version": "3.9.3",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.3/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.3/MacroForge-v3.9.3.zip",
+  "notes": "Release v3.9.3 - MenuController, PresetDialog, and full integration"
 }

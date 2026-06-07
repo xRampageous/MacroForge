@@ -39,6 +39,9 @@ from ui.timeline_interactions import create_timeline_interactions
 from ui.hotkey_settings import open_hotkey_settings
 from ui.recording_overlay import show_recording_overlay, show_post_recording_dialog
 from ui.status_dot import StatusDot
+from ui.menu_controller import MenuController
+from ui.preset_dialog import PresetDialog
+from action_presets import ActionPresetManager
 from ui.timeline import TimelineView
 from ui.icons import icon
 try:
@@ -189,6 +192,14 @@ class MainWindow(QMainWindow):
         self._playback_ctrl = create_playback_controller(self)
         self._playback_ctrl.set_engine(self.engine)
         self._playback_ctrl.set_callbacks(self.playback_feedback, self.status)
+        
+        # Setup menu controller
+        self._menu_ctrl = MenuController(self)
+        self._init_menu_controller()
+        
+        # Setup action preset manager
+        self._preset_mgr = ActionPresetManager()
+        self._init_preset_manager()
         try:
             QApplication.instance().installEventFilter(self)
         except Exception:
@@ -1594,6 +1605,7 @@ class MainWindow(QMainWindow):
             "profile_library": self.open_profile_library,
             "set_click_coordinates": self._capture_active_coordinates_from_cursor,
             "reset_timeline_zoom": self.reset_timeline_zoom,
+            "open_presets": self._open_preset_dialog,
         }
         self._hotkey_mgr = create_hotkey_manager(self, self.settings_manager, callbacks)
         logger.info("Hotkey manager initialized")
@@ -6246,6 +6258,95 @@ class MainWindow(QMainWindow):
 
     def _open_key_editor(self, index):
         from ui.dialogs.key_dialog import KeyDialog
+
+    # ═══════════════════════════════════════════════════════
+    #  CONTROLLER INITIALIZATION
+    # ═══════════════════════════════════════════════════════
+
+    def _init_menu_controller(self):
+        """Initialize menu controller with callbacks."""
+        self._menu_ctrl.set_callbacks(
+            new_file=self._on_new_file,
+            open_dialog=self._on_open_dialog,
+            save_file=self._on_save_file,
+            save_as=self._on_save_as,
+            import_dialog=self._on_import_dialog,
+            export_dialog=self._on_export_dialog,
+            is_dirty=lambda: getattr(self, '_dirty', False),
+            can_undo=lambda: hasattr(self, 'history') and self.history.can_undo(),
+            can_redo=lambda: hasattr(self, 'history') and self.history.can_redo()
+        )
+        self._menu_ctrl.file_opened.connect(self._load_macro_from_path)
+        self._menu_ctrl.file_saved.connect(self._on_file_saved)
+
+    def _init_preset_manager(self):
+        """Initialize action preset manager."""
+        # Preset manager is already created, just connect signals if needed
+        pass
+
+    def _open_preset_dialog(self):
+        """Open the action presets dialog."""
+        from ui.preset_dialog import PresetDialog
+        
+        dlg = PresetDialog(self._preset_mgr, self)
+        dlg.preset_selected.connect(self._on_preset_selected)
+        
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            preset = dlg.get_selected_preset()
+            if preset:
+                self.status(f"Applied preset: {preset.name}")
+
+    def _on_preset_selected(self, preset):
+        """Handle preset selection from dialog."""
+        # Convert preset to action and add to timeline
+        action = self._preset_mgr.preset_to_action(preset)
+        if action:
+            self._stamp_action_environment(action)
+            self.history.push(self.action_model.actions())
+            self.action_model.add_action(action)
+            self.active_index = len(self.action_model.actions()) - 1
+            self.timeline.ensure_visible(self.active_index)
+            self.save_session()
+            self.status(f"Added preset action: {preset.name}")
+
+    def _on_new_file(self):
+        """Handle new file request from menu controller."""
+        return self.new_file()
+
+    def _on_open_dialog(self):
+        """Handle open dialog request from menu controller."""
+        # This would show the file open dialog
+        # For now, return None to indicate no file selected
+        return None
+
+    def _on_save_file(self, filepath=None):
+        """Handle save file request from menu controller."""
+        if filepath:
+            return self.save_as(filepath)
+        return self.save()
+
+    def _on_save_as(self):
+        """Handle save as request from menu controller."""
+        return self.save_as()
+
+    def _on_import_dialog(self):
+        """Handle import dialog request from menu controller."""
+        # Would show import dialog
+        return None
+
+    def _on_export_dialog(self):
+        """Handle export dialog request from menu controller."""
+        # Would show export dialog  
+        return None
+
+    def _load_macro_from_path(self, filepath):
+        """Load macro from file path."""
+        # Implementation for loading macro
+        self.status(f"Loading: {filepath}")
+
+    def _on_file_saved(self, filepath):
+        """Handle file saved notification."""
+        self.status(f"Saved: {filepath}")
         dlg = KeyDialog(self, existing=self.action_model.get(index))
         if dlg.exec() == QDialog.DialogCode.Accepted:
             act = dlg.get_action()
