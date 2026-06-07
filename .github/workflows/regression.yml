@@ -36,6 +36,7 @@ jobs:
           updater.py
           build_helper.py
           post_release_verify.py
+          release_cli.py
           release_doctor.py
           release_notes.py
           release_preflight.py
