@@ -18,6 +18,15 @@ def get_version() -> str:
     return m.group(1) if m else ""
 
 
+def read_build_id(path: str = "version.py") -> int:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            m = re.search(r'BUILD_ID\s*=\s*(\d+)', f.read())
+        return int(m.group(1)) if m else 0
+    except FileNotFoundError:
+        return 0
+
+
 def write_update_json(version: str) -> None:
     # Preserve existing notes if present
     existing_notes = f"Release v{version}"
@@ -30,6 +39,7 @@ def write_update_json(version: str) -> None:
         pass
     data = {
         "version": version,
+        "build_id": read_build_id(),
         "url": f"https://github.com/xRampageous/MacroForge/releases/download/v{version}/MacroForge.exe",
         "zip_url": f"https://github.com/xRampageous/MacroForge/releases/download/v{version}/MacroForge-v{version}.zip",
         "notes": existing_notes,
@@ -37,7 +47,7 @@ def write_update_json(version: str) -> None:
     with open("update.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
-    print(f"  update.json -> {version}")
+    print(f"  update.json -> {version} (build_id={data['build_id']})")
 
 
 ARCHIVE_SUFFIXES = (".zip", ".7z", ".rar")
@@ -113,6 +123,7 @@ def write_artifact_manifest(version: str, src_dir: str, zip_name: str) -> str:
     """Write build metadata into the app folder before ZIP creation."""
     manifest = {
         "version": version,
+        "build_id": read_build_id(),
         "commit": git_commit(),
         "build_time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "build_host": socket.gethostname(),

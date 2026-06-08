@@ -20,6 +20,11 @@ from version import VERSION, VERSION_TUPLE, UPDATE_URL
 from debugger import logger
 import update_health
 
+try:
+    from version import BUILD_ID
+except ImportError:
+    BUILD_ID = 0
+
 MANIFEST_TIMEOUT = 3  # seconds
 DOWNLOAD_TIMEOUT = 120  # seconds (ZIPs are larger)
 
@@ -188,11 +193,21 @@ def check_update(silent: bool = True) -> dict | None:
             raise
         return None
 
-    logger.info(f"check_update: compare {VERSION_TUPLE} vs {remote_tuple}")
+    logger.info(f"check_update: compare {VERSION_TUPLE} vs {remote_tuple}, build_id={BUILD_ID}")
     if remote_tuple > VERSION_TUPLE:
         logger.info(f"Update available: {VERSION} -> {remote_ver}")
         update_health.record("check_update_available", status="available", current_version=VERSION, remote_version=remote_ver)
         return data
+
+    # Same version — compare build_id for silent rebuilds
+    if remote_tuple == VERSION_TUPLE:
+        remote_build_id = data.get("build_id", 0)
+        logger.info(f"check_update: same version, remote_build_id={remote_build_id} vs local={BUILD_ID}")
+        if isinstance(remote_build_id, int) and remote_build_id > BUILD_ID:
+            logger.info(f"Update available: build {BUILD_ID} -> {remote_build_id}")
+            update_health.record("check_update_available", status="available", current_version=VERSION, remote_version=remote_ver, remote_build_id=remote_build_id, local_build_id=BUILD_ID)
+            return data
+
     logger.info(f"check_update: no update ({VERSION} >= {remote_ver})")
     update_health.record("check_no_update", status="current", current_version=VERSION, remote_version=remote_ver)
     return None
