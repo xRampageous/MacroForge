@@ -31,6 +31,7 @@ set "ICON_FILE=%SCRIPT_DIR%MacroForge.ico"
 set "PNG_FILE=%SCRIPT_DIR%MacroForge.png"
 set "DIST_DIR=%SCRIPT_DIR%dist"
 set "BUILD_DIR=%SCRIPT_DIR%build"
+set "ISCC_EXE="
 
 :: ===========================================================
 ::  PRE-FLIGHT
@@ -194,11 +195,19 @@ echo.
 echo [5/5] Optional packaging...
 where iscc >nul 2>&1
 if %errorlevel% == 0 (
+    set "ISCC_EXE=iscc"
+) else if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" (
+    set "ISCC_EXE=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+) else if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" (
+    set "ISCC_EXE=%ProgramFiles%\Inno Setup 6\ISCC.exe"
+)
+
+if not "%ISCC_EXE%"=="" (
     if exist "%SCRIPT_DIR%setup.iss" (
         echo        Inno Setup found - building installer...
-        iscc "/DMyAppVersion=%VER%" "%SCRIPT_DIR%setup.iss"
+        "%ISCC_EXE%" "/DMyAppVersion=%VER%" "%SCRIPT_DIR%setup.iss"
         if %errorlevel% equ 0 (
-            echo        installer ready.
+            echo        Installer ready ^| %SCRIPT_DIR%installer\MacroForge-Setup-v%VER%.exe
         ) else (
             echo  [WARNING] Inno Setup build failed.
         )
@@ -220,6 +229,9 @@ echo  ============================================
 echo   Output:
 echo     %DIST_DIR%\MacroForge\MacroForge.exe
 echo     %DIST_DIR%\MacroForge.exe
+if exist "%SCRIPT_DIR%installer\MacroForge-Setup-v%VER%.exe" (
+echo     %SCRIPT_DIR%installer\MacroForge-Setup-v%VER%.exe
+)
 if "%NO_ZIP%"=="0" (
 echo     %DIST_DIR%\MacroForge-v%VER%.zip
 echo     %SCRIPT_DIR%update.json

@@ -149,6 +149,14 @@ if exist "dist\MacroForge-v!VER!.zip.sha256" (
         pause & exit /b 1
     )
 )
+if exist "installer\MacroForge-Setup-v!VER!.exe" (
+    gh release upload v!VER! --repo xRampageous/MacroForge --clobber "installer\MacroForge-Setup-v!VER!.exe" >nul 2>&1
+    if %errorlevel% neq 0 (
+        del /f /q _release_notes.txt >nul 2>&1
+        echo [ERROR] Installer upload failed.
+        pause & exit /b 1
+    )
+)
 del /f /q _release_notes.txt >nul 2>&1
 
 echo        Verifying published release...

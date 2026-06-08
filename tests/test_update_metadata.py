@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import build_helper
 import post_release_verify
+import release_doctor
 import release_preflight
 import support_bundle
 import update_health
@@ -275,6 +276,18 @@ class TestUpdateMetadata(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
+
+    def test_release_assets_include_installer_when_built(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            installer_dir = root / "installer"
+            installer_dir.mkdir()
+            installer = installer_dir / "MacroForge-Setup-v9.9.9.exe"
+            installer.write_bytes(b"setup")
+
+            names = [asset.name for asset in release_doctor.release_assets(root, "9.9.9")]
+
+        self.assertIn("MacroForge-Setup-v9.9.9.exe", names)
 
 
 class TestUpdaterValidation(unittest.TestCase):

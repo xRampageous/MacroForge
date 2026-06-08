@@ -8,6 +8,7 @@
 #define MyAppPublisher "MacroForge"
 #define MyAppURL ""
 #define MyAppExeName "MacroForge.exe"
+#define MyAppSetupName "MacroForge-Setup-v" + MyAppVersion
 
 [Setup]
 AppId={{MacroForge-Auto-Tool}}
@@ -17,16 +18,19 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=installer
-OutputBaseFilename=MacroForge-Setup
+OutputBaseFilename={#MyAppSetupName}
 SetupIconFile=MacroForge.ico
+UninstallDisplayIcon={app}\MacroForge.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -35,10 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\MacroForge\MacroForge.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\MacroForge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
-Source: "MacroForge.png"; DestDir: "{app}"; Flags: ignoreversion
-Source: "MacroForge.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\MacroForge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\MacroForge.ico"
@@ -47,5 +48,16 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
+[InstallDelete]
+Type: files; Name: "{app}\MacroForge.update.exe"
+Type: files; Name: "{app}\MacroForge.update.zip"
+Type: files; Name: "{app}\MacroForge_update.bat"
+Type: filesandordirs; Name: "{app}\MacroForge_update_tmp"
+Type: filesandordirs; Name: "{app}\_internal.old"
+
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}"
+Type: files; Name: "{app}\MacroForge.update.exe"
+Type: files; Name: "{app}\MacroForge.update.zip"
+Type: files; Name: "{app}\MacroForge_update.bat"
+Type: filesandordirs; Name: "{app}\MacroForge_update_tmp"
+Type: filesandordirs; Name: "{app}\_internal.old"
