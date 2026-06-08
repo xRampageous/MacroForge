@@ -72,8 +72,8 @@ def release_exists(version: str, repo: str) -> bool:
     return result.returncode == 0
 
 
-def print_asset_table(version: str, repo: str) -> None:
-    for asset in release_assets(ROOT, version):
+def print_asset_table(version: str, repo: str, *, include_installer: bool = False) -> None:
+    for asset in release_assets(ROOT, version, include_installer=include_installer):
         exists = asset.path.exists()
         size = asset.path.stat().st_size if exists else 0
         status = "OK" if exists and size > 0 else "MISSING"
@@ -185,7 +185,14 @@ def cmd_preflight(args: argparse.Namespace) -> int:
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     version = args.version or read_version(ROOT)
-    errors, warnings, _release = validate_release(ROOT, version, args.repo, online=not args.offline)
+    require_installer = bool(getattr(args, "require_installer", False))
+    errors, warnings, _release = validate_release(
+        ROOT,
+        version,
+        args.repo,
+        online=not args.offline,
+        require_installer=require_installer,
+    )
     for warning in warnings:
         print(f"[WARN] {warning}")
     if errors:
@@ -199,7 +206,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def cmd_repair(args: argparse.Namespace) -> int:
     version = args.version or read_version(ROOT)
-    run([sys.executable, "release_doctor.py", version, "--repo", args.repo, "--repair"])
+    cmd = [sys.executable, "release_doctor.py", version, "--repo", args.repo, "--repair"]
+    if getattr(args, "require_installer", False):
+        cmd.append("--require-installer")
+    run(cmd)
     return 0
 
 
@@ -221,8 +231,8 @@ def ensure_release(version: str, repo: str, notes_file: Path | None = None) -> N
     ])
 
 
-def upload_release_assets(version: str, repo: str) -> None:
-    assets = release_assets(ROOT, version)
+def upload_release_assets(version: str, repo: str, *, require_installer: bool = True) -> None:
+    assets = release_assets(ROOT, version, include_installer=require_installer)
     missing = [asset.path for asset in assets if not asset.path.exists()]
     if missing:
         for path in missing:
@@ -233,13 +243,14 @@ def upload_release_assets(version: str, repo: str) -> None:
 
 def cmd_publish(args: argparse.Namespace) -> int:
     version = args.version or read_version(ROOT)
+    require_installer = not bool(getattr(args, "no_installer", False))
     if not args.skip_preflight:
         code = cmd_preflight(argparse.Namespace(allow_dirty=args.allow_dirty))
         if code:
             return code
     if args.dry_run:
         print(f"[DRY-RUN] Would publish v{version} to {args.repo}")
-        print_asset_table(version, args.repo)
+        print_asset_table(version, args.repo, include_installer=require_installer)
         return 0
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, suffix=".md") as handle:
         notes_path = Path(handle.name)
@@ -247,13 +258,18 @@ def cmd_publish(args: argparse.Namespace) -> int:
         handle.write("\n")
     try:
         ensure_release(version, args.repo, notes_path)
-        upload_release_assets(version, args.repo)
+        upload_release_assets(version, args.repo, require_installer=require_installer)
     finally:
         try:
             notes_path.unlink()
         except OSError:
             pass
-    return cmd_doctor(argparse.Namespace(version=version, repo=args.repo, offline=False))
+    return cmd_doctor(argparse.Namespace(
+        version=version,
+        repo=args.repo,
+        offline=False,
+        require_installer=require_installer,
+    ))
 
 
 def cmd_full(args: argparse.Namespace) -> int:
@@ -322,11 +338,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("version", nargs="?")
     p.add_argument("--repo", default=REPO)
     p.add_argument("--offline", action="store_true")
+    p.add_argument("--require-installer", action="store_true")
     p.set_defaults(func=cmd_doctor)
 
     p = sub.add_parser("repair", help="Upload current local assets to an existing release")
     p.add_argument("version", nargs="?")
     p.add_argument("--repo", default=REPO)
+    p.add_argument("--require-installer", action="store_true")
     p.set_defaults(func=cmd_repair)
 
     p = sub.add_parser("publish", help="Publish/upload current build without rebuilding")
@@ -335,6 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-dirty", action="store_true")
     p.add_argument("--skip-preflight", action="store_true")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--no-installer", action="store_true", help="Publish without requiring/uploading the installer")
     p.set_defaults(func=cmd_publish)
 
     p = sub.add_parser("full", help="Run the existing full release pipeline")

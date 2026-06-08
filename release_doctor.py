@@ -32,14 +32,14 @@ class ReleaseAsset:
         return f"https://github.com/{repo}/releases/download/v{version}/{self.name}"
 
 
-def release_assets(root: Path, version: str) -> list[ReleaseAsset]:
+def release_assets(root: Path, version: str, *, include_installer: bool = False) -> list[ReleaseAsset]:
     assets = [
         ReleaseAsset("MacroForge.exe", root / "dist" / "MacroForge.exe", "url"),
         ReleaseAsset(f"MacroForge-v{version}.zip", root / "dist" / f"MacroForge-v{version}.zip", "zip_url"),
         ReleaseAsset(f"MacroForge-v{version}.zip.sha256", root / "dist" / f"MacroForge-v{version}.zip.sha256"),
     ]
     installer = root / "installer" / f"MacroForge-Setup-v{version}.exe"
-    if installer.exists():
+    if include_installer or installer.exists():
         assets.append(ReleaseAsset(f"MacroForge-Setup-v{version}.exe", installer))
     return assets
 
@@ -83,6 +83,7 @@ def validate_release(
     *,
     online: bool = True,
     release: dict | None = None,
+    require_installer: bool = False,
 ) -> tuple[list[str], list[str], dict | None]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -95,7 +96,7 @@ def validate_release(
     if manifest.get("version") != version:
         errors.append(f"update.json version {manifest.get('version')!r} does not match {version!r}")
 
-    for asset in release_assets(root, version):
+    for asset in release_assets(root, version, include_installer=require_installer):
         if not asset.path.exists():
             errors.append(f"local release asset missing: {asset.path}")
             continue
@@ -118,7 +119,7 @@ def validate_release(
         errors.append(f"release tag {release.get('tagName')!r} does not match v{version}")
 
     published = {asset.get("name"): asset for asset in (release or {}).get("assets", [])}
-    for expected in release_assets(root, version):
+    for expected in release_assets(root, version, include_installer=require_installer):
         item = published.get(expected.name)
         if not item:
             errors.append(f"published release asset missing: {expected.name}")
@@ -141,8 +142,8 @@ def validate_release(
     return errors, warnings, release
 
 
-def repair_release(root: Path, version: str, repo: str) -> int:
-    assets = release_assets(root, version)
+def repair_release(root: Path, version: str, repo: str, *, require_installer: bool = False) -> int:
+    assets = release_assets(root, version, include_installer=require_installer)
     missing = [str(asset.path) for asset in assets if not asset.path.exists()]
     if missing:
         for path in missing:
@@ -166,6 +167,7 @@ def main() -> int:
     parser.add_argument("--repo", default=REPO, help="GitHub repository, owner/name")
     parser.add_argument("--offline", action="store_true", help="Only check local files and update.json")
     parser.add_argument("--repair", action="store_true", help="Upload local release assets with --clobber before verifying")
+    parser.add_argument("--require-installer", action="store_true", help="Require the versioned Inno Setup installer asset")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent
@@ -175,11 +177,17 @@ def main() -> int:
         return 1
 
     if args.repair:
-        code = repair_release(root, version, args.repo)
+        code = repair_release(root, version, args.repo, require_installer=args.require_installer)
         if code:
             return code
 
-    errors, warnings, _release = validate_release(root, version, args.repo, online=not args.offline)
+    errors, warnings, _release = validate_release(
+        root,
+        version,
+        args.repo,
+        online=not args.offline,
+        require_installer=args.require_installer,
+    )
     for warning in warnings:
         print(f"[WARN] {warning}")
     if errors:
