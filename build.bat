@@ -57,7 +57,7 @@ if not exist "%SCRIPT_DIR%ui\theme.py" (
     pause & exit /b 1
 )
 
-python -c "import importlib.util,sys; sys.path.insert(0,r'%SCRIPT_DIR%'); missing=[m for m in ('ui','ui.theme') if importlib.util.find_spec(m) is None]; print('missing=' + ','.join(missing)); sys.exit(1 if missing else 0)" > _modcheck.txt
+python -c "import importlib.util,sys; sys.path.insert(0,'%SCRIPT_DIR:\=/%'); missing=[m for m in ('ui','ui.theme') if importlib.util.find_spec(m) is None]; print('missing=' + ','.join(missing)); sys.exit(1 if missing else 0)" > _modcheck.txt
 if %errorlevel% neq 0 (
     type _modcheck.txt
     del /f /q _modcheck.txt >nul 2>&1
