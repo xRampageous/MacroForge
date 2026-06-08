@@ -16,6 +16,13 @@ from models import ActionListModel
 TIMELINE_PROGRESS_COLUMN_SHIFT = 20
 TIMELINE_MULTI_SELECT_RAIL_WIDTH = 6
 
+IMAGE_STATE_DISPLAY = {
+    "Waiting": ("SCAN", "Searching", "neon_gold"),
+    "Found": ("DONE", "Matched", "success"),
+    "Missed": ("FAIL", "Failed", "error"),
+    "Timeout": ("TIME", "Timeout", "error"),
+}
+
 
 def _safe_float(value, default=0.0):
     try:
@@ -48,6 +55,20 @@ def _mix(hex_a: str, hex_b: str, t: float) -> str:
     g = int(a.green() + (b.green() - a.green()) * t)
     bl = int(a.blue() + (b.blue() - a.blue()) * t)
     return f"#{r:02x}{g:02x}{bl:02x}"
+
+
+def _pulse(speed=1.0, floor=0.0, ceiling=1.0) -> float:
+    """Cheap saw/ping-pong pulse used by the active row polish."""
+    span = max(0.001, ceiling - floor)
+    phase = (time.time() * max(0.05, speed)) % 2.0
+    value = 1.0 - abs(phase - 1.0)
+    return floor + value * span
+
+
+def _image_state_meta(state: str):
+    """Return (status_code, friendly_label, colour) for image runtime states."""
+    code, label, color_key = IMAGE_STATE_DISPLAY.get(str(state or ""), ("", str(state or ""), "text_dim"))
+    return code, label, COLORS.get(color_key, COLORS.get("text_dim", "#8a94a8"))
 
 
 def _action_kind(action) -> str:
@@ -329,33 +350,61 @@ class TimelineDelegate(QStyledItemDelegate):
                     border = COLORS.get("error", "#ff3142")
 
             # Active rows use a richer action-colour gradient: strong left block,
-            # soft centre glow, and dark right fade. This keeps the action colour
-            # obvious without hurting text readability.
+            # soft centre glow, subtle scan sweep and dark right fade. This keeps
+            # the action colour obvious without hurting text readability.
             if playing:
                 row_path = QPainterPath()
                 row_path.addRoundedRect(QRectF(outer), 8, 8)
+                pulse = _pulse(speed=1.15, floor=0.35, ceiling=1.0)
+
+                # Soft outer halo before the card fill gives the active row a
+                # premium illuminated edge while still clipping inside the row.
+                for width, alpha in ((6.0, int(30 + 32 * pulse)), (2.2, int(120 + 55 * pulse))):
+                    halo = QColor(type_color)
+                    halo.setAlpha(alpha)
+                    painter.setPen(QPen(halo, width))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRoundedRect(QRectF(outer).adjusted(1.8, 1.8, -1.8, -1.8), 8, 8)
 
                 row_grad = QLinearGradient(QPointF(outer.left(), outer.top()), QPointF(outer.right(), outer.top()))
-                left_col = QColor(type_color); left_col.setAlpha(205)
-                hot_col = QColor(_mix(type_color, "#ffffff", 0.18)); hot_col.setAlpha(132)
-                mid_col = QColor(type_color); mid_col.setAlpha(54)
-                dim_col = QColor(type_color); dim_col.setAlpha(16)
+                left_col = QColor(_mix(type_color, "#ffffff", 0.26)); left_col.setAlpha(230)
+                hot_col = QColor(type_color); hot_col.setAlpha(174)
+                mid_col = QColor(type_color); mid_col.setAlpha(68)
+                dim_col = QColor(type_color); dim_col.setAlpha(18)
                 row_grad.setColorAt(0.00, left_col)
-                row_grad.setColorAt(0.10, hot_col)
-                row_grad.setColorAt(0.28, mid_col)
-                row_grad.setColorAt(0.58, dim_col)
+                row_grad.setColorAt(0.13, hot_col)
+                row_grad.setColorAt(0.34, mid_col)
+                row_grad.setColorAt(0.66, dim_col)
                 row_grad.setColorAt(1.00, QColor(COLORS["bg_card"]))
 
                 painter.setBrush(QBrush(row_grad))
-                painter.setPen(QPen(QColor(type_color), 1.6))
+                painter.setPen(QPen(QColor(type_color), 1.8))
                 painter.drawPath(row_path)
+
+                # Animated diagonal/linear sweep. It is clipped to the row so the
+                # effect cannot bleed into adjacent timeline rows.
+                painter.save()
+                painter.setClipPath(row_path)
+                sweep_w = max(42.0, outer.width() * 0.18)
+                sweep_x = outer.left() - sweep_w + (outer.width() + sweep_w * 2) * ((time.time() * 0.34) % 1.0)
+                sweep = QLinearGradient(QPointF(sweep_x, outer.top()), QPointF(sweep_x + sweep_w, outer.bottom()))
+                clear = QColor("#ffffff"); clear.setAlpha(0)
+                shine = QColor("#ffffff"); shine.setAlpha(int(18 + 18 * pulse))
+                sweep.setColorAt(0.00, clear)
+                sweep.setColorAt(0.48, shine)
+                sweep.setColorAt(1.00, clear)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(sweep))
+                painter.drawRect(QRectF(sweep_x, outer.top(), sweep_w, outer.height()))
+                painter.restore()
 
                 # Thin top sheen gives the active row a sleeker, less flat look.
                 sheen = QLinearGradient(QPointF(outer.left(), outer.top()), QPointF(outer.right(), outer.top()))
-                sheen_col = QColor("#ffffff"); sheen_col.setAlpha(44)
+                sheen_col = QColor("#ffffff"); sheen_col.setAlpha(54)
+                color_sheen = QColor(_mix(type_color, "#ffffff", 0.42)); color_sheen.setAlpha(52)
                 clear_col = QColor("#ffffff"); clear_col.setAlpha(0)
                 sheen.setColorAt(0.00, sheen_col)
-                sheen.setColorAt(0.30, QColor(type_color).lighter(130))
+                sheen.setColorAt(0.28, color_sheen)
                 sheen.setColorAt(1.00, clear_col)
                 painter.setPen(QPen(QBrush(sheen), 1.0))
                 painter.drawLine(QPointF(outer.left() + 7, outer.top() + 1), QPointF(outer.right() - 7, outer.top() + 1))
@@ -566,22 +615,26 @@ class TimelineDelegate(QStyledItemDelegate):
             pct_w = 38 if compact else 44
             right_edge = outer.right() - menu_reserve - pct_w - 10
 
+            image_state_raw = str(getattr(view, "image_states", {}).get(row, "") or "") if kind == "image" else ""
+            image_status, image_detail_label, image_state_color = _image_state_meta(image_state_raw)
             if not enabled:
-                status, status_col = "Disabled", COLORS["text_dark"]
+                status, status_col = "SKIP", COLORS["text_dark"]
             elif kind == "group":
                 # Drop interaction text is emitted to the top-right status pill;
                 # group row status stays stable/aligned during drag targeting.
-                status, status_col = ("Active", type_color) if active_group else ("Folder", type_color)
+                status, status_col = ("ACTIVE", type_color) if active_group else ("FOLDER", type_color)
             elif kind == "loop":
-                status, status_col = "Loop", type_color
+                status, status_col = "LOOP", type_color
             elif playing:
-                status, status_col = ("Paused", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("Running", type_color)
+                status, status_col = ("PAUSE", COLORS["pause_cyan"]) if getattr(view, "paused", False) else ("RUN", type_color)
+            elif kind == "image" and image_status:
+                status, status_col = image_status, image_state_color
             elif progress >= 0.999:
-                status, status_col = "Completed", type_color
+                status, status_col = "DONE", type_color
             else:
-                status, status_col = "Pending", COLORS["text_dim"]
+                status, status_col = "WAIT", COLORS["text_dim"]
 
-            status_base_w = 76 if compact else 92
+            status_base_w = 64 if compact else 78
             # Use one invisible global column system for normal rows, group
             # headers and cut-in child rows.  Child cards remain indented on
             # the left, but status/duration/progress stay table-aligned.
@@ -606,16 +659,12 @@ class TimelineDelegate(QStyledItemDelegate):
             image_match_state = ""
             image_match_color = COLORS["text_dim"]
             if kind == "image":
-                image_match_state = str(getattr(view, "image_states", {}).get(row, "") or "")
+                image_match_state = image_state_raw
                 if image_match_state:
-                    image_match_color = {
-                        "Found": COLORS["success"],
-                        "Waiting": COLORS["neon_gold"],
-                        "Missed": COLORS["error"],
-                    }.get(image_match_state, COLORS["text_dim"])
+                    _, image_match_label, image_match_color = _image_state_meta(image_match_state)
                     # Image runtime tests sit under the row name, not as a
                     # separate floating chip, so the timeline stays compact.
-                    detail = image_match_state
+                    detail = image_match_label
                     detail_color = image_match_color
             if kind == "group" and group_badge:
                 count = _safe_int(group_badge.get("count", 0), 0)
@@ -714,8 +763,21 @@ class TimelineDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(track, bar_h / 2, bar_h / 2)
             if progress > 0:
                 fill = QRectF(bar_x, bar_y, bar_w * progress, bar_h)
-                painter.setBrush(QBrush(QColor(type_color)))
+                fill_grad = QLinearGradient(QPointF(fill.left(), fill.top()), QPointF(fill.right(), fill.top()))
+                fill_a = QColor(_mix(type_color, "#ffffff", 0.34)); fill_a.setAlpha(245)
+                fill_b = QColor(type_color); fill_b.setAlpha(230)
+                fill_c = QColor(_mix(type_color, COLORS["bg"], 0.12)); fill_c.setAlpha(235)
+                fill_grad.setColorAt(0.00, fill_a)
+                fill_grad.setColorAt(0.48, fill_b)
+                fill_grad.setColorAt(1.00, fill_c)
+                painter.setBrush(QBrush(fill_grad))
                 painter.drawRoundedRect(fill, bar_h / 2, bar_h / 2)
+                if playing and fill.width() >= 4:
+                    tip_r = 3.8 if compact else 4.6
+                    pulse_dot = QColor(_mix(type_color, "#ffffff", 0.45))
+                    pulse_dot.setAlpha(int(150 + 80 * _pulse(speed=1.45)))
+                    painter.setBrush(pulse_dot)
+                    painter.drawEllipse(QRectF(fill.right() - tip_r, fill.center().y() - tip_r, tip_r * 2, tip_r * 2))
 
             pct = f"{int(round(progress * 100)):d}%"
             pct_x = bar_x + bar_w + 8

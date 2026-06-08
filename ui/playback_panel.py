@@ -25,7 +25,7 @@ def make_playback_panel(window):
 
     panel = QFrame()
     panel.setObjectName("mf3_playback_panel")
-    panel.setFixedHeight(175)
+    panel.setFixedHeight(184)
     panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     panel.setStyleSheet(f"QFrame#mf3_playback_panel {{ background-color: {C['bg']}; border: none; }}")
 
@@ -43,7 +43,7 @@ def make_playback_panel(window):
         "QFrame#mf3_playback_dock QLabel { background: transparent; border: none; }"
     )
     dlo = QVBoxLayout(dock)
-    dlo.setContentsMargins(10, 6, 10, 6)
+    dlo.setContentsMargins(11, 7, 11, 7)
     dlo.setSpacing(5)
 
     def section_title(text, icon_name, color):
@@ -93,7 +93,7 @@ def make_playback_panel(window):
 
     play_section = QFrame()
     play_section.setObjectName("playback_block")
-    play_section.setFixedWidth(204)
+    play_section.setFixedWidth(262)
     play_section.setStyleSheet("QFrame#playback_block { background: transparent; border: none; }")
     play_lo = QVBoxLayout(play_section)
     play_lo.setContentsMargins(0, 0, 0, 0)
@@ -108,7 +108,7 @@ def make_playback_panel(window):
     self.start_btn.setIcon(icon("play", 18, C["success"]))
     self.start_btn.setIconSize(QSize(18, 18))
     self.start_btn.setToolTip("Start playback (F9)")
-    self.start_btn.setFixedSize(52, 38)
+    self.start_btn.setFixedSize(54, 40)
     self.start_btn.clicked.connect(self.start)
     play_row.addWidget(self.start_btn)
 
@@ -117,7 +117,7 @@ def make_playback_panel(window):
     self.pause_btn.setIcon(icon("pause", 17, C["pause_cyan"]))
     self.pause_btn.setIconSize(QSize(17, 17))
     self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-    self.pause_btn.setFixedSize(52, 38)
+    self.pause_btn.setFixedSize(54, 40)
     self.pause_btn.setEnabled(False)
     self.pause_btn.clicked.connect(self.engine.toggle_pause)
     play_row.addWidget(self.pause_btn)
@@ -127,16 +127,25 @@ def make_playback_panel(window):
     self.stop_btn.setIcon(icon("stop", 16, C["error"]))
     self.stop_btn.setIconSize(QSize(16, 16))
     self.stop_btn.setToolTip("Stop playback")
-    self.stop_btn.setFixedSize(52, 38)
+    self.stop_btn.setFixedSize(54, 40)
     self.stop_btn.setEnabled(False)
     self.stop_btn.clicked.connect(self.stop)
     play_row.addWidget(self.stop_btn)
+
+    self.preflight_btn = QPushButton()
+    self.preflight_btn.setObjectName("preflight_btn")
+    self.preflight_btn.setIcon(icon("check", 16, C["accent"]))
+    self.preflight_btn.setIconSize(QSize(16, 16))
+    self.preflight_btn.setToolTip("Macro health / pre-flight check (Ctrl+Shift+P)")
+    self.preflight_btn.setFixedSize(54, 40)
+    self.preflight_btn.clicked.connect(self.open_preflight_report)
+    play_row.addWidget(self.preflight_btn)
     play_row.addStretch()
     play_lo.addLayout(play_row)
 
     feedback_frame = QFrame()
     feedback_frame.setObjectName("playback_feedback_frame")
-    feedback_frame.setFixedSize(204, 26)
+    feedback_frame.setFixedSize(262, 28)
     feedback_frame.setProperty("feedback_state", "ready")
     feedback_frame.setToolTip("Playback status")
     feedback_frame.setStyleSheet(
@@ -149,7 +158,7 @@ def make_playback_panel(window):
     feedback_lo.setSpacing(6)
     self.playback_feedback_icon = QLabel()
     self.playback_feedback_icon.setObjectName("playback_feedback_icon")
-    self.playback_feedback_icon.setFixedSize(20, 18)
+    self.playback_feedback_icon.setFixedSize(21, 19)
     self.playback_feedback_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.playback_feedback_icon.setPixmap(icon("bolt", 15, C["accent"]).pixmap(15, 15))
     self.playback_feedback_icon.setStyleSheet(
@@ -166,7 +175,7 @@ def make_playback_panel(window):
     self.playback_feedback_label.setToolTip("Playback status")
     self.playback_feedback_label.setStyleSheet(
         f"QLabel#playback_feedback {{ color: {C['accent']}; "
-        "font-size: 11px; font-weight: 850; background: transparent; border: none; }}"
+        "font-size: 11px; font-weight: 900; background: transparent; border: none; }}"
     )
     feedback_lo.addWidget(self.playback_feedback_label, stretch=1)
     self.playback_feedback_frame = feedback_frame
@@ -410,6 +419,12 @@ def make_playback_panel(window):
     opt_lo.addLayout(options_body)
     top.addWidget(options_section, stretch=1)
 
+    self.preflight_btn.setStyleSheet(
+        f"QPushButton#preflight_btn {{ color: {C['accent']}; background-color: {C['bg_tertiary']}; "
+        f"border: 1px solid {C['border']}; border-radius: 10px; padding: 0; }}"
+        f"QPushButton#preflight_btn:hover {{ border-color: {C['accent']}; background-color: {C['accent_glow']}; }}"
+    )
+
     self.collapse_playback_btn = QPushButton("^")
     self.collapse_playback_btn.setToolTip("Collapse playback panel")
     self.collapse_playback_btn.setFixedSize(34, 34)
@@ -448,10 +463,10 @@ def make_playback_panel(window):
 
     progress_wrap = QFrame()
     progress_wrap.setObjectName("progress_wrap")
-    progress_wrap.setMinimumWidth(250)
-    progress_wrap.setMaximumWidth(420)
-    progress_wrap.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-    progress_wrap.setFixedHeight(36)
+    progress_wrap.setMinimumWidth(300)
+    progress_wrap.setMaximumWidth(16777215)
+    progress_wrap.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    progress_wrap.setFixedHeight(38)
     progress_wrap.setStyleSheet(
         f"QFrame#progress_wrap {{ background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['border']}; border-radius: 8px; }}"
@@ -463,7 +478,7 @@ def make_playback_panel(window):
     self.progress_bar.setRange(0, 100)
     self.progress_bar.setValue(0)
     self.progress_bar.setTextVisible(False)
-    self.progress_bar.setFixedHeight(9)
+    self.progress_bar.setFixedHeight(11)
     self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.progress_bar.setStyleSheet(
         f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 9px; }}"
@@ -476,7 +491,7 @@ def make_playback_panel(window):
         f"color: {C['accent']}; font-size: 13px; font-weight: 900; min-width: 38px;"
     )
     pw_lo.addWidget(self.progress_label)
-    bottom.addWidget(progress_wrap)
+    bottom.addWidget(progress_wrap, stretch=1)
 
     self._stat_actions_w, self._stat_actions = self._make_stat_chip("bolt", "Played", "0", C["accent"], "Actions played this run")
     self._stat_loops_w, self._stat_loops = self._make_stat_chip("loop", "Loops", "0", C["neon_purple"], "Completed loops")

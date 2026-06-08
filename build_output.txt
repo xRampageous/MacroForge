@@ -1,0 +1,116 @@
+272 INFO: PyInstaller: 6.20.0, contrib hooks: 2026.5
+272 INFO: Python: 3.14.2
+343 INFO: Platform: Windows-11-10.0.26200-SP0
+344 INFO: Python environment: C:\Users\Andie\AppData\Local\Python\pythoncore-3.14-64
+348 INFO: Removing temporary files and cleaning cache in C:\Users\Andie\AppData\Local\pyinstaller
+2166 WARNING: collect_dynamic_libs - skipping library collection for module 'PyQt6.QtCore' as it is not a package.
+2273 WARNING: collect_dynamic_libs - skipping library collection for module 'PyQt6.QtGui' as it is not a package.
+2381 WARNING: collect_dynamic_libs - skipping library collection for module 'PyQt6.QtWidgets' as it is not a package.
+2382 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\Andie\\MacroForge',
+ 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\python314.zip',
+ 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\DLLs',
+ 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib',
+ 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64',
+ 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages',
+ 'C:\\Users\\Andie\\MacroForge']
+2924 INFO: Appending 'binaries' from .spec
+2932 INFO: Appending 'datas' from .spec
+2933 INFO: checking Analysis
+2933 INFO: Building Analysis because Analysis-00.toc is non existent
+2933 INFO: Looking for Python shared library...
+2933 INFO: Using Python shared library: C:\Users\Andie\AppData\Local\Python\pythoncore-3.14-64\python314.dll
+2933 INFO: Running Analysis Analysis-00.toc
+2933 INFO: Target bytecode optimization level: 0
+2933 INFO: Initializing module dependency graph...
+2935 INFO: Initializing module graph hook caches...
+2951 INFO: Analyzing modules for base_library.zip ...
+5674 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+6439 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+6990 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+7006 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+11858 INFO: Caching module dependency graph...
+11893 INFO: Analyzing C:\Users\Andie\MacroForge\MacroForge.py
+11943 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+11948 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12044 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12125 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12330 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12863 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+13524 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13527 INFO: SetuptoolsInfo: initializing cached setuptools info...
+14816 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+14966 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+20158 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20906 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+21350 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+22092 INFO: Processing standard module hook 'hook-cv2.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\Andie\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\pyautogui\_pyautogui_x11.py:284: SyntaxWarning: "\e" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\e"? A raw string is also an option.
+  '\e': _display.keysym_to_keycode(Xlib.XK.string_to_keysym('Escape')),
+23020 INFO: Processing standard module hook 'hook-PyQt6.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+25855 INFO: Processing standard module hook 'hook-PyQt6.QtWidgets.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+31789 INFO: Processing standard module hook 'hook-PyQt6.QtCore.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+38270 INFO: Processing standard module hook 'hook-PyQt6.QtGui.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+65528 INFO: Processing standard module hook 'hook-pynput.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+66448 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+68023 INFO: Analyzing hidden import 'pynput.keyboard._win32'
+68091 INFO: Analyzing hidden import 'pynput.mouse._win32'
+68115 INFO: Analyzing hidden import 'requests'
+68132 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+68315 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+68316 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+68324 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+68341 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+68393 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+68394 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+68414 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+68415 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+68800 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+69114 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+69119 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+69680 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+69683 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+69760 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+69823 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+69826 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+70372 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+70373 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+71402 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+71403 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+72397 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+72520 INFO: Analyzing hidden import 'cv2.config'
+72521 INFO: Analyzing hidden import 'cv2.config-3'
+72524 INFO: Analyzing hidden import 'cv2.cv2'
+72524 INFO: Analyzing hidden import 'cv2.data'
+72525 INFO: Analyzing hidden import 'cv2.gapi'
+72545 INFO: Analyzing hidden import 'cv2.load_config_py2'
+72546 INFO: Analyzing hidden import 'cv2.mat_wrapper'
+72548 INFO: Analyzing hidden import 'cv2.misc'
+72550 INFO: Analyzing hidden import 'cv2.typing'
+72559 INFO: Analyzing hidden import 'cv2.utils'
+72560 INFO: Processing module hooks (post-graph stage)...
+73145 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+73981 INFO: Performing binary vs. data reclassification (218 entries)
+74028 INFO: Looking for ctypes DLLs
+74225 INFO: Analyzing run-time hooks ...
+74228 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+74231 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+74234 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+74237 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+74239 INFO: Including run-time hook 'pyi_rth_pyqt6.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+74241 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+74243 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+74761 INFO: Looking for dynamic libraries
+75939 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyQt6\\Qt6\\bin', 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\cv2\\../../x64/vc17/bin']
+75939 INFO: Extra DLL search directories (PATH): ['C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\cv2\\../../x64/vc17/bin', 'C:\\Users\\Andie\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyQt6\\Qt6\\bin']
+77055 INFO: Warnings written to C:\Users\Andie\MacroForge\build\MacroForge\warn-MacroForge.txt
+77134 INFO: Graph cross-reference written to C:\Users\Andie\MacroForge\build\MacroForge\xref-MacroForge.html
+77208 INFO: checking PYZ
+77214 INFO: checking PKG
+77216 INFO: Bootloader C:\Users\Andie\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+77216 INFO: checking EXE
+77254 INFO: checking COLLECT
+77298 INFO: Removing dir C:\Users\Andie\MacroForge\dist\MacroForge
+77740 INFO: Building COLLECT COLLECT-00.toc
+80354 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+80381 INFO: Build complete! The results are available in: C:\Users\Andie\MacroForge\dist

@@ -1178,8 +1178,8 @@ class MainWindow(QMainWindow):
         chip = QFrame()
         chip.setObjectName("mf2_stat_chip")
         chip.setToolTip(f"{title}: {tooltip}")
-        chip.setFixedWidth({"Played": 62, "Loops": 62, "Seq": 80, "Time": 92}.get(title, 68))
-        chip.setFixedHeight(36)
+        chip.setFixedWidth({"Played": 70, "Loops": 70, "Seq": 88, "Time": 106}.get(title, 74))
+        chip.setFixedHeight(38)
         chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         chip.setStyleSheet(
             f"QFrame#mf2_stat_chip {{ background-color: {C['bg_card']}; "
@@ -1188,19 +1188,19 @@ class MainWindow(QMainWindow):
         )
 
         lo = QHBoxLayout(chip)
-        lo.setContentsMargins(8, 3, 8, 3)
+        lo.setContentsMargins(9, 3, 9, 3)
         lo.setSpacing(5)
 
         ico = QLabel()
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setFixedSize(16, 16)
-        ico.setPixmap(icon(icon_name, 16, color).pixmap(16, 16))
+        ico.setFixedSize(17, 17)
+        ico.setPixmap(icon(icon_name, 17, color).pixmap(17, 17))
         lo.addWidget(ico)
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         value_lbl.setStyleSheet(
-            f"color: {C['text']}; font-size: 13px; font-weight: 850; background: transparent;"
+            f"color: {C['text']}; font-size: 14px; font-weight: 900; background: transparent;"
         )
         lo.addWidget(value_lbl)
         return chip, value_lbl
@@ -3489,22 +3489,28 @@ class MainWindow(QMainWindow):
         return False, f"unknown key '{key}'"
 
     def _format_preflight_report(self, errors, warnings):
-        lines = []
+        error_count = len(errors or [])
+        warning_count = len(warnings or [])
+        if error_count:
+            state = f"Blocked — {error_count} error(s), {warning_count} warning(s)"
+        elif warning_count:
+            state = f"Ready with review — {warning_count} warning(s)"
+        else:
+            state = "Ready to run — no validation issues found."
+        lines = [state, ""]
         if errors:
-            lines.append(f"Errors ({len(errors)}):")
+            lines.append(f"Errors ({error_count}):")
             lines.extend(f"  • {x}" for x in errors[:20])
             if len(errors) > 20:
                 lines.append(f"  • …and {len(errors) - 20} more")
         if warnings:
-            if lines:
+            if len(lines) > 2:
                 lines.append("")
-            lines.append(f"Warnings ({len(warnings)}):")
+            lines.append(f"Warnings ({warning_count}):")
             lines.extend(f"  • {x}" for x in warnings[:20])
             if len(warnings) > 20:
                 lines.append(f"  • …and {len(warnings) - 20} more")
-        if not lines:
-            lines.append("Ready to run — no validation issues found.")
-        return "\n".join(lines)
+        return "\n".join(lines).rstrip()
 
     def run_preflight_check(self, show_success=True, allow_warning_prompt=True, auto_fix=True, actions=None, row_labels=None):
         """Validate the visible timeline before playback.
@@ -3563,6 +3569,16 @@ class MainWindow(QMainWindow):
             if getattr(action, "action_type", "") == "group":
                 if not (getattr(action, "group_name", "") or getattr(action, "label", "")):
                     warnings.append(f"{prefix}: folder has no name.")
+                gid = getattr(action, "group_id", "") or ""
+                if gid:
+                    child_count = sum(
+                        1 for child in actions
+                        if child is not action
+                        and getattr(child, "action_type", "") != "group"
+                        and getattr(child, "group_id", "") == gid
+                    )
+                    if child_count <= 0:
+                        warnings.append(f"{prefix}: folder has no actions assigned.")
                 continue
 
             if getattr(action, "action_type", "") == "loop":
@@ -3638,6 +3654,8 @@ class MainWindow(QMainWindow):
                     wait = -1.0
                 if wait < 0:
                     errors.append(f"{prefix}: image wait timeout cannot be negative.")
+                elif wait == 0:
+                    warnings.append(f"{prefix}: image wait timeout is instant; use a timeout if the template can appear late.")
                 if getattr(action, "on_found_action", "continue") == "press_key":
                     ok, reason = self._validate_key_name(getattr(action, "on_found_key", ""))
                     if not ok:
@@ -3801,8 +3819,19 @@ class MainWindow(QMainWindow):
         title = QLabel("Macro Health / Pre-flight")
         title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 950;")
         lo.addWidget(title)
-        summary = QLabel(f"{self.action_model.rowCount()} rows · {len(self._last_preflight.get('errors', []))} errors · {len(self._last_preflight.get('warnings', []))} warnings")
-        summary.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
+        errors = self._last_preflight.get('errors', [])
+        warnings = self._last_preflight.get('warnings', [])
+        if errors:
+            health_text = "Blocked"
+            health_color = C['error']
+        elif warnings:
+            health_text = "Needs review"
+            health_color = C['warning']
+        else:
+            health_text = "Ready"
+            health_color = C['success']
+        summary = QLabel(f"{health_text} · {self.action_model.rowCount()} rows · {len(errors)} errors · {len(warnings)} warnings")
+        summary.setStyleSheet(f"color: {health_color}; font-size: 12px; font-weight: 900;")
         lo.addWidget(summary)
         edit = QPlainTextEdit(report)
         edit.setReadOnly(True)

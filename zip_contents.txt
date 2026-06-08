@@ -1,0 +1,9 @@
+MacroForge-3.9.8/
+MacroForge-3.9.8/version.py
+MacroForge-3.9.8/update.json
+MacroForge-3.9.8/ui/
+MacroForge-3.9.8/ui/timeline.py
+MacroForge-3.9.8/ui/playback_panel.py
+MacroForge-3.9.8/ui/main_window.py
+MacroForge-3.9.8/docs/
+MacroForge-3.9.8/docs/CHANGELOG_3.9.8.md
