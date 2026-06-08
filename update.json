@@ -1,6 +1,6 @@
 {
-  "version": "3.9.6",
-  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.6/MacroForge.exe",
-  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.6/MacroForge-v3.9.6.zip",
-  "notes": "Release v3.9.6"
+  "version": "3.9.7",
+  "url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.7/MacroForge.exe",
+  "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v3.9.7/MacroForge-v3.9.7.zip",
+  "notes": "Release v3.9.7 - Debug menu simplified, new icon"
 }
