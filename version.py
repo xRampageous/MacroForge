@@ -5,7 +5,7 @@ VERSION_TUPLE = tuple(int(p) for p in VERSION.split(".") if p.isdigit())
 
 # Increment this when shipping a patch rebuild under the same version.
 # The updater checks BUILD_ID when VERSION is unchanged.
-BUILD_ID = 2
+BUILD_ID = 3
 
 # Update source (raw JSON hosted anywhere — GitHub raw, S3, your own server)
 # Example: "https://raw.githubusercontent.com/YourUser/MacroForge/main/update.json"

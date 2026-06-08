@@ -296,20 +296,24 @@ def make_playback_panel(window):
 
     target_row = QHBoxLayout()
     target_row.setContentsMargins(0, 1, 0, 0)
-    target_row.setSpacing(8)
+    target_row.setSpacing(7)
     self.lock_window_combo = QComboBox()
     self.lock_window_combo.setObjectName("lock_window_combo")
     self.lock_window_combo.setToolTip("Target window for Lock to window")
     self.lock_window_combo.addItem("Choose target window", 0)
     self.lock_window_combo.setFixedHeight(26)
-    self.lock_window_combo.setMinimumWidth(176)
-    self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    # Keep the target selector readable without letting it consume the whole
+    # bottom dock.  Wide layouts get a tidy capped selector, while compact
+    # layouts can shrink it before the refresh/target icon cluster is squeezed.
+    self.lock_window_combo.setMinimumWidth(132)
+    self.lock_window_combo.setMaximumWidth(242)
+    self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     self.lock_window_combo.setStyleSheet(
         f"QComboBox#lock_window_combo {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 3px 10px; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 3px 8px; "
         "font-size: 10px; font-weight: 850; }}"
         f"QComboBox#lock_window_combo:hover {{ border-color: {C['pause_cyan']}; }}"
-        "QComboBox#lock_window_combo::drop-down { border: none; width: 18px; }"
+        "QComboBox#lock_window_combo::drop-down { border: none; width: 14px; }"
     )
     self.lock_window_health = QLabel()
     self.lock_window_health.setObjectName("lock_window_health")
@@ -320,12 +324,14 @@ def make_playback_panel(window):
         f"border: 1px solid {C['border']}; border-radius: 5px; }}"
     )
     target_row.addWidget(self.lock_window_health, alignment=Qt.AlignmentFlag.AlignVCenter)
-    target_row.addWidget(self.lock_window_combo, stretch=1)
-    target_row.addSpacing(18)
+    target_row.addWidget(self.lock_window_combo)
+    # Push the icon tools away from the target selector when there is room,
+    # but collapse the gap first on narrower window sizes.
+    target_row.addStretch(1)
 
     lock_window_tools = QHBoxLayout()
     lock_window_tools.setContentsMargins(0, 0, 0, 0)
-    lock_window_tools.setSpacing(6)
+    lock_window_tools.setSpacing(7)
 
     def tiny_icon_btn(icon_name, tip, slot):
         btn = QPushButton()
@@ -333,7 +339,7 @@ def make_playback_panel(window):
         btn.setIcon(icon(icon_name, 14, C["pause_cyan"]))
         btn.setIconSize(QSize(14, 14))
         btn.setToolTip(tip)
-        btn.setFixedSize(26, 26)
+        btn.setFixedSize(27, 26)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(slot)
         btn.setStyleSheet(
