@@ -1978,28 +1978,8 @@ def build_main_layout(window):
 
     self.mode_filter_btn.clicked.connect(_show_mode_filter_menu)
 
-    self.debug_tools_menu = QMenu(self)
-    self.debug_tools_menu.setObjectName("debug_tools_menu")
-    self.debug_tools_menu.setStyleSheet(toolbar_menu_style)
-    dbg_editor = self.debug_tools_menu.addAction("Editor")
-    dbg_health = self.debug_tools_menu.addAction("Health")
-    dbg_runtime = self.debug_tools_menu.addAction("Runtime")
-    dbg_filters = self.debug_tools_menu.addAction("Filters")
-    self.debug_tools_menu.addSeparator()
-    dbg_debug = self.debug_tools_menu.addAction("Debug")
-    dbg_editor.triggered.connect(self.open_macro_editor)
-    dbg_health.triggered.connect(self.open_preflight_report)
-    dbg_runtime.triggered.connect(lambda: self.toggle_runtime_log_panel(True))
-    dbg_filters.triggered.connect(lambda: _show_mode_filter_menu())
-    dbg_debug.triggered.connect(self.open_debug_viewer)
-    self.debug_tools_menu.addSeparator()
-    dbg_hotkeys = self.debug_tools_menu.addAction("Hotkey Settings...")
-    dbg_hotkeys.triggered.connect(self.open_hotkey_settings_dialog)
-
-    def _show_debug_tools_menu():
-        self.debug_tools_menu.popup(self.debug_top_btn.mapToGlobal(self.debug_top_btn.rect().bottomLeft()))
-
-    self.debug_top_btn.clicked.connect(_show_debug_tools_menu)
+    # Debug button now directly opens debug viewer
+    self.debug_top_btn.clicked.connect(self.open_debug_viewer)
 
     self.tl_search_popup = QFrame(self)
     self.tl_search_popup.setObjectName("timeline_search_popup")
