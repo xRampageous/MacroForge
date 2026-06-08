@@ -1,0 +1,19 @@
+title:	MacroForge v3.9.7
+tag:	v3.9.7
+draft:	false
+prerelease:	false
+immutable:	false
+author:	xRampageous
+created:	2026-06-08T03:07:20Z
+published:	2026-06-08T03:30:39Z
+url:	https://github.com/xRampageous/MacroForge/releases/tag/v3.9.7
+asset:	MacroForge-v3.9.7.zip
+asset:	MacroForge.exe
+--
+## v3.9.7 - Debug Menu Simplified + New Icon
+
+### Changes
+- **Simplified debug button** - Now directly opens debug window (no menu)
+- **Removed from debug menu:** Editor, Health, Runtime, Filters
+- **New application icon** - Updated logo across all sizes
+- **Hotkey settings** - Available in Settings dialog
