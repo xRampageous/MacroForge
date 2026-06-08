@@ -89,11 +89,11 @@ def make_playback_panel(window):
 
     top = QHBoxLayout()
     top.setContentsMargins(0, 0, 0, 0)
-    top.setSpacing(10)
+    top.setSpacing(12)
 
     play_section = QFrame()
     play_section.setObjectName("playback_block")
-    play_section.setFixedWidth(262)
+    play_section.setFixedWidth(266)
     play_section.setStyleSheet("QFrame#playback_block { background: transparent; border: none; }")
     play_lo = QVBoxLayout(play_section)
     play_lo.setContentsMargins(0, 0, 0, 0)
@@ -194,22 +194,22 @@ def make_playback_panel(window):
 
     options_body = QHBoxLayout()
     options_body.setContentsMargins(0, 0, 0, 0)
-    options_body.setSpacing(10)
+    options_body.setSpacing(12)
 
     speed_box = QVBoxLayout()
     speed_box.setContentsMargins(0, 0, 0, 0)
-    speed_box.setSpacing(3)
+    speed_box.setSpacing(4)
     speed_box.addWidget(tiny_label("Speed"))
     self.speed_combo = QComboBox()
     self.speed_combo.addItems(["0.1x", "0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x", "4.0x"])
     self.speed_combo.setCurrentText("1.0x")
     self.speed_combo.currentTextChanged.connect(self._on_speed_change)
     self.speed_combo.setFixedHeight(30)
-    self.speed_combo.setFixedWidth(50)
+    self.speed_combo.setFixedWidth(58)
     self.speed_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     self.speed_combo.setStyleSheet(
         f"QComboBox {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-        f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 4px; "
+        f"border: 1px solid {C['border_light']}; border-radius: 7px; padding: 4px 6px; "
         "font-size: 12px; font-weight: 800; }}"
         f"QComboBox:hover {{ border-color: {C['accent_dim']}; }}"
         "QComboBox::drop-down { border: none; width: 0px; }"
@@ -221,12 +221,13 @@ def make_playback_panel(window):
     self.speed_slider.setValue(self.speed_combo.currentIndex())
     self.speed_slider.setTickInterval(1)
     self.speed_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    self.speed_slider.setFixedHeight(20)
+    self.speed_slider.setFixedHeight(22)
+    self.speed_slider.setMinimumWidth(128)
     self.speed_slider.setStyleSheet(
-        f"QSlider#playback_speed_slider::groove:horizontal {{ height: 6px; background: {C['lane']}; border-radius: 3px; }}"
-        f"QSlider#playback_speed_slider::sub-page:horizontal {{ background: {C['accent']}; border-radius: 3px; }}"
-        f"QSlider#playback_speed_slider::handle:horizontal {{ background: {C['accent']}; width: 16px; height: 16px; "
-        f"border-radius: 8px; margin: -5px 0; }}"
+        f"QSlider#playback_speed_slider::groove:horizontal {{ height: 7px; background: {C['lane']}; border-radius: 4px; }}"
+        f"QSlider#playback_speed_slider::sub-page:horizontal {{ background: {C['accent']}; border-radius: 4px; }}"
+        f"QSlider#playback_speed_slider::handle:horizontal {{ background: {C['accent']}; width: 17px; height: 17px; "
+        f"border-radius: 9px; margin: -5px 0; }}"
         f"QSlider#playback_speed_slider::handle:horizontal:hover {{ background: {C['accent_hover']}; }}"
     )
     self.speed_slider.valueChanged.connect(lambda value: self.speed_combo.setCurrentIndex(int(value)))
@@ -234,7 +235,7 @@ def make_playback_panel(window):
 
     speed_control_row = QHBoxLayout()
     speed_control_row.setContentsMargins(0, 0, 0, 0)
-    speed_control_row.setSpacing(7)
+    speed_control_row.setSpacing(9)
     speed_control_row.addWidget(self.speed_combo)
     speed_control_row.addWidget(self.speed_slider, stretch=1)
     speed_box.addLayout(speed_control_row)
@@ -242,7 +243,7 @@ def make_playback_panel(window):
     speed_scale = QHBoxLayout()
     speed_scale.setContentsMargins(0, 0, 0, 0)
     speed_scale.setSpacing(0)
-    speed_scale.addSpacing(57)
+    speed_scale.addSpacing(67)
     for text, align in (("0.1x", Qt.AlignmentFlag.AlignLeft), ("1x", Qt.AlignmentFlag.AlignCenter), ("4x", Qt.AlignmentFlag.AlignRight)):
         scale_lbl = QLabel(text)
         scale_lbl.setAlignment(align)
@@ -295,18 +296,18 @@ def make_playback_panel(window):
 
     target_row = QHBoxLayout()
     target_row.setContentsMargins(0, 0, 0, 0)
-    target_row.setSpacing(4)
+    target_row.setSpacing(7)
     self.lock_window_combo = QComboBox()
     self.lock_window_combo.setObjectName("lock_window_combo")
     self.lock_window_combo.setToolTip("Target window for Lock to window")
     self.lock_window_combo.addItem("Choose target window", 0)
-    self.lock_window_combo.setFixedHeight(24)
-    self.lock_window_combo.setMinimumWidth(118)
+    self.lock_window_combo.setFixedHeight(26)
+    self.lock_window_combo.setMinimumWidth(146)
     self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.lock_window_combo.setStyleSheet(
         f"QComboBox#lock_window_combo {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 2px 7px; "
-        "font-size: 10px; font-weight: 800; }}"
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 3px 8px; "
+        "font-size: 10px; font-weight: 850; }}"
         f"QComboBox#lock_window_combo:hover {{ border-color: {C['pause_cyan']}; }}"
         "QComboBox#lock_window_combo::drop-down { border: none; width: 18px; }"
     )
@@ -320,6 +321,7 @@ def make_playback_panel(window):
     )
     target_row.addWidget(self.lock_window_health)
     target_row.addWidget(self.lock_window_combo, stretch=1)
+    target_row.addSpacing(12)
 
     def tiny_icon_btn(icon_name, tip, slot):
         btn = QPushButton()
@@ -327,7 +329,7 @@ def make_playback_panel(window):
         btn.setIcon(icon(icon_name, 14, C["pause_cyan"]))
         btn.setIconSize(QSize(14, 14))
         btn.setToolTip(tip)
-        btn.setFixedSize(24, 24)
+        btn.setFixedSize(26, 26)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(slot)
         btn.setStyleSheet(
@@ -413,7 +415,7 @@ def make_playback_panel(window):
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
 
-    options_body.addLayout(loops_modes, stretch=2)
+    options_body.addLayout(loops_modes, stretch=1)
     options_body.addWidget(vertical_rule())
     options_body.addLayout(speed_box, stretch=2)
     opt_lo.addLayout(options_body)
