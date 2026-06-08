@@ -30,7 +30,7 @@ build.bat
 
 Output:
 - `dist\MacroForge\MacroForge.exe` — portable app
-- `installer\MacroForge-Setup.exe` — Windows installer
+- `installer\MacroForge-Setup-vX.Y.Z.exe` — Windows installer
 
 ## Update System
 

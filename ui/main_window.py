@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QGridLayout, QSizePolicy,
     QLabel, QPushButton, QComboBox, QLineEdit, QCheckBox,
-    QProgressBar, QFrame, QMenu,
+    QFrame, QMenu,
     QSpinBox, QDoubleSpinBox, QSlider,
     QFileDialog, QMessageBox, QInputDialog,
     QDialog, QPlainTextEdit, QListWidget
@@ -26,7 +26,6 @@ from PyQt6.QtGui import QFont, QColor, QPen, QKeySequence, QShortcut, QIcon, QPi
 
 from engine import ExecutionEngine
 from models import Action, ProfileManager, SettingsManager, ActionListModel, HistoryManager
-from updater import check_update, perform_update, get_last_update_error
 from version import VERSION
 # from hotkeys import start_hotkeys, stop_hotkeys  # DISABLED — pynput causes Qt dialog crashes
 from debugger import logger, DebugViewer
@@ -35,6 +34,7 @@ from ui.hotkey_manager import create_hotkey_manager
 from ui.toolbar_controller import create_toolbar_controller
 from ui.inspector_controller import create_inspector_controller
 from ui.playback_controller import create_playback_controller
+from ui.update_controller import create_update_controller
 from ui.timeline_interactions import create_timeline_interactions
 from ui.hotkey_settings import open_hotkey_settings
 from ui.recording_overlay import show_recording_overlay, show_post_recording_dialog
@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
     _update_error = pyqtSignal(str)
     _download_progress = pyqtSignal(int, str)  # pct, info_text
     _do_exit = pyqtSignal()
+    _do_update_exit = pyqtSignal()
     _close_update_dlg = pyqtSignal()
 
     # Engine -> main thread signals
@@ -142,6 +143,7 @@ class MainWindow(QMainWindow):
         self._image_preview_pixmap = QPixmap()
         self._pending_update_manifest = None
         self._update_available = False
+        self._update_ctrl = create_update_controller(self)
         self._update_check_timer = QTimer(self)
         self._update_check_timer.setInterval(60 * 1000)
         self._update_check_timer.timeout.connect(self._check_update_silent)
@@ -225,6 +227,7 @@ class MainWindow(QMainWindow):
         self._update_not_found.connect(self._on_update_not_found)
         self._update_error.connect(self._on_update_error)
         self._do_exit.connect(self._real_exit)
+        self._do_update_exit.connect(lambda: self._real_exit(force=True))
         self._close_update_dlg.connect(self._on_close_update_dlg)
 
         self._play_action.connect(self._do_play_cb)
@@ -5646,228 +5649,44 @@ class MainWindow(QMainWindow):
         self.status("Statistics reset")
 
     def _set_update_button_available(self, available=False, checking=False):
-        """Refresh the top update/download icon state without showing popups."""
-        try:
-            btn = getattr(self, "update_top_btn", None)
-            if btn is None:
-                return
-            if checking:
-                color = COLORS["text_dim"]
-                tip = "Checking for updates…"
-            elif available:
-                color = COLORS["success"]
-                manifest = getattr(self, "_pending_update_manifest", None) or {}
-                remote = manifest.get("version", "new version") if isinstance(manifest, dict) else "new version"
-                tip = f"Update available: {remote} — click to download"
-            else:
-                color = COLORS["accent"]
-                tip = "Check for updates"
-            btn.setIcon(icon("download", 18, color))
-            btn.setToolTip(tip)
-            btn.setProperty("update_available", bool(available))
-            btn.setProperty("checking", bool(checking))
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
-            btn.update()
-        except Exception:
-            pass
+        self._update_ctrl.set_button_available(available=available, checking=checking)
 
     def _mark_update_available(self, manifest):
-        """Store an available update and turn the download icon green."""
-        try:
-            self._pending_update_manifest = dict(manifest or {})
-        except Exception:
-            self._pending_update_manifest = manifest
-        self._update_available = True
-        self._set_update_button_available(available=True)
-        try:
-            remote = (manifest or {}).get("version", "new version") if isinstance(manifest, dict) else "new version"
-            self.status(f"Update available: {remote}")
-        except Exception:
-            pass
+        self._update_ctrl.mark_available(manifest)
 
     # ═══════════════════════════════════════════════════════
     #  UPDATE CHECKING
     # ═══════════════════════════════════════════════════════
 
     def _check_update_silent(self):
-        self._update_prompt_shown = False  # fresh startup = allow prompt
-        def _bg():
-            try:
-                manifest = check_update(silent=True)
-                if manifest:
-                    self._update_found.emit(manifest)
-            except Exception as e:
-                logger.error(f"Silent update check failed: {e}")
-        threading.Thread(target=_bg, daemon=True).start()
+        self._update_ctrl.check_silent()
 
     def _on_update_found(self, manifest):
-        """Slot for _update_found signal — always runs on main thread."""
-        self._set_update_done()
-        # No popup on discovery: the toolbar download icon turns green and the
-        # user can click it when ready to open the download window.
-        self._mark_update_available(manifest)
+        self._update_ctrl.on_found(manifest)
 
     def _on_update_not_found(self):
-        self._set_update_done()
-        self._pending_update_manifest = None
-        self._update_available = False
-        self._set_update_button_available(available=False)
-        self.status("No updates found")
+        self._update_ctrl.on_not_found()
 
     def _on_update_error(self, error_msg):
-        self._set_update_done()
-        self._set_update_button_available(available=bool(getattr(self, "_update_available", False)))
-        self._on_close_update_dlg()
-        QMessageBox.warning(self, "Update Check Failed", f"Could not check for updates:\n\n{error_msg}")
+        self._update_ctrl.on_error(error_msg)
 
     def _on_close_update_dlg(self):
-        if hasattr(self, '_update_dlg') and self._update_dlg:
-            self._update_dlg.close()
-            self._update_dlg = None
-        if hasattr(self, '_update_bar'):
-            self._update_bar = None
-        if hasattr(self, '_update_info'):
-            self._update_info = None
-        try:
-            self._download_progress.disconnect(self._on_download_progress)
-        except Exception:
-            pass
+        self._update_ctrl.close_dialog()
 
     def _on_download_progress(self, pct, txt):
-        """Slot for _download_progress signal — always runs on main thread."""
-        if hasattr(self, '_update_bar') and self._update_bar:
-            self._update_bar.setValue(pct)
-        if hasattr(self, '_update_info') and self._update_info:
-            self._update_info.setText(txt)
+        self._update_ctrl.on_download_progress(pct, txt)
 
     def _set_update_done(self):
-        self._update_checking = False
-        if not bool(getattr(self, "_update_available", False)):
-            self._set_update_button_available(available=False)
+        self._update_ctrl.set_done()
 
     def _check_update_manual(self):
-        if bool(getattr(self, "_update_available", False)) and getattr(self, "_pending_update_manifest", None):
-            self._start_update_download(self._pending_update_manifest)
-            return
-        if getattr(self, "_update_checking", False):
-            self.status("Already checking for updates")
-            return
-        self._update_checking = True
-        self._update_prompt_shown = False
-        self._set_update_button_available(checking=True)
-        self.status("Checking for updates…")
-
-        def _bg():
-            try:
-                manifest = check_update(silent=False)
-            except Exception as e:
-                self._update_error.emit(str(e))
-                return
-            if manifest:
-                self._update_found.emit(manifest)
-            else:
-                error = get_last_update_error()
-                if error:
-                    self._update_error.emit(error)
-                else:
-                    self._update_not_found.emit()
-
-        threading.Thread(target=_bg, daemon=True).start()
-        # Safety net: reset flag after 30s so UI isn't stuck
-        QTimer.singleShot(30000, lambda: self._set_update_done() if getattr(self, "_update_checking", False) else None)
+        self._update_ctrl.check_manual()
 
     def _prompt_update(self, manifest):
-        """Backwards-compatible discovery handler: mark available, no popup."""
-        self._mark_update_available(manifest)
+        self._update_ctrl.prompt_update(manifest)
 
     def _start_update_download(self, manifest):
-        try:
-            if not manifest:
-                self.status("No update is ready to download")
-                return
-            remote_ver = manifest.get("version", "unknown") if isinstance(manifest, dict) else "unknown"
-            logger.info(f"Opening update download window for {remote_ver}")
-
-            # Progress dialog
-            from ui.dialogs._common import dialog_stylesheet, make_header
-            accent = COLORS["accent"]
-            self._update_dlg = QDialog(self)
-            self._update_dlg.setWindowTitle("Updating MacroForge")
-            self._update_dlg.setFixedSize(420, 170)
-            self._update_dlg.setStyleSheet(
-                dialog_stylesheet(accent)
-                + f"""
-                QProgressBar {{
-                    background-color: {COLORS['lane']};
-                    border: 1px solid {COLORS['border']};
-                    border-radius: 6px;
-                    height: 9px;
-                    text-align: center;
-                }}
-                QProgressBar::chunk {{
-                    background-color: {accent};
-                    border-radius: 6px;
-                }}
-                """
-            )
-            self._update_dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-            lo = QVBoxLayout(self._update_dlg)
-            lo.setContentsMargins(16, 16, 16, 14)
-            lo.setSpacing(9)
-            lo.addWidget(make_header("Downloading Update", accent, "download"))
-            title = QLabel(f"MacroForge {remote_ver}")
-            title.setStyleSheet(f"color: {COLORS['text']}; font-size: 13px; font-weight: 900; background: transparent;")
-            lo.addWidget(title)
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setFixedHeight(11)
-            lo.addWidget(bar)
-            info = QLabel("Starting…")
-            info.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 11px; font-weight: 700; background: transparent;")
-            lo.addWidget(info)
-            self._update_dlg.show()
-            self._update_dlg.raise_()
-            self._update_dlg.activateWindow()
-            self._update_dlg.update()
-            self._set_update_button_available(checking=True)
-            QApplication.processEvents()
-
-            # Store refs for signal-based updates (thread-safe)
-            self._update_bar = bar
-            self._update_info = info
-            try:
-                self._download_progress.disconnect(self._on_download_progress)
-            except Exception:
-                pass
-            self._download_progress.connect(self._on_download_progress)
-
-            def _on_progress(downloaded, total):
-                pct = downloaded / total * 100 if total else 0
-                mb_down = downloaded / (1024 * 1024)
-                if total:
-                    mb_total = total / (1024 * 1024)
-                    txt = f"{mb_down:.1f} MB / {mb_total:.1f} MB  ({pct:.0f}%)"
-                else:
-                    txt = f"{mb_down:.1f} MB downloaded"
-                self._download_progress.emit(int(pct), txt)
-
-            def _download():
-                try:
-                    if perform_update(manifest, progress_cb=_on_progress):
-                        self._close_update_dlg.emit()
-                        self._do_exit.emit()
-                    else:
-                        self._close_update_dlg.emit()
-                        self._update_error.emit("Download or installation failed. See debug log for details.")
-                except Exception as e:
-                    logger.error(f"perform_update failed: {e}")
-                    self._close_update_dlg.emit()
-                    self._update_error.emit(f"Update failed: {e}")
-            threading.Thread(target=_download, daemon=True).start()
-        except Exception as e:
-            logger.error(f"_prompt_update crashed: {e}")
-            self._update_prompt_shown = False
+        self._update_ctrl.start_download(manifest)
 
     # ═══════════════════════════════════════════════════════
     #  STATISTICS & STATUS
@@ -6499,7 +6318,7 @@ class MainWindow(QMainWindow):
                 self.save_session()
                 self.status("Action folder updated")
 
-    def _real_exit(self):
+    def _real_exit(self, force: bool = False):
         try:
             self._do_save_session()
             self._write_recovery_snapshot(clean_shutdown=True)
@@ -6524,10 +6343,11 @@ class MainWindow(QMainWindow):
             QApplication.quit()
         except Exception:
             pass
-        try:
-            QTimer.singleShot(1500, lambda: os._exit(0))
-        except Exception:
-            pass
+        if force:
+            try:
+                QTimer.singleShot(1500, lambda: os._exit(0))
+            except Exception:
+                pass
 
     def closeEvent(self, event):
         self._do_save_session()

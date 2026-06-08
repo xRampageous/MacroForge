@@ -324,12 +324,39 @@ class TestOwnedTimers(QtTestCase):
                 patch.object(MainWindow, "_setup_tray"),
                 patch("ui.main_window.QApplication.topLevelWidgets", return_value=[]),
                 patch("ui.main_window.QApplication.quit") as quit_mock,
+                patch("ui.main_window.QTimer.singleShot") as single_shot_mock,
                 patch("ui.main_window.os._exit") as os_exit_mock,
             ):
                 window = MainWindow(profile_manager=profile_manager)
+                single_shot_mock.reset_mock()
                 window._real_exit()
 
             quit_mock.assert_called_once()
+            single_shot_mock.assert_not_called()
+            os_exit_mock.assert_not_called()
+            window._save_session_timer.stop()
+            window._update_check_timer.stop()
+            window.deleteLater()
+
+    def test_real_exit_can_force_updater_shutdown_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_manager = SimpleNamespace(base_dir=tmpdir)
+            with (
+                patch.object(MainWindow, "_check_update_silent"),
+                patch.object(MainWindow, "load_last_session"),
+                patch.object(MainWindow, "_restore_window_geometry"),
+                patch.object(MainWindow, "_setup_tray"),
+                patch("ui.main_window.QApplication.topLevelWidgets", return_value=[]),
+                patch("ui.main_window.QApplication.quit") as quit_mock,
+                patch("ui.main_window.QTimer.singleShot") as single_shot_mock,
+                patch("ui.main_window.os._exit") as os_exit_mock,
+            ):
+                window = MainWindow(profile_manager=profile_manager)
+                single_shot_mock.reset_mock()
+                window._real_exit(force=True)
+
+            quit_mock.assert_called_once()
+            single_shot_mock.assert_called_once()
             os_exit_mock.assert_not_called()
             window._save_session_timer.stop()
             window._update_check_timer.stop()

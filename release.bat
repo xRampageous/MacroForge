@@ -20,6 +20,7 @@ cd /d "%~dp0"
 :: ===========================================================
 set "BUMP=patch"
 set "BUILD_FLAGS="
+set "REQUIRE_INSTALLER=1"
 
 :arg_loop
 set "ARG=%~1"
@@ -29,6 +30,9 @@ if "!ARG!"=="--bump" (
     shift
     shift
     goto :arg_loop
+)
+if "!ARG!"=="--no-installer" (
+    set "REQUIRE_INSTALLER=0"
 )
 :: Pass everything else to build.bat
 set "BUILD_FLAGS=!BUILD_FLAGS! !ARG!"
@@ -112,15 +116,17 @@ python release_notes.py !VER! > _release_notes.txt
 echo.
 echo [2/3] Releasing to GitHub...
 
-:: Delete existing release (idempotent)
-gh release delete v!VER! --repo xRampageous/MacroForge --yes >nul 2>&1
-
-:: Create release
-gh release create v!VER! --repo xRampageous/MacroForge --title "MacroForge v!VER!" --notes-file _release_notes.txt >nul 2>&1
+:: Create release only when it does not already exist.
+gh release view v!VER! --repo xRampageous/MacroForge >nul 2>&1
 if %errorlevel% neq 0 (
-    del /f /q _release_notes.txt >nul 2>&1
-    echo [ERROR] Release creation failed.
-    pause & exit /b 1
+    gh release create v!VER! --repo xRampageous/MacroForge --title "MacroForge v!VER!" --notes-file _release_notes.txt >nul 2>&1
+    if errorlevel 1 (
+        del /f /q _release_notes.txt >nul 2>&1
+        echo [ERROR] Release creation failed.
+        pause & exit /b 1
+    )
+) else (
+    echo        Reusing existing release v!VER!.
 )
 
 :: Upload assets
@@ -156,6 +162,14 @@ if exist "installer\MacroForge-Setup-v!VER!.exe" (
         echo [ERROR] Installer upload failed.
         pause & exit /b 1
     )
+) else (
+    if "!REQUIRE_INSTALLER!"=="1" (
+        del /f /q _release_notes.txt >nul 2>&1
+        echo [ERROR] Installer asset missing: installer\MacroForge-Setup-v!VER!.exe
+        pause & exit /b 1
+    ) else (
+        echo [WARN] Installer upload skipped because --no-installer was passed.
+    )
 )
 del /f /q _release_notes.txt >nul 2>&1
 
@@ -165,10 +179,18 @@ if %errorlevel% neq 0 (
     echo [ERROR] Post-release verification failed.
     pause & exit /b 1
 )
-python release_doctor.py !VER!
-if %errorlevel% neq 0 (
-    echo [ERROR] Release doctor failed.
-    pause & exit /b 1
+if "!REQUIRE_INSTALLER!"=="1" (
+    python release_doctor.py !VER! --require-installer
+    if errorlevel 1 (
+        echo [ERROR] Release doctor failed.
+        pause & exit /b 1
+    )
+) else (
+    python release_doctor.py !VER!
+    if errorlevel 1 (
+        echo [ERROR] Release doctor failed.
+        pause & exit /b 1
+    )
 )
 
 echo        Release v!VER! published.

@@ -14,6 +14,7 @@ def test_parser_accepts_publish_existing_build_dry_run():
     assert args.version == "9.9.9"
     assert args.allow_dirty is True
     assert args.dry_run is True
+    assert args.no_installer is False
 
 
 def test_parser_accepts_clean_and_bump_commands():
@@ -36,6 +37,7 @@ def test_publish_dry_run_does_not_create_or_upload_release():
         allow_dirty=True,
         skip_preflight=True,
         dry_run=True,
+        no_installer=False,
     )
 
     with (
@@ -48,7 +50,11 @@ def test_publish_dry_run_does_not_create_or_upload_release():
     assert result == 0
     ensure_release.assert_not_called()
     upload_release_assets.assert_not_called()
-    print_asset_table.assert_called_once_with("9.9.9", "xRampageous/MacroForge")
+    print_asset_table.assert_called_once_with(
+        "9.9.9",
+        "xRampageous/MacroForge",
+        include_installer=True,
+    )
 
 
 def test_clean_removes_generated_clutter_without_dist(tmp_path):

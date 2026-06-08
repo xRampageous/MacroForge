@@ -289,6 +289,43 @@ class TestUpdateMetadata(unittest.TestCase):
 
         self.assertIn("MacroForge-Setup-v9.9.9.exe", names)
 
+    def test_release_assets_require_installer_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            names = [
+                asset.name
+                for asset in release_doctor.release_assets(root, "9.9.9", include_installer=True)
+            ]
+
+        self.assertIn("MacroForge-Setup-v9.9.9.exe", names)
+
+    def test_release_doctor_reports_missing_required_installer(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "dist").mkdir()
+            (root / "dist" / "MacroForge.exe").write_bytes(b"exe")
+            (root / "dist" / "MacroForge-v9.9.9.zip").write_bytes(b"zip")
+            (root / "dist" / "MacroForge-v9.9.9.zip.sha256").write_text("digest", encoding="utf-8")
+            (root / "update.json").write_text(
+                json.dumps({
+                    "version": "9.9.9",
+                    "url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge.exe",
+                    "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge-v9.9.9.zip",
+                }),
+                encoding="utf-8",
+            )
+
+            errors, _warnings, _release = release_doctor.validate_release(
+                root,
+                "9.9.9",
+                "xRampageous/MacroForge",
+                online=False,
+                require_installer=True,
+            )
+
+        self.assertTrue(any("MacroForge-Setup-v9.9.9.exe" in error for error in errors))
+
 
 class TestUpdaterValidation(unittest.TestCase):
     def test_manifest_validation_rejects_malformed_metadata(self):
