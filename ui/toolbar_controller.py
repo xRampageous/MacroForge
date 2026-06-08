@@ -41,7 +41,7 @@ class ToolbarController:
             shown = name if len(name) <= 8 else f"{name[:7]}…"
             return f"{shown}  ▾"
         if mode == "compact":
-            shown = name if len(name) <= 12 else f"{name[:10]}..."
+            shown = name if len(name) <= 11 else f"{name[:10]}…"
             return f"{shown}  ▾"
         shown = name if len(name) <= 18 else f"{name[:15]}..."
         return f"{shown}  ▾"
@@ -57,12 +57,11 @@ class ToolbarController:
         try:
             header = getattr(self.window, "header_dock", None)
             profile = getattr(self.window, "profile_btn", None)
-            layout = getattr(self.window, "toolbar_layout", None)
-            status_pill = getattr(self.window, "status_pill", None)
-            if not all([header, profile, layout, status_pill]):
+            if header is None or profile is None:
                 return
-            
-            width = header.width()
+            width = int(header.width() or self.window.width())
+            if width <= 0:
+                return
             
             if width < 760:
                 mode = "tiny"
@@ -86,7 +85,8 @@ class ToolbarController:
                 separator_visible = True
                 status_cap = 420
             
-            # Calculate available space for status pill
+            # Give the status pill as much real space as remains after the fixed
+            # toolbar controls. It grows left from the right edge without overlap.
             visible_debug = 35
             static_budget = profile_w + visible_debug + 312
             available_status = max(112, width - static_budget)
@@ -98,22 +98,46 @@ class ToolbarController:
             
             if profile.width() != profile_w:
                 profile.setFixedWidth(profile_w)
-            
-            if status_pill.minimumWidth() != status_bounds[0] or status_pill.maximumWidth() != status_bounds[1]:
-                status_pill.setMinimumWidth(status_bounds[0])
-                status_pill.setMaximumWidth(status_bounds[1])
-            
-            if layout.contentsMargins() != margins:
-                layout.setContentsMargins(*margins)
-            if layout.spacing() != spacing:
-                layout.setSpacing(spacing)
-            
-            for sep in getattr(self, "toolbar_separators", []):
+
+            debug_btn = getattr(self.window, "debug_top_btn", None)
+            if debug_btn is not None:
+                try:
+                    debug_btn.setText("")
+                    debug_btn.setFixedWidth(35)
+                    debug_btn.setToolTip("Debug tools")
+                except Exception:
+                    pass
+
+            layout = header.layout()
+            if layout is not None:
+                current = layout.contentsMargins()
+                current_margins = (current.left(), current.top(), current.right(), current.bottom())
+                if current_margins != margins:
+                    layout.setContentsMargins(*margins)
+                if layout.spacing() != spacing:
+                    layout.setSpacing(spacing)
+
+            for sep in getattr(self.window, "toolbar_separators", getattr(self, "toolbar_separators", [])):
                 try:
                     sep.setVisible(separator_visible)
                     sep.setFixedWidth(1 if separator_visible else 0)
                 except Exception:
                     pass
+
+            status_pill = getattr(self.window, "status_pill", None)
+            if status_pill is not None:
+                self.window._status_pill_bounds = status_bounds
+                fit = getattr(self.window, "_fit_status_pill_to_visible_text", None)
+                if callable(fit):
+                    fit()
+                else:
+                    status_pill.setMinimumWidth(status_bounds[0])
+                    status_pill.setMaximumWidth(status_bounds[1])
+            try:
+                header.updateGeometry()
+                header.layout().activate() if header.layout() is not None else None
+            except Exception:
+                pass
         except Exception as e:
             logger.debug(f"Toolbar containment error: {e}")
     

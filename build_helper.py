@@ -63,7 +63,7 @@ def release_notes_from_git(version: str) -> str:
 
 
 def clean_release_zips(dist_dir: str = "dist", keep: str | None = None) -> list[str]:
-    """Remove old top-level release ZIPs from dist."""
+    """Remove old top-level release ZIPs and orphan digest sidecars from dist."""
     removed = []
     if not os.path.isdir(dist_dir):
         return removed
@@ -77,6 +77,22 @@ def clean_release_zips(dist_dir: str = "dist", keep: str | None = None) -> list[
                 print(f"  removed stale release ZIP: {stale}")
             except OSError as exc:
                 print(f"  ! could not remove stale release ZIP {stale}: {exc}")
+    for fname in os.listdir(dist_dir):
+        if not re.fullmatch(r"MacroForge-v.+\.zip\.sha256", fname):
+            continue
+        zip_name = fname.removesuffix(".sha256")
+        if zip_name == keep_name:
+            continue
+        zip_path = os.path.join(dist_dir, zip_name)
+        if os.path.exists(zip_path):
+            continue
+        stale = os.path.join(dist_dir, fname)
+        try:
+            os.remove(stale)
+            removed.append(stale)
+            print(f"  removed stale release digest: {stale}")
+        except OSError as exc:
+            print(f"  ! could not remove stale release digest {stale}: {exc}")
     return removed
 
 

@@ -3,7 +3,7 @@ import re
 import sys
 from pathlib import Path
 
-FILE = str(Path(__file__).parent / "version.py")
+FILE = Path(__file__).parent / "version.py"
 
 def bump(version: str, part: str) -> str:
     m = re.match(r'(\d+)\.(\d+)\.(\d+)', version)
@@ -22,26 +22,34 @@ def bump(version: str, part: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
-def main():
-    part = sys.argv[1] if len(sys.argv) > 1 else "patch"
+def bump_version(part: str = "patch", version_file: Path = FILE) -> tuple[str, str]:
     if part not in ("major", "minor", "patch"):
-        print("Usage: python bump_version.py [major|minor|patch]")
-        sys.exit(1)
+        raise ValueError("part must be one of: major, minor, patch")
 
-    with open(FILE, "r", encoding="utf-8") as f:
+    with version_file.open("r", encoding="utf-8") as f:
         content = f.read()
 
     m = re.search(r'VERSION\s*=\s*"([^"]+)"', content)
     if not m:
-        print(f"VERSION not found in {FILE}")
-        sys.exit(1)
+        raise ValueError(f"VERSION not found in {version_file}")
 
     old = m.group(1)
     new = bump(old, part)
     content = content.replace(f'VERSION = "{old}"', f'VERSION = "{new}"')
 
-    with open(FILE, "w", encoding="utf-8") as f:
+    with version_file.open("w", encoding="utf-8") as f:
         f.write(content)
+    return old, new
+
+
+def main():
+    part = sys.argv[1] if len(sys.argv) > 1 else "patch"
+    try:
+        old, new = bump_version(part)
+    except ValueError as exc:
+        print(exc)
+        print("Usage: python bump_version.py [major|minor|patch]")
+        sys.exit(1)
 
     print(f"Bumped {old} -> {new}")
 

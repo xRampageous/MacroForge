@@ -9,17 +9,36 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+from bump_version import bump_version
 from build_helper import release_notes_from_git
 from release_doctor import REPO, release_assets, validate_release
 from release_preflight import read_version, validate_release as validate_local_release
 
 
 ROOT = Path(__file__).resolve().parent
+GENERATED_FILES = (
+    "debug.log",
+    "macroforge_session.json",
+    "test_dl.zip",
+    "test_download.zip",
+    "update_health.json",
+    "upload_release.bat",
+    "upload_to_github.py",
+)
+GENERATED_DIRS = (
+    "__pycache__",
+    ".pytest_cache",
+)
+BUILD_ARTIFACT_DIRS = (
+    "build",
+    "installer",
+)
 
 
 def run(cmd: list[str] | str, *, check: bool = True, stdin=None) -> subprocess.CompletedProcess:
@@ -101,6 +120,54 @@ def cmd_build(args: argparse.Namespace) -> int:
     if args.clean_release:
         flags.append("--clean-release")
     run(["cmd", "/c", "build.bat", *flags], stdin=subprocess.DEVNULL)
+    return 0
+
+
+def _clean_targets(include_build: bool = False) -> list[Path]:
+    targets: list[Path] = []
+    for name in GENERATED_FILES:
+        path = ROOT / name
+        if path.exists():
+            targets.append(path)
+    for name in GENERATED_DIRS:
+        targets.extend(path for path in ROOT.rglob(name) if path.exists())
+    if include_build:
+        for name in BUILD_ARTIFACT_DIRS:
+            path = ROOT / name
+            if path.exists():
+                targets.append(path)
+    return sorted(set(targets), key=lambda p: str(p).lower())
+
+
+def _assert_inside_root(path: Path) -> None:
+    root = ROOT.resolve()
+    resolved = path.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise SystemExit(f"Refusing to clean outside repository: {resolved}")
+
+
+def cmd_clean(args: argparse.Namespace) -> int:
+    targets = _clean_targets(include_build=args.include_build)
+    if not targets:
+        print("[OK] No generated clutter found")
+        return 0
+    for path in targets:
+        _assert_inside_root(path)
+        rel = path.relative_to(ROOT)
+        if args.dry_run:
+            print(f"[DRY-RUN] Would remove {rel}")
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+        print(f"[CLEAN] Removed {rel}")
+    return 0
+
+
+def cmd_bump(args: argparse.Namespace) -> int:
+    old, new = bump_version(args.part, ROOT / "version.py")
+    print(f"Bumped {old} -> {new}")
     return 0
 
 
@@ -237,6 +304,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-installer", action="store_true")
     p.add_argument("--clean-release", action="store_true")
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("clean", help="Remove generated local clutter")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--include-build", action="store_true", help="Also remove build/ and installer/")
+    p.set_defaults(func=cmd_clean)
+
+    p = sub.add_parser("bump", help="Bump version.py")
+    p.add_argument("part", choices=["major", "minor", "patch"], nargs="?", default="patch")
+    p.set_defaults(func=cmd_bump)
 
     p = sub.add_parser("preflight", help="Validate local release artifacts")
     p.add_argument("--allow-dirty", action="store_true")

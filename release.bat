@@ -124,12 +124,12 @@ if %errorlevel% neq 0 (
 )
 
 :: Upload assets
-if not exist "dist\MacroForge\MacroForge.exe" (
+if not exist "dist\MacroForge.exe" (
     del /f /q _release_notes.txt >nul 2>&1
-    echo [ERROR] Legacy EXE asset missing: dist\MacroForge\MacroForge.exe
+    echo [ERROR] Legacy EXE asset missing: dist\MacroForge.exe
     pause & exit /b 1
 )
-gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge\MacroForge.exe" >nul 2>&1
+gh release upload v!VER! --repo xRampageous/MacroForge --clobber "dist\MacroForge.exe" >nul 2>&1
 if %errorlevel% neq 0 (
     del /f /q _release_notes.txt >nul 2>&1
     echo [ERROR] Legacy EXE upload failed.

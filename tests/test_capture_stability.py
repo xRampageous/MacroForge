@@ -611,6 +611,18 @@ class TestPlaybackVisibility(QtTestCase):
         self.assertFalse(outside["active"])
         timeline.deleteLater()
 
+    def test_main_window_owns_real_controller_instances(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window = self._make_window(tmpdir)
+            try:
+                self.assertIs(window._timeline_ctrl.timeline, window.timeline)
+                self.assertIs(window._timeline_ctrl.action_model, window.action_model)
+                self.assertIs(window._playback_ctrl.engine, window.engine)
+                self.assertIs(window._toolbar_ctrl.window, window)
+                self.assertIs(window._inspector_ctrl.window, window)
+            finally:
+                self._dispose_window(window)
+
     def test_timeline_ctrl_click_adds_to_multi_selection(self):
         timeline = TimelineView(model=ActionListModel([Action(str(i), 0.1) for i in range(5)]))
         timeline.resize(700, 360)

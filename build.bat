@@ -26,6 +26,7 @@ for %%a in (%*) do (
 set "SCRIPT_DIR=%~dp0"
 set "SRC_FILE=%SCRIPT_DIR%MacroForge.py"
 set "SPEC_FILE=%SCRIPT_DIR%MacroForge.spec"
+set "LEGACY_SPEC_FILE=%SCRIPT_DIR%MacroForge-legacy.spec"
 set "ICON_FILE=%SCRIPT_DIR%MacroForge.ico"
 set "PNG_FILE=%SCRIPT_DIR%MacroForge.png"
 set "DIST_DIR=%SCRIPT_DIR%dist"
@@ -42,6 +43,11 @@ if not exist "%SRC_FILE%" (
 if not exist "%SPEC_FILE%" (
     echo  [ERROR] Cannot find MacroForge.spec
     echo          Expected: %SPEC_FILE%
+    pause & exit /b 1
+)
+if not exist "%LEGACY_SPEC_FILE%" (
+    echo  [ERROR] Cannot find MacroForge-legacy.spec
+    echo          Expected: %LEGACY_SPEC_FILE%
     pause & exit /b 1
 )
 
@@ -98,6 +104,24 @@ if not exist "%DIST_DIR%\MacroForge\MacroForge.exe" (
     pause & exit /b 1
 )
 echo        EXE OK  ^|  %DIST_DIR%\MacroForge\MacroForge.exe
+
+echo.
+echo [1b/5] Building standalone legacy/update EXE...
+if "%FAST%"=="1" (
+    echo        Mode: incremental ^(skipping --clean^)
+    python -m PyInstaller "%LEGACY_SPEC_FILE%" --noconfirm --distpath "%DIST_DIR%" --workpath "%BUILD_DIR%\legacy"
+) else (
+    python -m PyInstaller "%LEGACY_SPEC_FILE%" --noconfirm --clean --distpath "%DIST_DIR%" --workpath "%BUILD_DIR%\legacy"
+)
+if %errorlevel% neq 0 (
+    echo  [ERROR] PyInstaller legacy EXE build failed.
+    pause & exit /b 1
+)
+if not exist "%DIST_DIR%\MacroForge.exe" (
+    echo  [ERROR] Expected standalone legacy EXE not found.
+    pause & exit /b 1
+)
+echo        Legacy EXE OK  ^|  %DIST_DIR%\MacroForge.exe
 
 :: ===========================================================
 ::  STEP 2 - COPY ASSETS
@@ -195,6 +219,7 @@ echo   BUILD COMPLETE  v%VER%
 echo  ============================================
 echo   Output:
 echo     %DIST_DIR%\MacroForge\MacroForge.exe
+echo     %DIST_DIR%\MacroForge.exe
 if "%NO_ZIP%"=="0" (
 echo     %DIST_DIR%\MacroForge-v%VER%.zip
 echo     %SCRIPT_DIR%update.json

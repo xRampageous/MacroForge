@@ -33,6 +33,8 @@ class TimelineInteractions:
         
         # Callbacks
         self._on_selection_changed: Optional[Callable] = None
+        self._on_action_clicked: Optional[Callable] = None
+        self._on_action_double_clicked: Optional[Callable] = None
         self._on_row_moved: Optional[Callable] = None
         self._on_show_context_menu: Optional[Callable] = None
     
@@ -45,10 +47,13 @@ class TimelineInteractions:
         """Set the action model reference."""
         self.action_model = model
     
-    def set_callbacks(self, on_selection_changed=None, on_row_moved=None, 
+    def set_callbacks(self, on_selection_changed=None, on_action_clicked=None,
+                     on_action_double_clicked=None, on_row_moved=None,
                      on_show_context_menu=None):
         """Set callback functions."""
         self._on_selection_changed = on_selection_changed
+        self._on_action_clicked = on_action_clicked
+        self._on_action_double_clicked = on_action_double_clicked
         self._on_row_moved = on_row_moved
         self._on_show_context_menu = on_show_context_menu
     
@@ -210,13 +215,16 @@ class TimelineInteractions:
     def _on_timeline_click(self, index):
         """Handle timeline row click."""
         row = index.row() if hasattr(index, 'row') else index
-        self.select_row(row)
+        self._sync_from_timeline(active=row)
+        if self._on_action_clicked:
+            self._on_action_clicked(row)
     
     def _on_timeline_double_click(self, index):
         """Handle timeline row double click."""
         row = index.row() if hasattr(index, 'row') else index
-        self.select_row(row)
-        # Could emit signal to open editor
+        self._sync_from_timeline(active=row)
+        if self._on_action_double_clicked:
+            self._on_action_double_clicked(row)
     
     def _on_row_dragged(self, from_row, to_row):
         """Handle single row drag and drop."""
@@ -240,8 +248,29 @@ class TimelineInteractions:
     
     def _on_selection_summary(self, rows):
         """Handle selection summary update."""
-        # Update any UI that shows selection count
-        pass
+        self._sync_from_timeline(rows=rows)
+        self._notify_selection_changed()
+
+    def _sync_from_timeline(self, rows=None, active=None):
+        """Mirror selection state owned by the timeline widget."""
+        if rows is None and self.timeline is not None:
+            try:
+                if hasattr(self.timeline, "sync_selection"):
+                    self.timeline.sync_selection()
+                if hasattr(self.timeline, "selected_rows"):
+                    rows = self.timeline.selected_rows()
+                else:
+                    rows = sorted(getattr(self.timeline, "selected_indices", set()))
+            except Exception:
+                rows = []
+        valid_rows = [r for r in (rows or []) if self._is_valid_row(int(r))]
+        self._selected_rows = set(valid_rows)
+        if active is not None and self._is_valid_row(int(active)):
+            self._active_index = int(active)
+        elif valid_rows:
+            self._active_index = valid_rows[0]
+        else:
+            self._active_index = -1
     
     # ═══════════════════════════════════════════════════════
     #  KEYBOARD NAVIGATION

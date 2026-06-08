@@ -57,11 +57,15 @@ def validate_release(root: Path, require_clean: bool = True) -> tuple[list[str],
     if not str(manifest.get("notes", "")).strip():
         errors.append("update.json notes must not be empty")
 
-    exe_path = root / "dist" / "MacroForge" / "MacroForge.exe"
+    exe_path = root / "dist" / "MacroForge.exe"
     if not exe_path.exists():
         errors.append(f"legacy EXE asset missing: {exe_path}")
     elif exe_path.stat().st_size <= 0:
         errors.append(f"legacy EXE asset is empty: {exe_path}")
+    else:
+        onedir_exe = root / "dist" / "MacroForge" / "MacroForge.exe"
+        if onedir_exe.exists() and exe_path.stat().st_size <= onedir_exe.stat().st_size:
+            errors.append("legacy EXE asset appears to be the onedir launcher, not a standalone onefile build")
 
     zip_path = root / "dist" / f"MacroForge-v{version}.zip"
     if not zip_path.exists():

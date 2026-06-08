@@ -46,24 +46,44 @@ class InspectorController:
     def show_inspector(self, show=True, action_type="key"):
         """Show or hide the inspector panel for the given action type."""
         try:
-            inspector_stack = getattr(self.window, "inspector_stack", None)
-            if not inspector_stack:
-                return
-            
-            # Map action types to widget indices
-            type_indices = {
-                "key": 0,
-                "pause": 1,
-                "image": 2,
-                "click": 3,
-                "group": 4,
-                "condition": 5,
-                "loop": 6,
-            }
-            index = type_indices.get(action_type, 0)
-            inspector_stack.setCurrentIndex(index if show else 0)
-            
-            # Trigger autosize
+            panes = (
+                "insp_key", "insp_pause", "insp_click", "insp_image",
+                "insp_group", "insp_loop", "insp_condition",
+            )
+            for name in panes:
+                pane = getattr(self.window, name, None)
+                if pane is not None:
+                    pane.setVisible(False)
+
+            action_row = getattr(self.window, "inspector_action_row", None)
+            if action_row is not None:
+                action_row.setVisible(bool(show))
+
+            empty = getattr(self.window, "insp_empty", None)
+            if empty is not None:
+                empty.setVisible(False)
+                if not show:
+                    empty.setText("Select an action to inspect")
+                    empty.setVisible(True)
+
+            if show:
+                mapping = {
+                    "key": "insp_key",
+                    "pause": "insp_pause",
+                    "click": "insp_click",
+                    "image": "insp_image",
+                    "group": "insp_group",
+                    "loop": "insp_loop",
+                    "condition": "insp_condition",
+                }
+                pane_name = mapping.get(action_type)
+                pane = getattr(self.window, pane_name, None) if pane_name else None
+                if pane is not None:
+                    pane.setVisible(True)
+                elif empty is not None:
+                    empty.setText("Use Edit for this block")
+                    empty.setVisible(True)
+
             autosize = getattr(self.window, "_autosize_inspector_panel", None)
             if autosize and callable(autosize):
                 QTimer.singleShot(0, autosize)
@@ -73,7 +93,7 @@ class InspectorController:
     def _autosave_inspector_edits(self):
         """Apply pending inspector edits."""
         try:
-            if getattr(self, "_inspector_loading", False):
+            if self.is_loading():
                 return
             apply = getattr(self.window, "_apply_inspector", None)
             if apply and callable(apply):
@@ -84,7 +104,7 @@ class InspectorController:
     def queue_inspector_autosave(self, *args):
         """Queue an autosave after a short delay."""
         try:
-            if getattr(self, "_inspector_loading", False):
+            if self.is_loading():
                 return
             if hasattr(self.window, "active_index"):
                 idx = self.window.active_index
@@ -131,10 +151,17 @@ class InspectorController:
     def set_loading(self, loading: bool):
         """Set the inspector loading state to prevent autosave during load."""
         self._inspector_loading = loading
+        try:
+            setattr(self.window, "_inspector_loading", loading)
+        except Exception:
+            pass
     
     def is_loading(self) -> bool:
         """Check if the inspector is currently loading."""
-        return getattr(self, "_inspector_loading", False)
+        window_value = getattr(self.window, "_inspector_loading", None)
+        if isinstance(window_value, bool):
+            return window_value
+        return bool(self._inspector_loading)
 
 
 def create_inspector_controller(window, timer_factory=QTimer):

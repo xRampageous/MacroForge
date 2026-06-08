@@ -34,7 +34,7 @@ class ReleaseAsset:
 
 def release_assets(root: Path, version: str) -> list[ReleaseAsset]:
     return [
-        ReleaseAsset("MacroForge.exe", root / "dist" / "MacroForge" / "MacroForge.exe", "url"),
+        ReleaseAsset("MacroForge.exe", root / "dist" / "MacroForge.exe", "url"),
         ReleaseAsset(f"MacroForge-v{version}.zip", root / "dist" / f"MacroForge-v{version}.zip", "zip_url"),
         ReleaseAsset(f"MacroForge-v{version}.zip.sha256", root / "dist" / f"MacroForge-v{version}.zip.sha256"),
     ]

@@ -180,11 +180,12 @@ class RecordingOverlay(QFrame):
     
     def _update_time(self):
         """Update the duration display."""
-        if self._recording and not self._paused:
-            elapsed = time.time() - self._start_time
-            minutes = int(elapsed // 60)
-            seconds = int(elapsed % 60)
-            self._time_label.setText(f"{minutes:02d}:{seconds:02d}")
+        if self._paused or self._start_time <= 0:
+            return
+        elapsed = max(0.0, time.time() - self._start_time)
+        minutes = int(elapsed // 60)
+        seconds = int(elapsed % 60)
+        self._time_label.setText(f"{minutes:02d}:{seconds:02d}")
     
     def _on_pause(self):
         """Handle pause button click."""

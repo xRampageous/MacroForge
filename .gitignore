@@ -3,9 +3,9 @@ dist/
 build/
 *.spec
 !MacroForge.spec
+!MacroForge-legacy.spec
 *.exe
 *.update.exe
-MacroForge.ico
 icon_new.png
 
 # Build helpers
@@ -25,6 +25,10 @@ installer/
 debug.log
 *.log
 .local_snapshots/
+test_dl.zip
+test_download.zip
+upload_release.bat
+upload_to_github.py
 
 # Session data
 macroforge_session.json

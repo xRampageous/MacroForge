@@ -53,36 +53,33 @@ class TestInspectorController(unittest.TestCase):
         """Test showing inspector for key action type."""
         self.controller.show_inspector(show=True, action_type="key")
         
-        # Key type should use index 0
-        self.window.inspector_stack.setCurrentIndex.assert_called_with(0)
+        self.window.insp_key.setVisible.assert_called_with(True)
     
     def test_show_inspector_image_type(self):
         """Test showing inspector for image action type."""
         self.controller.show_inspector(show=True, action_type="image")
         
-        # Image type should use index 2
-        self.window.inspector_stack.setCurrentIndex.assert_called_with(2)
+        self.window.insp_image.setVisible.assert_called_with(True)
     
     def test_show_inspector_group_type(self):
         """Test showing inspector for group action type."""
         self.controller.show_inspector(show=True, action_type="group")
         
-        # Group type should use index 4
-        self.window.inspector_stack.setCurrentIndex.assert_called_with(4)
+        self.window.insp_group.setVisible.assert_called_with(True)
     
     def test_show_inspector_unknown_type(self):
         """Test showing inspector for unknown action type."""
         self.controller.show_inspector(show=True, action_type="unknown")
         
-        # Unknown type should default to index 0
-        self.window.inspector_stack.setCurrentIndex.assert_called_with(0)
+        self.window.insp_empty.setText.assert_called_with("Use Edit for this block")
+        self.window.insp_empty.setVisible.assert_called_with(True)
     
     def test_show_inspector_hide(self):
         """Test hiding inspector."""
         self.controller.show_inspector(show=False, action_type="key")
         
-        # When show=False, should still set index but with 0
-        self.window.inspector_stack.setCurrentIndex.assert_called_with(0)
+        self.window.insp_empty.setText.assert_called_with("Select an action to inspect")
+        self.window.insp_empty.setVisible.assert_called_with(True)
     
     def test_queue_inspector_autosave_when_loading(self):
         """Test that autosave is not queued when loading."""

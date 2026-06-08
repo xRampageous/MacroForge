@@ -24,6 +24,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def write_legacy_exe(dist: Path, content: bytes = b"exe") -> Path:
+    exe_path = dist / "MacroForge.exe"
+    exe_path.write_bytes(content)
+    return exe_path
+
+
+def write_onedir_exe(dist: Path, content: bytes = b"launcher") -> Path:
     exe_dir = dist / "MacroForge"
     exe_dir.mkdir(exist_ok=True)
     exe_path = exe_dir / "MacroForge.exe"
@@ -41,6 +47,12 @@ class TestUpdateMetadata(unittest.TestCase):
         self.assertIn(f"/releases/download/v{VERSION}/", data["url"])
         self.assertTrue(data["url"].endswith("MacroForge.exe"))
         self.assertTrue(data.get("notes"))
+
+    def test_release_icon_asset_exists_for_fresh_builds(self):
+        icon_path = REPO_ROOT / "MacroForge.ico"
+
+        self.assertTrue(icon_path.exists())
+        self.assertGreater(icon_path.stat().st_size, 0)
 
     def test_build_helper_writes_complete_manifest(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -104,14 +116,23 @@ class TestUpdateMetadata(unittest.TestCase):
             dist = Path(tmpdir) / "dist"
             dist.mkdir()
             stale = dist / "MacroForge-v1.0.0.zip"
+            stale_digest = dist / "MacroForge-v1.0.0.zip.sha256"
+            orphan_digest = dist / "MacroForge-v0.9.0.zip.sha256"
             keep = dist / "MacroForge-v9.9.9.zip"
+            keep_digest = dist / "MacroForge-v9.9.9.zip.sha256"
             stale.write_text("old", encoding="utf-8")
+            stale_digest.write_text("old digest", encoding="utf-8")
+            orphan_digest.write_text("orphan digest", encoding="utf-8")
             keep.write_text("new", encoding="utf-8")
+            keep_digest.write_text("new digest", encoding="utf-8")
 
             removed = build_helper.clean_release_zips(str(dist), keep=str(keep))
-            self.assertEqual(len(removed), 1)
+            self.assertEqual(len(removed), 3)
             self.assertFalse(stale.exists())
+            self.assertFalse(stale_digest.exists())
+            self.assertFalse(orphan_digest.exists())
             self.assertTrue(keep.exists())
+            self.assertTrue(keep_digest.exists())
 
     def test_release_preflight_rejects_bad_digest_sidecar(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -128,7 +149,8 @@ class TestUpdateMetadata(unittest.TestCase):
             )
             dist = root / "dist"
             dist.mkdir()
-            write_legacy_exe(dist)
+            write_legacy_exe(dist, b"standalone exe")
+            write_onedir_exe(dist, b"launcher")
             zip_path = dist / "MacroForge-v9.9.9.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
                 zf.writestr("MacroForge.exe", "exe")
@@ -139,6 +161,37 @@ class TestUpdateMetadata(unittest.TestCase):
             errors, _warnings = release_preflight.validate_release(root, require_clean=False)
 
         self.assertTrue(any("digest sidecar does not match" in error for error in errors))
+
+    def test_release_preflight_rejects_onedir_launcher_as_legacy_exe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "version.py").write_text('VERSION = "9.9.9"\n', encoding="utf-8")
+            (root / "update.json").write_text(
+                json.dumps({
+                    "version": "9.9.9",
+                    "url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge.exe",
+                    "zip_url": "https://github.com/xRampageous/MacroForge/releases/download/v9.9.9/MacroForge-v9.9.9.zip",
+                    "notes": "test",
+                }),
+                encoding="utf-8",
+            )
+            dist = root / "dist"
+            dist.mkdir()
+            write_legacy_exe(dist, b"tiny")
+            write_onedir_exe(dist, b"larger onedir launcher")
+            zip_path = dist / "MacroForge-v9.9.9.zip"
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                zf.writestr("MacroForge.exe", "exe")
+                zf.writestr("_internal/module.py", "module")
+                zf.writestr("artifact_manifest.json", "{}")
+            Path(f"{zip_path}.sha256").write_text(
+                f"{build_helper.sha256_file(str(zip_path))}  MacroForge-v9.9.9.zip\n",
+                encoding="utf-8",
+            )
+
+            errors, _warnings = release_preflight.validate_release(root, require_clean=False)
+
+        self.assertTrue(any("not a standalone onefile build" in error for error in errors))
 
     def test_release_preflight_warns_when_zip_exceeds_size_budget(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -155,7 +208,8 @@ class TestUpdateMetadata(unittest.TestCase):
             )
             dist = root / "dist"
             dist.mkdir()
-            write_legacy_exe(dist)
+            write_legacy_exe(dist, b"standalone exe")
+            write_onedir_exe(dist, b"launcher")
             zip_path = dist / "MacroForge-v9.9.9.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
                 zf.writestr("MacroForge.exe", "exe")
