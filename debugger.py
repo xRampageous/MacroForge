@@ -11,15 +11,25 @@ import traceback
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QCheckBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
-COLORS = {
-    "bg": "#1e1e2e",
-    "text": "#cdd6f4",
-    "bg_card": "#313244",
-    "border": "#45475a",
-    "bg_tertiary": "#45475a",
-    "accent": "#89b4fa",
-    "bg_secondary": "#1e1e2e",
-}
+try:
+    from ui.theme import COLORS
+except Exception:
+    # Startup-safe fallback: the full app still requires ui/theme.py, but the
+    # debugger should never be the first module to crash when a partial patch or
+    # stale PyInstaller cache is missing the theme module.
+    COLORS = {
+        "bg": "#000207",
+        "bg_secondary": "#010711",
+        "bg_card": "#020A13",
+        "border": "#143047",
+        "accent": "#0096FF",
+        "accent_glow": "rgba(0, 150, 255, 0.18)",
+        "text": "#F3F6FA",
+        "text_dim": "#B0C0D6",
+        "success": "#00D75A",
+        "warning": "#FFD000",
+        "error": "#FF2330",
+    }
 
 
 MAX_LOG_LINES = 10000

@@ -32,6 +32,8 @@ for pkg in ('PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets'):
     pyqt6_binaries += collect_dynamic_libs(pkg)
 
 # ── Project hidden imports ──
+ui_hiddenimports = collect_submodules('ui')
+
 project_hiddenimports = [
     # Core modules
     'models',
@@ -67,6 +69,8 @@ datas = [
     ('MacroForge.ico', '.'),
     ('MacroForge.png', '.'),
     ('version.py', '.'),
+    # Keep the theme source as data too so one-dir/manual repairs can still load it.
+    ('ui/theme.py', 'ui'),
 ]
 
 # ── Analysis ──
@@ -75,7 +79,7 @@ a = Analysis(
     pathex=[SPEC_DIR],
     binaries=pyqt6_binaries + cv2_binaries,
     datas=datas + pyqt6_datas + cv2_datas,
-    hiddenimports=pyqt6_hiddenimports + project_hiddenimports + cv2_hidden,
+    hiddenimports=pyqt6_hiddenimports + project_hiddenimports + ui_hiddenimports + cv2_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

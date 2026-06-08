@@ -7,7 +7,7 @@ older clients and manual downloads that still use update.json ``url``.
 """
 
 from PyInstaller.building.build_main import Analysis, PYZ, EXE
-from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_all, collect_submodules, collect_dynamic_libs
 
 import os
 
@@ -27,6 +27,8 @@ cv2_binaries, cv2_datas, cv2_hidden = collect_all("cv2")
 
 for pkg in ("PyQt6.QtCore", "PyQt6.QtGui", "PyQt6.QtWidgets"):
     pyqt6_binaries += collect_dynamic_libs(pkg)
+
+ui_hiddenimports = collect_submodules("ui")
 
 project_hiddenimports = [
     "models",
@@ -59,6 +61,7 @@ datas = [
     ("MacroForge.ico", "."),
     ("MacroForge.png", "."),
     ("version.py", "."),
+    ("ui/theme.py", "ui"),
 ]
 
 a = Analysis(
@@ -66,7 +69,7 @@ a = Analysis(
     pathex=[SPEC_DIR],
     binaries=pyqt6_binaries + cv2_binaries,
     datas=datas + pyqt6_datas + cv2_datas,
-    hiddenimports=pyqt6_hiddenimports + project_hiddenimports + cv2_hidden,
+    hiddenimports=pyqt6_hiddenimports + project_hiddenimports + ui_hiddenimports + cv2_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
