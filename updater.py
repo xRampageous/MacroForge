@@ -206,22 +206,37 @@ def get_last_update_error() -> str:
     return _last_error
 
 
-def _write_batch_updater(work_dir: Path, current_exe: Path, extract_dir: Path, zip_file: Path) -> Path:
+def _write_batch_updater(
+    work_dir: Path,
+    current_exe: Path,
+    extract_dir: Path,
+    zip_file: Path,
+    parent_pid: int | None = None,
+) -> Path:
     """Write a Windows batch script that replaces _internal + exe and relaunches."""
     bat = work_dir / "MacroForge_update.bat"
     c = str(current_exe)
     w = str(work_dir)
     e = str(extract_dir)
     z = str(zip_file)
+    parent_pid = int(parent_pid or os.getpid())
     internal_old = str(work_dir / "_internal.old")
     internal_cur = str(work_dir / "_internal")
     bat_content = f"""@echo off
 title MacroForge Updater
 color 0A
 echo Waiting for MacroForge to close...
+set WAIT_RETRIES=0
 :waitloop
-tasklist /FI "IMAGENAME eq MacroForge.exe" 2>nul | find /I "MacroForge.exe" >nul
+tasklist /FI "PID eq {parent_pid}" 2>nul | find /I "{parent_pid}" >nul
 if %errorlevel% == 0 (
+    set /a WAIT_RETRIES+=1
+    if %WAIT_RETRIES% geq 45 (
+        echo MacroForge did not close in time. Forcing update handoff...
+        taskkill /PID {parent_pid} /F >nul 2>&1
+        ping -n 2 127.0.0.1 >nul
+        goto waitloop
+    )
     ping -n 2 127.0.0.1 >nul
     goto waitloop
 )
@@ -432,7 +447,7 @@ def perform_update(manifest: dict, progress_cb=None) -> bool:
         extracted_exe = extract_dir / "MacroForge.exe"
 
     # Write updater batch
-    bat = _write_batch_updater(work, current, extract_dir, zip_file)
+    bat = _write_batch_updater(work, current, extract_dir, zip_file, parent_pid=os.getpid())
     if not bat.exists():
         logger.error(f"Updater batch not found: {bat}")
         update_health.record("handoff_failed", status="failed", from_version=VERSION, to_version=manifest.get("version"), error=f"Updater batch not found: {bat}")

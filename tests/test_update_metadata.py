@@ -399,6 +399,23 @@ class TestUpdaterValidation(unittest.TestCase):
 
             self.assertFalse((Path(tmpdir) / "escape.txt").exists())
 
+    def test_batch_updater_waits_for_exact_parent_pid(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            bat = updater._write_batch_updater(
+                work,
+                work / "MacroForge.exe",
+                work / "MacroForge_update_tmp",
+                work / "MacroForge.update.zip",
+                parent_pid=12345,
+            )
+
+            script = bat.read_text(encoding="utf-8")
+
+        self.assertIn('tasklist /FI "PID eq 12345"', script)
+        self.assertIn("taskkill /PID 12345 /F", script)
+        self.assertNotIn('IMAGENAME eq MacroForge.exe', script)
+
 
 if __name__ == "__main__":
     unittest.main()

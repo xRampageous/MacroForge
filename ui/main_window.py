@@ -6524,6 +6524,10 @@ class MainWindow(QMainWindow):
             QApplication.quit()
         except Exception:
             pass
+        try:
+            QTimer.singleShot(1500, lambda: os._exit(0))
+        except Exception:
+            pass
 
     def closeEvent(self, event):
         self._do_save_session()
