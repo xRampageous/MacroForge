@@ -305,8 +305,8 @@ def make_playback_panel(window):
     # Keep the target selector readable without letting it consume the whole
     # bottom dock.  Wide layouts get a tidy capped selector, while compact
     # layouts can shrink it before the refresh/target icon cluster is squeezed.
-    self.lock_window_combo.setMinimumWidth(132)
-    self.lock_window_combo.setMaximumWidth(242)
+    self.lock_window_combo.setMinimumWidth(146)
+    self.lock_window_combo.setMaximumWidth(226)
     self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     self.lock_window_combo.setStyleSheet(
         f"QComboBox#lock_window_combo {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
@@ -325,9 +325,6 @@ def make_playback_panel(window):
     )
     target_row.addWidget(self.lock_window_health, alignment=Qt.AlignmentFlag.AlignVCenter)
     target_row.addWidget(self.lock_window_combo)
-    # Push the icon tools away from the target selector when there is room,
-    # but collapse the gap first on narrower window sizes.
-    target_row.addStretch(1)
 
     lock_window_tools = QHBoxLayout()
     lock_window_tools.setContentsMargins(0, 0, 0, 0)
@@ -421,6 +418,11 @@ def make_playback_panel(window):
     add_mode_check("sim_check", "Sim", "play", C["accent"], 52, "Simulation mode")
     add_mode_check("human_check", "Humanize", "person", C["success"], 76, "Humanized movement curve", checked=True)
     add_mode_check("focus_check", "Window", "lock", C["pause_cyan"], 72, "Lock playback to the selected target window", target_layout=target_row)
+    # Window-row alignment: keep the Window lock chip on the left and group
+    # the target selector with its refresh/pick tools on the right.  This puts
+    # all flexible space between the label/control and the selector, rather
+    # than separating the selector from the icons it controls.
+    target_row.insertStretch(1, 1)
     mode_row.addStretch()
     loops_modes.addLayout(mode_row)
 
