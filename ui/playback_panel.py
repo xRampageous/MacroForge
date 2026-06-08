@@ -295,18 +295,18 @@ def make_playback_panel(window):
     loops_modes.addLayout(loop_row)
 
     target_row = QHBoxLayout()
-    target_row.setContentsMargins(0, 0, 0, 0)
-    target_row.setSpacing(7)
+    target_row.setContentsMargins(0, 1, 0, 0)
+    target_row.setSpacing(8)
     self.lock_window_combo = QComboBox()
     self.lock_window_combo.setObjectName("lock_window_combo")
     self.lock_window_combo.setToolTip("Target window for Lock to window")
     self.lock_window_combo.addItem("Choose target window", 0)
     self.lock_window_combo.setFixedHeight(26)
-    self.lock_window_combo.setMinimumWidth(146)
+    self.lock_window_combo.setMinimumWidth(176)
     self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.lock_window_combo.setStyleSheet(
         f"QComboBox#lock_window_combo {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
-            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 3px 8px; "
+            f"border: 1px solid {C['border']}; border-radius: 7px; padding: 3px 10px; "
         "font-size: 10px; font-weight: 850; }}"
         f"QComboBox#lock_window_combo:hover {{ border-color: {C['pause_cyan']}; }}"
         "QComboBox#lock_window_combo::drop-down { border: none; width: 18px; }"
@@ -319,9 +319,13 @@ def make_playback_panel(window):
         f"QLabel#lock_window_health {{ background-color: {C['text_dark']}; "
         f"border: 1px solid {C['border']}; border-radius: 5px; }}"
     )
-    target_row.addWidget(self.lock_window_health)
+    target_row.addWidget(self.lock_window_health, alignment=Qt.AlignmentFlag.AlignVCenter)
     target_row.addWidget(self.lock_window_combo, stretch=1)
-    target_row.addSpacing(12)
+    target_row.addSpacing(18)
+
+    lock_window_tools = QHBoxLayout()
+    lock_window_tools.setContentsMargins(0, 0, 0, 0)
+    lock_window_tools.setSpacing(6)
 
     def tiny_icon_btn(icon_name, tip, slot):
         btn = QPushButton()
@@ -341,9 +345,9 @@ def make_playback_panel(window):
 
     self.lock_window_refresh_btn = tiny_icon_btn("loop", "Refresh running windows", self.refresh_lock_windows)
     self.lock_window_pick_btn = tiny_icon_btn("target", "Pick foreground window after a short delay", self._capture_foreground_lock_window)
-    target_row.addWidget(self.lock_window_refresh_btn)
-    target_row.addWidget(self.lock_window_pick_btn)
-    speed_box.addLayout(target_row)
+    lock_window_tools.addWidget(self.lock_window_refresh_btn)
+    lock_window_tools.addWidget(self.lock_window_pick_btn)
+    target_row.addLayout(lock_window_tools)
 
     self.lock_window_status = QLabel("No target window")
     self.lock_window_status.setObjectName("lock_window_status")
@@ -352,7 +356,6 @@ def make_playback_panel(window):
     self.lock_window_status.setStyleSheet(
         f"color: {C['text_dark']}; font-size: 9px; font-weight: 750; background: transparent;"
     )
-    speed_box.addWidget(self.lock_window_status)
 
     mode_row = QHBoxLayout()
     mode_row.setContentsMargins(0, 0, 0, 0)
@@ -419,6 +422,9 @@ def make_playback_panel(window):
     options_body.addWidget(vertical_rule())
     options_body.addLayout(speed_box, stretch=2)
     opt_lo.addLayout(options_body)
+    opt_lo.addSpacing(2)
+    opt_lo.addLayout(target_row)
+    opt_lo.addWidget(self.lock_window_status)
     top.addWidget(options_section, stretch=1)
 
     self.preflight_btn.setStyleSheet(
