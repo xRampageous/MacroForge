@@ -32,7 +32,7 @@ def make_playback_panel(window):
 
     panel = QFrame()
     panel.setObjectName("mf3_playback_panel")
-    panel.setFixedHeight(190)
+    panel.setFixedHeight(206)
     panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     panel.setStyleSheet(f"QFrame#mf3_playback_panel {{ background-color: {C['bg']}; border: none; }}")
 
@@ -51,9 +51,9 @@ def make_playback_panel(window):
     )
 
     grid = QGridLayout(dock)
-    grid.setContentsMargins(10, 7, 10, 7)
-    grid.setHorizontalSpacing(9)
-    grid.setVerticalSpacing(6)
+    grid.setContentsMargins(9, 6, 9, 6)
+    grid.setHorizontalSpacing(8)
+    grid.setVerticalSpacing(5)
     grid.setColumnStretch(0, 0)
     grid.setColumnStretch(1, 1)
     grid.setColumnStretch(2, 0)
@@ -157,10 +157,10 @@ def make_playback_panel(window):
     # Playback card: Play / Pause / Stop only.
     # ------------------------------------------------------------------
     play_section = card("playback_card")
-    play_section.setFixedWidth(292)
+    play_section.setFixedWidth(252)
     play_lo = QVBoxLayout(play_section)
-    play_lo.setContentsMargins(12, 9, 12, 9)
-    play_lo.setSpacing(8)
+    play_lo.setContentsMargins(10, 7, 10, 7)
+    play_lo.setSpacing(6)
     play_lo.addLayout(title_row("PLAYBACK", "play", C['accent']))
 
     play_row = QHBoxLayout()
@@ -169,9 +169,9 @@ def make_playback_panel(window):
 
     self.start_btn = QPushButton()
     self.start_btn.setIcon(icon("play", 18, C['success']))
-    self.start_btn.setIconSize(QSize(18, 18))
+    self.start_btn.setIconSize(QSize(16, 16))
     self.start_btn.setToolTip("Start playback (F9)")
-    base_button(self.start_btn, "play_btn", (54, 38), C['success'])
+    base_button(self.start_btn, "play_btn", (46, 34), C['success'])
     self.start_btn.setStyleSheet(
         f"QPushButton#play_btn {{ color: {C['success']}; background-color: #003c20; "
         f"border: 1px solid {C['success']}; border-radius: 8px; padding: 0; }}"
@@ -182,18 +182,18 @@ def make_playback_panel(window):
 
     self.pause_btn = QPushButton()
     self.pause_btn.setIcon(icon("pause", 16, C['pause_cyan']))
-    self.pause_btn.setIconSize(QSize(16, 16))
+    self.pause_btn.setIconSize(QSize(14, 14))
     self.pause_btn.setToolTip("Pause / resume playback (Esc)")
-    base_button(self.pause_btn, "pause_btn", (54, 38), C['pause_cyan'])
+    base_button(self.pause_btn, "pause_btn", (46, 34), C['pause_cyan'])
     self.pause_btn.setEnabled(False)
     self.pause_btn.clicked.connect(self.engine.toggle_pause)
     play_row.addWidget(self.pause_btn)
 
     self.stop_btn = QPushButton()
     self.stop_btn.setIcon(icon("stop", 15, C['error']))
-    self.stop_btn.setIconSize(QSize(15, 15))
+    self.stop_btn.setIconSize(QSize(13, 13))
     self.stop_btn.setToolTip("Stop playback")
-    base_button(self.stop_btn, "stop_btn", (54, 38), C['error'])
+    base_button(self.stop_btn, "stop_btn", (46, 34), C['error'])
     self.stop_btn.setEnabled(False)
     self.stop_btn.clicked.connect(self.stop)
     play_row.addWidget(self.stop_btn)
@@ -209,7 +209,7 @@ def make_playback_panel(window):
 
     feedback_frame = QFrame()
     feedback_frame.setObjectName("playback_feedback_frame")
-    feedback_frame.setFixedHeight(24)
+    feedback_frame.setFixedHeight(22)
     feedback_frame.setProperty("feedback_state", "ready")
     feedback_frame.setToolTip("Playback status")
     feedback_frame.setStyleSheet(
@@ -249,8 +249,8 @@ def make_playback_panel(window):
     settings_section = card("run_settings_card")
     settings_section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
     settings_lo = QVBoxLayout(settings_section)
-    settings_lo.setContentsMargins(12, 9, 12, 9)
-    settings_lo.setSpacing(6)
+    settings_lo.setContentsMargins(10, 7, 10, 7)
+    settings_lo.setSpacing(4)
 
     settings_header = QHBoxLayout()
     settings_header.setContentsMargins(0, 0, 0, 0)
@@ -260,8 +260,8 @@ def make_playback_panel(window):
 
     settings_grid = QGridLayout()
     settings_grid.setContentsMargins(0, 0, 0, 0)
-    settings_grid.setHorizontalSpacing(13)
-    settings_grid.setVerticalSpacing(5)
+    settings_grid.setHorizontalSpacing(11)
+    settings_grid.setVerticalSpacing(2)
     settings_grid.setColumnStretch(0, 0)
     settings_grid.setColumnStretch(1, 0)
     settings_grid.setColumnStretch(2, 1)
@@ -273,7 +273,7 @@ def make_playback_panel(window):
     loops_group.setStyleSheet("QFrame#loops_group { background: transparent; border: none; }")
     loops_lo = QVBoxLayout(loops_group)
     loops_lo.setContentsMargins(0, 0, 0, 0)
-    loops_lo.setSpacing(5)
+    loops_lo.setSpacing(3)
     loops_lo.addWidget(tiny_label("Loops"))
 
     loop_row = QHBoxLayout()
@@ -282,7 +282,7 @@ def make_playback_panel(window):
     self.inf_check = QCheckBox("∞")
     self.inf_check.setObjectName("playback_inf_toggle")
     self.inf_check.setToolTip("Infinite loop")
-    self.inf_check.setFixedSize(42, 28)
+    self.inf_check.setFixedSize(40, 26)
     self.inf_check.setStyleSheet(
         f"QCheckBox#playback_inf_toggle {{ color: {C['text']}; background-color: {C['bg_tertiary']}; "
         f"border: 1px solid {C['border']}; border-radius: 7px; padding-left: 10px; "
@@ -296,8 +296,8 @@ def make_playback_panel(window):
     self.loops_spin = QSpinBox()
     self.loops_spin.setRange(1, 9999)
     self.loops_spin.setValue(1)
-    self.loops_spin.setFixedSize(56, 28)
-    self.loops_spin.setStyleSheet(spin_style(56, 28))
+    self.loops_spin.setFixedSize(52, 26)
+    self.loops_spin.setStyleSheet(spin_style(52, 26))
     loop_row.addWidget(self.loops_spin)
     loop_row.addStretch()
     loops_lo.addLayout(loop_row)
@@ -311,7 +311,7 @@ def make_playback_panel(window):
         check.setObjectName(attr_name)
         check.setToolTip(tooltip)
         check.setChecked(checked)
-        check.setFixedSize(width, 24)
+        check.setFixedSize(width, 22)
         check.setCursor(Qt.CursorShape.PointingHandCursor)
 
         def refresh(is_checked):
@@ -334,15 +334,15 @@ def make_playback_panel(window):
     speed_group.setStyleSheet("QFrame#speed_group { background: transparent; border: none; }")
     speed_lo = QVBoxLayout(speed_group)
     speed_lo.setContentsMargins(0, 0, 0, 0)
-    speed_lo.setSpacing(5)
+    speed_lo.setSpacing(3)
     speed_lo.addWidget(tiny_label("Speed"))
     self.speed_combo = QComboBox()
     self.speed_combo.setObjectName("speed_combo")
     self.speed_combo.addItems(["0.1x", "0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x", "4.0x"])
     self.speed_combo.setCurrentText("1.0x")
     self.speed_combo.currentTextChanged.connect(self._on_speed_change)
-    self.speed_combo.setFixedSize(96, 30)
-    self.speed_combo.setStyleSheet(combo_style("speed_combo", 96, 30, 12))
+    self.speed_combo.setFixedSize(92, 28)
+    self.speed_combo.setStyleSheet(combo_style("speed_combo", 92, 28, 11))
     speed_lo.addWidget(self.speed_combo)
     speed_lo.addStretch()
 
@@ -360,7 +360,7 @@ def make_playback_panel(window):
     target_group.setStyleSheet("QFrame#target_group { background: transparent; border: none; }")
     target_lo = QVBoxLayout(target_group)
     target_lo.setContentsMargins(0, 0, 0, 0)
-    target_lo.setSpacing(5)
+    target_lo.setSpacing(3)
     target_lo.addWidget(tiny_label("Target"))
 
     target_controls = QHBoxLayout()
@@ -371,7 +371,7 @@ def make_playback_panel(window):
     self.focus_check.setObjectName("focus_check")
     self.focus_check.setToolTip("Toggle target-window lock on/off")
     self.focus_check.setChecked(False)
-    self.focus_check.setFixedSize(46, 26)
+    self.focus_check.setFixedSize(44, 24)
     self.focus_check.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def refresh_focus_text(checked):
@@ -386,7 +386,7 @@ def make_playback_panel(window):
     self.lock_window_combo.setObjectName("lock_window_combo")
     self.lock_window_combo.setToolTip("Target window for Lock to window")
     self.lock_window_combo.addItem("Target", 0)
-    self.lock_window_combo.setFixedSize(112, 28)
+    self.lock_window_combo.setFixedSize(104, 26)
     self.lock_window_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     self.lock_window_combo.setStyleSheet(
         f"QComboBox#lock_window_combo {{ background-color: {C['bg_tertiary']}; color: {C['text']}; "
@@ -397,8 +397,8 @@ def make_playback_panel(window):
     )
     target_controls.addWidget(self.lock_window_combo)
 
-    self.lock_window_refresh_btn = icon_button("lock_window_tool_btn", "loop", "Refresh running windows", self.refresh_lock_windows, (28, 28), C['pause_cyan'])
-    self.lock_window_pick_btn = icon_button("lock_window_tool_btn", "target", "Pick foreground window after a short delay", self._capture_foreground_lock_window, (28, 28), C['pause_cyan'])
+    self.lock_window_refresh_btn = icon_button("lock_window_tool_btn", "loop", "Refresh running windows", self.refresh_lock_windows, (26, 26), C['pause_cyan'])
+    self.lock_window_pick_btn = icon_button("lock_window_tool_btn", "target", "Pick foreground window after a short delay", self._capture_foreground_lock_window, (26, 26), C['pause_cyan'])
     target_controls.addWidget(self.lock_window_refresh_btn)
     target_controls.addWidget(self.lock_window_pick_btn)
     target_controls.addStretch()
@@ -463,9 +463,9 @@ def make_playback_panel(window):
     # Stats card.  Uses the existing old-style icon + value stat chips.
     # ------------------------------------------------------------------
     stats_section = card("stats_card")
-    stats_section.setFixedWidth(310)
+    stats_section.setFixedWidth(286)
     stats_lo = QVBoxLayout(stats_section)
-    stats_lo.setContentsMargins(12, 9, 12, 9)
+    stats_lo.setContentsMargins(10, 7, 10, 7)
     stats_lo.setSpacing(7)
     stats_header = QHBoxLayout()
     stats_header.setContentsMargins(0, 0, 0, 0)
@@ -491,7 +491,7 @@ def make_playback_panel(window):
     # ------------------------------------------------------------------
     bottom_strip = QFrame()
     bottom_strip.setObjectName("progress_stats_strip")
-    bottom_strip.setFixedHeight(38)
+    bottom_strip.setFixedHeight(36)
     bottom_strip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     bottom_strip.setStyleSheet(
         f"QFrame#progress_stats_strip {{ background-color: {C['bg_secondary']}; "
@@ -499,7 +499,7 @@ def make_playback_panel(window):
         f"QFrame#progress_stats_strip QLabel {{ background: transparent; border: none; }}"
     )
     bottom_lo = QHBoxLayout(bottom_strip)
-    bottom_lo.setContentsMargins(10, 4, 10, 4)
+    bottom_lo.setContentsMargins(8, 3, 8, 3)
     bottom_lo.setSpacing(8)
     progress_title = QLabel("Progress")
     progress_title.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 850; background: transparent;")
@@ -510,7 +510,7 @@ def make_playback_panel(window):
     self.progress_bar.setValue(0)
     self.progress_bar.setTextVisible(False)
     self.progress_bar.setFixedHeight(10)
-    self.progress_bar.setMinimumWidth(160)
+    self.progress_bar.setMinimumWidth(145)
     self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     self.progress_bar.setStyleSheet(
         f"QProgressBar {{ background-color: {C['lane']}; border: none; border-radius: 6px; }}"
@@ -520,7 +520,7 @@ def make_playback_panel(window):
 
     self.progress_label = QLabel("0%")
     self.progress_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
-    self.progress_label.setFixedWidth(36)
+    self.progress_label.setFixedWidth(34)
     self.progress_label.setStyleSheet(f"color: {C['accent']}; font-size: 12px; font-weight: 900;")
     bottom_lo.addWidget(self.progress_label)
 
@@ -571,13 +571,15 @@ def make_playback_panel(window):
             return
         settings_grid.removeWidget(target_group)
         if to_compact:
+            # Compact mode keeps Target tucked directly under Speed so it
+            # stays inside the Settings card instead of clipping below it.
             settings_grid.addWidget(target_group, 1, 1, 1, 2, alignment=Qt.AlignmentFlag.AlignTop)
-            target_group.setMaximumWidth(245)
-            self.lock_window_combo.setFixedWidth(104)
+            target_group.setMaximumWidth(225)
+            self.lock_window_combo.setFixedWidth(96)
         else:
             settings_grid.addWidget(target_group, 0, 2, 1, 1, alignment=Qt.AlignmentFlag.AlignTop)
-            target_group.setMaximumWidth(260)
-            self.lock_window_combo.setFixedWidth(112)
+            target_group.setMaximumWidth(245)
+            self.lock_window_combo.setFixedWidth(104)
         layout_state["target_pos"] = target_name
 
     def update_layout_mode():
@@ -590,13 +592,19 @@ def make_playback_panel(window):
         move_utility(compact)
         move_target(compact)
         if compact:
-            panel.setFixedHeight(190)
-            settings_grid.setHorizontalSpacing(11)
-            bottom_strip.setFixedHeight(38)
+            # Give compact mode enough vertical space for Target under Speed
+            # and reduce Playback width so Settings gets room to breathe.
+            panel.setFixedHeight(206)
+            play_section.setFixedWidth(238)
+            settings_grid.setHorizontalSpacing(10)
+            settings_grid.setVerticalSpacing(1)
+            bottom_strip.setFixedHeight(36)
         else:
-            panel.setFixedHeight(190)
+            panel.setFixedHeight(194)
+            play_section.setFixedWidth(252)
             settings_grid.setHorizontalSpacing(14)
-            bottom_strip.setFixedHeight(38)
+            settings_grid.setVerticalSpacing(2)
+            bottom_strip.setFixedHeight(36)
         layout_state["compact"] = compact
 
     old_resize_event = dock.resizeEvent
