@@ -5171,20 +5171,20 @@ class MainWindow(QMainWindow):
         if show:
             if rec["overlay"] is not None:
                 return
-            # We use a simple QWidget overlay positioned near main window
-            ov = QFrame()
+            # Keep the REC badge inside the main window so Windows does not
+            # advertise it as another MacroForge.exe tool window.
+            ov = QFrame(self)
             ov.setStyleSheet("background-color: transparent; border: none;")
             ov.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            ov.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
             ov.setFixedSize(60, 28)
             lbl = QLabel("REC")
             lbl.setStyleSheet(f"color: {COLORS['error']}; font-weight: bold; font-size: 12px;")
             lo = QHBoxLayout(ov)
             lo.addWidget(lbl)
+            # Position near top-right of the main window content.
+            ov.move(max(8, self.width() - 72), 10)
             ov.show()
-            # Position near top-right of main window
-            geo = self.geometry()
-            ov.move(geo.x() + geo.width() - 72, geo.y() + 10)
+            ov.raise_()
             rec["overlay"] = ov
         else:
             if rec["overlay"] is not None:

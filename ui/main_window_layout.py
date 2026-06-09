@@ -894,7 +894,7 @@ def build_main_layout(window):
     rec_state = QHBoxLayout()
     rec_state.setContentsMargins(0, 0, 0, 0)
     rec_state.setSpacing(7)
-    self.rec_dot = StatusDot()
+    self.rec_dot = StatusDot(rec_body)
     self.rec_dot.set_color(C["success"])
     rec_state.addWidget(self.rec_dot)
     self.rec_status = QLabel("IDLE")
@@ -1870,7 +1870,7 @@ def build_main_layout(window):
     sp_lo = QHBoxLayout(status_pill)
     sp_lo.setContentsMargins(11, 0, 11, 0)
     sp_lo.setSpacing(7)
-    self.status_dot = StatusDot()
+    self.status_dot = StatusDot(status_pill)
     self.status_dot.set_color(C["success"])
     self.status_dot.setFixedSize(12, 12)
     self.status_dot.setAutoFillBackground(False)
@@ -2001,9 +2001,11 @@ def build_main_layout(window):
 
     self.debug_top_btn.clicked.connect(_show_debug_tools_menu)
 
-    self.tl_search_popup = QFrame(self)
+    # Keep this as a normal child overlay, not a Qt.Tool top-level window.
+    # On Windows, Qt.Tool frames can appear as an extra MacroForge.exe window
+    # beside the main client even when they are visually just small popups.
+    self.tl_search_popup = QFrame(content)
     self.tl_search_popup.setObjectName("timeline_search_popup")
-    self.tl_search_popup.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
     self.tl_search_popup.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.tl_search_popup.setVisible(False)
     self.tl_search_popup.setStyleSheet(
@@ -2131,8 +2133,15 @@ def build_main_layout(window):
                 self.tl_search_popup.hide()
                 return
             self.tl_search_popup.adjustSize()
-            pos = self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft())
-            self.tl_search_popup.move(pos)
+            parent = self.tl_search_popup.parentWidget() or self
+            global_pos = self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft())
+            pos = parent.mapFromGlobal(global_pos)
+            margin = 8
+            popup_w = self.tl_search_popup.width()
+            popup_h = self.tl_search_popup.height()
+            x = max(margin, min(pos.x(), max(margin, parent.width() - popup_w - margin)))
+            y = max(margin, min(pos.y() + 4, max(margin, parent.height() - popup_h - margin)))
+            self.tl_search_popup.move(x, y)
             self.tl_search_popup.show()
             self.tl_search_popup.raise_()
         except Exception:
