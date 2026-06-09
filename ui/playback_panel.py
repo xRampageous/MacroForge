@@ -1,9 +1,8 @@
 """Playback panel construction for MacroForge main window.
 
-The panel is built as a responsive command dock.  Wide layouts keep Playback,
-Run Settings, and Stats in separate table-aligned cards.  Compact layouts hide
-that separate Stats card and move the same stat chips into the bottom strip so
-controls stay readable instead of overlapping.
+The panel is built as a compact command dock.  Playback and Run Settings stay
+in the top row at every width, while progress and stat chips stay in the bottom
+strip so stretching the window does not reveal a separate stats panel.
 """
 
 from PyQt6.QtCore import Qt, QSize, QTimer
@@ -32,6 +31,7 @@ def make_playback_panel(window):
 
     panel = QFrame()
     panel.setObjectName("mf3_playback_panel")
+    self._playback_expanded_height = 206
     panel.setFixedHeight(206)
     panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     panel.setStyleSheet(f"QFrame#mf3_playback_panel {{ background-color: {C['bg']}; border: none; }}")
@@ -408,7 +408,7 @@ def make_playback_panel(window):
     self.lock_window_health.setObjectName("lock_window_health")
     self.lock_window_health.setFixedSize(9, 9)
     self.lock_window_health.setToolTip("Window target not selected")
-    self.lock_window_health.setVisible(False)
+    self.lock_window_health.setVisible(True)
     self.lock_window_health.setStyleSheet(
         f"QLabel#lock_window_health {{ background-color: {C['text_dark']}; "
         f"border: 1px solid {C['border']}; border-radius: 5px; }}"
@@ -427,8 +427,8 @@ def make_playback_panel(window):
     settings_grid.addWidget(target_group, 0, 2, 1, 1, alignment=Qt.AlignmentFlag.AlignTop)
 
     # ------------------------------------------------------------------
-    # Utility lock/collapse cluster, moved between Settings and Stats based
-    # on width.  Compact mode keeps it in Settings; stretched keeps it in Stats.
+    # Utility lock/collapse cluster.  Keep it in Run Settings at every width so
+    # stretching the panel does not reveal a separate stats card.
     # ------------------------------------------------------------------
     utility_holder = QFrame()
     utility_holder.setObjectName("playback_utility_holder")
@@ -459,26 +459,6 @@ def make_playback_panel(window):
     self.collapse_playback_btn.clicked.connect(lambda: self._set_playback_collapsed(True))
     utility_lo.addWidget(self.collapse_playback_btn)
 
-    # ------------------------------------------------------------------
-    # Stats card.  Uses the existing old-style icon + value stat chips.
-    # ------------------------------------------------------------------
-    stats_section = card("stats_card")
-    stats_section.setFixedWidth(286)
-    stats_lo = QVBoxLayout(stats_section)
-    stats_lo.setContentsMargins(10, 7, 10, 7)
-    stats_lo.setSpacing(7)
-    stats_header = QHBoxLayout()
-    stats_header.setContentsMargins(0, 0, 0, 0)
-    stats_header.setSpacing(7)
-    stats_header.addLayout(title_row("STATS", "bolt", C['text_dim']))
-    stats_lo.addLayout(stats_header)
-
-    stats_body = QHBoxLayout()
-    stats_body.setContentsMargins(0, 0, 0, 0)
-    stats_body.setSpacing(6)
-    stats_lo.addLayout(stats_body)
-    stats_lo.addStretch()
-
     self._stat_actions_w, self._stat_actions = self._make_stat_chip("bolt", "Played", "0", C['accent'], "Actions played this run")
     self._stat_loops_w, self._stat_loops = self._make_stat_chip("loop", "Loops", "0", C['neon_purple'], "Completed loops")
     self._stat_seq_w, self._stat_seq = self._make_stat_chip("delay", "Seq", "44.0s", C['neon_gold'], "Estimated sequence duration")
@@ -499,8 +479,8 @@ def make_playback_panel(window):
         f"QFrame#progress_stats_strip QLabel {{ background: transparent; border: none; }}"
     )
     bottom_lo = QHBoxLayout(bottom_strip)
-    bottom_lo.setContentsMargins(8, 3, 8, 3)
-    bottom_lo.setSpacing(8)
+    bottom_lo.setContentsMargins(6, 3, 6, 3)
+    bottom_lo.setSpacing(5)
     progress_title = QLabel("Progress")
     progress_title.setStyleSheet(f"color: {C['text_dim']}; font-size: 9px; font-weight: 850; background: transparent;")
     bottom_lo.addWidget(progress_title)
@@ -526,86 +506,37 @@ def make_playback_panel(window):
 
     bottom_stats = QHBoxLayout()
     bottom_stats.setContentsMargins(0, 0, 0, 0)
-    bottom_stats.setSpacing(6)
+    bottom_stats.setSpacing(5)
     bottom_lo.addLayout(bottom_stats)
+    for chip in (self._stat_actions_w, self._stat_loops_w, self._stat_seq_w, self._stat_time_w):
+        bottom_stats.addWidget(chip)
 
     # Place widgets in the responsive grid.
     grid.addWidget(play_section, 0, 0)
     grid.addWidget(settings_section, 0, 1)
-    grid.addWidget(stats_section, 0, 2, 2, 1)
     grid.addWidget(bottom_strip, 1, 0, 1, 2)
 
-    layout_state = {"compact": None, "stats_parent": None, "utility_parent": None, "target_pos": None}
-    stat_widgets = (self._stat_actions_w, self._stat_loops_w, self._stat_seq_w, self._stat_time_w)
+    layout_state = {"initialized": False}
+    settings_header.addWidget(utility_holder)
 
-    def remove_from_layout(layout, widget):
-        try:
-            layout.removeWidget(widget)
-        except Exception:
-            pass
-
-    def move_stats(to_compact):
-        target_layout = bottom_stats if to_compact else stats_body
-        target_name = "compact" if to_compact else "stats"
-        if layout_state["stats_parent"] == target_name:
-            return
-        for chip in stat_widgets:
-            remove_from_layout(bottom_stats, chip)
-            remove_from_layout(stats_body, chip)
-            target_layout.addWidget(chip)
-        layout_state["stats_parent"] = target_name
-
-    def move_utility(to_compact):
-        target_layout = settings_header if to_compact else stats_header
-        target_name = "settings" if to_compact else "stats"
-        if layout_state["utility_parent"] == target_name:
-            return
-        remove_from_layout(settings_header, utility_holder)
-        remove_from_layout(stats_header, utility_holder)
-        target_layout.addWidget(utility_holder)
-        layout_state["utility_parent"] = target_name
-
-    def move_target(to_compact):
-        target_name = "compact" if to_compact else "wide"
-        if layout_state["target_pos"] == target_name:
-            return
+    def place_target():
         settings_grid.removeWidget(target_group)
-        if to_compact:
-            # Compact mode keeps Target tucked directly under Speed so it
-            # stays inside the Settings card instead of clipping below it.
-            settings_grid.addWidget(target_group, 1, 1, 1, 2, alignment=Qt.AlignmentFlag.AlignTop)
-            target_group.setMaximumWidth(225)
-            self.lock_window_combo.setFixedWidth(96)
-        else:
-            settings_grid.addWidget(target_group, 0, 2, 1, 1, alignment=Qt.AlignmentFlag.AlignTop)
-            target_group.setMaximumWidth(245)
-            self.lock_window_combo.setFixedWidth(104)
-        layout_state["target_pos"] = target_name
+        # Keep Target tucked directly under Speed so the top row keeps the
+        # compact shape even when the playback panel stretches wide.
+        settings_grid.addWidget(target_group, 1, 1, 1, 2, alignment=Qt.AlignmentFlag.AlignTop)
+        target_group.setMaximumWidth(225)
+        self.lock_window_combo.setFixedWidth(96)
 
     def update_layout_mode():
-        width = dock.width() or panel.width()
-        compact = width < 1040
-        if layout_state["compact"] == compact:
+        if layout_state["initialized"]:
             return
-        stats_section.setVisible(not compact)
-        move_stats(compact)
-        move_utility(compact)
-        move_target(compact)
-        if compact:
-            # Give compact mode enough vertical space for Target under Speed
-            # and reduce Playback width so Settings gets room to breathe.
-            panel.setFixedHeight(206)
-            play_section.setFixedWidth(238)
-            settings_grid.setHorizontalSpacing(10)
-            settings_grid.setVerticalSpacing(1)
-            bottom_strip.setFixedHeight(36)
-        else:
-            panel.setFixedHeight(194)
-            play_section.setFixedWidth(252)
-            settings_grid.setHorizontalSpacing(14)
-            settings_grid.setVerticalSpacing(2)
-            bottom_strip.setFixedHeight(36)
-        layout_state["compact"] = compact
+        layout_state["initialized"] = True
+        place_target()
+        panel.setFixedHeight(206)
+        play_section.setFixedWidth(238)
+        settings_grid.setHorizontalSpacing(10)
+        settings_grid.setVerticalSpacing(1)
+        bottom_strip.setFixedHeight(36)
 
     old_resize_event = dock.resizeEvent
 

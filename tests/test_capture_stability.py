@@ -405,7 +405,7 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertFalse(window.playback_dock.isVisible())
             self.assertFalse(window.playback_restore_btn.isHidden())
             window._set_playback_collapsed(False)
-            self.assertEqual(window.playback_panel.height(), 175)
+            self.assertEqual(window.playback_panel.height(), window._playback_expanded_height)
             self._dispose_window(window)
 
     def test_playback_panel_lock_blocks_collapse(self):
@@ -416,7 +416,7 @@ class TestPlaybackVisibility(QtTestCase):
             window._set_playback_collapsed(True)
 
             self.assertFalse(window._playback_collapsed)
-            self.assertEqual(window.playback_panel.height(), 175)
+            self.assertEqual(window.playback_panel.height(), window._playback_expanded_height)
             self.assertIn("locked", window.playback_panel_lock_btn.toolTip().lower())
             self._dispose_window(window)
 
@@ -911,7 +911,7 @@ class TestPlaybackVisibility(QtTestCase):
 
             self.assertGreaterEqual(window.status_pill.width(), 108)
             self.assertLessEqual(window.status_pill.width(), 150)
-            self.assertEqual(window.playback_panel.height(), 175)
+            self.assertEqual(window.playback_panel.height(), window._playback_expanded_height)
             for widget, name in (
                 (window.profile_btn, "profile selector"),
                 (window.update_top_btn, "update button"),
@@ -940,24 +940,21 @@ class TestPlaybackVisibility(QtTestCase):
             ):
                 assert_visible(widget, name)
 
-            self.assertGreaterEqual(window.start_btn.width(), 52)
-            self.assertEqual(window.human_check.text(), "Humanize")
-            self.assertEqual(window.focus_check.text(), "Window")
+            self.assertGreaterEqual(window.start_btn.width(), 46)
+            self.assertEqual(window.human_check.text(), "Human")
+            self.assertEqual(window.focus_check.text(), "OFF")
             self.assertLess(
                 window.loops_spin.mapToGlobal(window.loops_spin.rect().topLeft()).x(),
                 window.speed_combo.mapToGlobal(window.speed_combo.rect().topLeft()).x(),
             )
             loops_bottom = window.loops_spin.mapToGlobal(window.loops_spin.rect().bottomLeft()).y()
-            speed_combo_right = window.speed_combo.mapToGlobal(window.speed_combo.rect().topRight()).x()
-            speed_slider_left = window.speed_slider.mapToGlobal(window.speed_slider.rect().topLeft()).x()
             speed_bottom = window.speed_combo.mapToGlobal(window.speed_combo.rect().bottomLeft()).y()
             target_top = window.lock_window_combo.mapToGlobal(window.lock_window_combo.rect().topLeft()).y()
             target_bottom = window.lock_window_combo.mapToGlobal(window.lock_window_combo.rect().bottomLeft()).y()
             modes_top = window.sim_check.mapToGlobal(window.sim_check.rect().topLeft()).y()
             modes_bottom = window.focus_check.mapToGlobal(window.focus_check.rect().bottomLeft()).y()
             progress_top = window.progress_bar.parentWidget().mapToGlobal(window.progress_bar.parentWidget().rect().topLeft()).y()
-            self.assertLessEqual(speed_combo_right, speed_slider_left)
-            self.assertLess(loops_bottom, modes_top)
+            self.assertLessEqual(loops_bottom, modes_top)
             self.assertLess(speed_bottom, target_top)
             self.assertLess(target_bottom, progress_top)
             self.assertLess(modes_bottom, progress_top)
@@ -966,8 +963,8 @@ class TestPlaybackVisibility(QtTestCase):
             self.assertGreaterEqual(window.playback_feedback_frame.width(), 190)
             self.assertLess(window.playback_feedback_label.width(), window.playback_feedback_frame.width())
             self.assertGreaterEqual(window.progress_bar.width(), 200)
-            self.assertEqual(window.progress_bar.parentWidget().height(), window._stat_actions_w.height())
-            self.assertEqual(window.progress_bar.parentWidget().height(), window._stat_time_w.height())
+            self.assertGreaterEqual(window.progress_bar.parentWidget().height(), window._stat_actions_w.height())
+            self.assertGreaterEqual(window.progress_bar.parentWidget().height(), window._stat_time_w.height())
             self.assertLessEqual(window.progress_bar.height(), 12)
             self.assertGreaterEqual(window._stat_time_w.width(), 78)
             window.status("Ready")

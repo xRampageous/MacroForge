@@ -5057,7 +5057,7 @@ class MainWindow(QMainWindow):
         self._run_from_index = idx
         self.engine.actions = self.action_model.actions()[idx:]
         self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
-        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
+        if not self.run_preflight_check(show_success=False, allow_warning_prompt=False):
             self._run_from_index = 0
             return
 
@@ -5841,7 +5841,8 @@ class MainWindow(QMainWindow):
         if panel is None or dock is None or restore is None:
             return
 
-        target_h = 36 if collapsed else 175
+        expanded_h = int(getattr(self, "_playback_expanded_height", 175) or 175)
+        target_h = 36 if collapsed else expanded_h
         try:
             anim = getattr(self, "_playback_collapse_anim", None)
             if anim is not None:
@@ -5849,9 +5850,9 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        start_h = int(panel.height() or (36 if not collapsed else 175))
+        start_h = int(panel.height() or (36 if not collapsed else expanded_h))
         if start_h <= 0:
-            start_h = 36 if not collapsed else 175
+            start_h = 36 if not collapsed else expanded_h
         if not collapsed:
             restore.setVisible(False)
             dock.setVisible(True)
