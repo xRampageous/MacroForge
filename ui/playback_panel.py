@@ -404,7 +404,7 @@ def make_playback_panel(window):
     target_controls.addStretch()
     target_lo.addLayout(target_controls)
 
-    self.lock_window_health = QLabel()
+    self.lock_window_health = QLabel(target_group)
     self.lock_window_health.setObjectName("lock_window_health")
     self.lock_window_health.setFixedSize(9, 9)
     self.lock_window_health.setToolTip("Window target not selected")

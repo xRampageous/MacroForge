@@ -894,7 +894,7 @@ def build_main_layout(window):
     rec_state = QHBoxLayout()
     rec_state.setContentsMargins(0, 0, 0, 0)
     rec_state.setSpacing(7)
-    self.rec_dot = StatusDot(rec_body)
+    self.rec_dot = StatusDot()
     self.rec_dot.set_color(C["success"])
     rec_state.addWidget(self.rec_dot)
     self.rec_status = QLabel("IDLE")
@@ -1870,7 +1870,7 @@ def build_main_layout(window):
     sp_lo = QHBoxLayout(status_pill)
     sp_lo.setContentsMargins(11, 0, 11, 0)
     sp_lo.setSpacing(7)
-    self.status_dot = StatusDot(status_pill)
+    self.status_dot = StatusDot()
     self.status_dot.set_color(C["success"])
     self.status_dot.setFixedSize(12, 12)
     self.status_dot.setAutoFillBackground(False)
@@ -1978,34 +1978,16 @@ def build_main_layout(window):
 
     self.mode_filter_btn.clicked.connect(_show_mode_filter_menu)
 
-    self.debug_tools_menu = QMenu(self)
-    self.debug_tools_menu.setObjectName("debug_tools_menu")
-    self.debug_tools_menu.setStyleSheet(toolbar_menu_style)
-    dbg_editor = self.debug_tools_menu.addAction("Editor")
-    dbg_health = self.debug_tools_menu.addAction("Health")
-    dbg_runtime = self.debug_tools_menu.addAction("Runtime")
-    dbg_filters = self.debug_tools_menu.addAction("Filters")
-    self.debug_tools_menu.addSeparator()
-    dbg_debug = self.debug_tools_menu.addAction("Debug")
-    dbg_editor.triggered.connect(self.open_macro_editor)
-    dbg_health.triggered.connect(self.open_preflight_report)
-    dbg_runtime.triggered.connect(lambda: self.toggle_runtime_log_panel(True))
-    dbg_filters.triggered.connect(lambda: _show_mode_filter_menu())
-    dbg_debug.triggered.connect(self.open_debug_viewer)
-    self.debug_tools_menu.addSeparator()
-    dbg_hotkeys = self.debug_tools_menu.addAction("Hotkey Settings...")
-    dbg_hotkeys.triggered.connect(self.open_hotkey_settings_dialog)
+    # Debug button now directly opens debug viewer
+    self.debug_top_btn.clicked.connect(self.open_debug_viewer)
 
-    def _show_debug_tools_menu():
-        self.debug_tools_menu.popup(self.debug_top_btn.mapToGlobal(self.debug_top_btn.rect().bottomLeft()))
-
-    self.debug_top_btn.clicked.connect(_show_debug_tools_menu)
-
-    # Keep this as a normal child overlay, not a Qt.Tool top-level window.
-    # On Windows, Qt.Tool frames can appear as an extra MacroForge.exe window
-    # beside the main client even when they are visually just small popups.
+    # Timeline search must stay inside the main client.  A Qt.Tool/frameless
+    # popup creates a separate native top-level window on Windows, which can
+    # show up as an extra MacroForge.exe window beside the main app.
     self.tl_search_popup = QFrame(content)
     self.tl_search_popup.setObjectName("timeline_search_popup")
+    self.tl_search_popup.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, False)
+    self.tl_search_popup.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors, True)
     self.tl_search_popup.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     self.tl_search_popup.setVisible(False)
     self.tl_search_popup.setStyleSheet(
@@ -2132,15 +2114,15 @@ def build_main_layout(window):
             if self.tl_search_popup.isVisible():
                 self.tl_search_popup.hide()
                 return
+            parent = self.tl_search_popup.parentWidget() or content
             self.tl_search_popup.adjustSize()
-            parent = self.tl_search_popup.parentWidget() or self
             global_pos = self.search_top_btn.mapToGlobal(self.search_top_btn.rect().bottomLeft())
-            pos = parent.mapFromGlobal(global_pos)
-            margin = 8
-            popup_w = self.tl_search_popup.width()
-            popup_h = self.tl_search_popup.height()
-            x = max(margin, min(pos.x(), max(margin, parent.width() - popup_w - margin)))
-            y = max(margin, min(pos.y() + 4, max(margin, parent.height() - popup_h - margin)))
+            local_pos = parent.mapFromGlobal(global_pos)
+            popup_w = max(self.tl_search_popup.sizeHint().width(), self.tl_search_popup.width(), 304)
+            popup_h = max(self.tl_search_popup.sizeHint().height(), self.tl_search_popup.height(), 78)
+            x = max(8, min(local_pos.x(), max(8, parent.width() - popup_w - 8)))
+            y = max(8, min(local_pos.y(), max(8, parent.height() - popup_h - 8)))
+            self.tl_search_popup.setFixedWidth(popup_w)
             self.tl_search_popup.move(x, y)
             self.tl_search_popup.show()
             self.tl_search_popup.raise_()

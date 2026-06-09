@@ -221,6 +221,7 @@ class MainWindow(QMainWindow):
             pass
 
         self._setup_tray()
+        self._start_startup_window_guard()
 
         # Wire update-check signals for thread-safe UI callbacks
         self._update_found.connect(self._on_update_found)
@@ -779,7 +780,7 @@ class MainWindow(QMainWindow):
                     int(sidebar.minimumSizeHint().height()),
                 )
 
-            playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else 175
+            playback_h = 36 if bool(getattr(self, "_playback_collapsed", False)) else int(getattr(self, "_playback_expanded_height", 206))
             base_min_h = int(getattr(self, "_base_min_height", 420))
             # Small padding accounts for the root layout margins without leaving
             # the bottom of the window far below the side panel.
@@ -3489,28 +3490,22 @@ class MainWindow(QMainWindow):
         return False, f"unknown key '{key}'"
 
     def _format_preflight_report(self, errors, warnings):
-        error_count = len(errors or [])
-        warning_count = len(warnings or [])
-        if error_count:
-            state = f"Blocked — {error_count} error(s), {warning_count} warning(s)"
-        elif warning_count:
-            state = f"Ready with review — {warning_count} warning(s)"
-        else:
-            state = "Ready to run — no validation issues found."
-        lines = [state, ""]
+        lines = []
         if errors:
-            lines.append(f"Errors ({error_count}):")
+            lines.append(f"Errors ({len(errors)}):")
             lines.extend(f"  • {x}" for x in errors[:20])
             if len(errors) > 20:
                 lines.append(f"  • …and {len(errors) - 20} more")
         if warnings:
-            if len(lines) > 2:
+            if lines:
                 lines.append("")
-            lines.append(f"Warnings ({warning_count}):")
+            lines.append(f"Warnings ({len(warnings)}):")
             lines.extend(f"  • {x}" for x in warnings[:20])
             if len(warnings) > 20:
                 lines.append(f"  • …and {len(warnings) - 20} more")
-        return "\n".join(lines).rstrip()
+        if not lines:
+            lines.append("Ready to run — no validation issues found.")
+        return "\n".join(lines)
 
     def run_preflight_check(self, show_success=True, allow_warning_prompt=True, auto_fix=True, actions=None, row_labels=None):
         """Validate the visible timeline before playback.
@@ -3569,16 +3564,6 @@ class MainWindow(QMainWindow):
             if getattr(action, "action_type", "") == "group":
                 if not (getattr(action, "group_name", "") or getattr(action, "label", "")):
                     warnings.append(f"{prefix}: folder has no name.")
-                gid = getattr(action, "group_id", "") or ""
-                if gid:
-                    child_count = sum(
-                        1 for child in actions
-                        if child is not action
-                        and getattr(child, "action_type", "") != "group"
-                        and getattr(child, "group_id", "") == gid
-                    )
-                    if child_count <= 0:
-                        warnings.append(f"{prefix}: folder has no actions assigned.")
                 continue
 
             if getattr(action, "action_type", "") == "loop":
@@ -3654,8 +3639,6 @@ class MainWindow(QMainWindow):
                     wait = -1.0
                 if wait < 0:
                     errors.append(f"{prefix}: image wait timeout cannot be negative.")
-                elif wait == 0:
-                    warnings.append(f"{prefix}: image wait timeout is instant; use a timeout if the template can appear late.")
                 if getattr(action, "on_found_action", "continue") == "press_key":
                     ok, reason = self._validate_key_name(getattr(action, "on_found_key", ""))
                     if not ok:
@@ -3819,19 +3802,8 @@ class MainWindow(QMainWindow):
         title = QLabel("Macro Health / Pre-flight")
         title.setStyleSheet(f"color: {C['text']}; font-size: 18px; font-weight: 950;")
         lo.addWidget(title)
-        errors = self._last_preflight.get('errors', [])
-        warnings = self._last_preflight.get('warnings', [])
-        if errors:
-            health_text = "Blocked"
-            health_color = C['error']
-        elif warnings:
-            health_text = "Needs review"
-            health_color = C['warning']
-        else:
-            health_text = "Ready"
-            health_color = C['success']
-        summary = QLabel(f"{health_text} · {self.action_model.rowCount()} rows · {len(errors)} errors · {len(warnings)} warnings")
-        summary.setStyleSheet(f"color: {health_color}; font-size: 12px; font-weight: 900;")
+        summary = QLabel(f"{self.action_model.rowCount()} rows · {len(self._last_preflight.get('errors', []))} errors · {len(self._last_preflight.get('warnings', []))} warnings")
+        summary.setStyleSheet(f"color: {C['text_dim']}; font-size: 11px;")
         lo.addWidget(summary)
         edit = QPlainTextEdit(report)
         edit.setReadOnly(True)
@@ -5057,7 +5029,7 @@ class MainWindow(QMainWindow):
         self._run_from_index = idx
         self.engine.actions = self.action_model.actions()[idx:]
         self.engine.variables = dict(getattr(self, "macro_variables", {}) or {})
-        if not self.run_preflight_check(show_success=False, allow_warning_prompt=False):
+        if not self.run_preflight_check(show_success=False, allow_warning_prompt=True):
             self._run_from_index = 0
             return
 
@@ -5167,29 +5139,22 @@ class MainWindow(QMainWindow):
             self._show_rec_badge(False)
 
     def _show_rec_badge(self, show):
+        """Recording already has status in the main UI; do not spawn a badge.
+
+        Older builds used a small frameless Qt.Tool badge.  On Windows that can
+        be advertised as another MacroForge.exe top-level window, so this helper
+        now only removes any legacy badge that may still exist.
+        """
         rec = self._recorder
-        if show:
-            if rec["overlay"] is not None:
-                return
-            # Keep the REC badge inside the main window so Windows does not
-            # advertise it as another MacroForge.exe tool window.
-            ov = QFrame(self)
-            ov.setStyleSheet("background-color: transparent; border: none;")
-            ov.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            ov.setFixedSize(60, 28)
-            lbl = QLabel("REC")
-            lbl.setStyleSheet(f"color: {COLORS['error']}; font-weight: bold; font-size: 12px;")
-            lo = QHBoxLayout(ov)
-            lo.addWidget(lbl)
-            # Position near top-right of the main window content.
-            ov.move(max(8, self.width() - 72), 10)
-            ov.show()
-            ov.raise_()
-            rec["overlay"] = ov
-        else:
-            if rec["overlay"] is not None:
-                rec["overlay"].close()
-                rec["overlay"] = None
+        try:
+            overlay = rec.get("overlay")
+            if overlay is not None:
+                overlay.hide()
+                overlay.close()
+                overlay.deleteLater()
+        except Exception:
+            pass
+        rec["overlay"] = None
 
     def _rec_timer_tick(self):
         rec = self._recorder
@@ -5841,8 +5806,8 @@ class MainWindow(QMainWindow):
         if panel is None or dock is None or restore is None:
             return
 
-        expanded_h = int(getattr(self, "_playback_expanded_height", 175) or 175)
-        target_h = 36 if collapsed else expanded_h
+        exp_h = int(getattr(self, "_playback_expanded_height", 206))
+        target_h = 36 if collapsed else exp_h
         try:
             anim = getattr(self, "_playback_collapse_anim", None)
             if anim is not None:
@@ -5850,9 +5815,9 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        start_h = int(panel.height() or (36 if not collapsed else expanded_h))
+        start_h = int(panel.height() or (36 if not collapsed else exp_h))
         if start_h <= 0:
-            start_h = 36 if not collapsed else expanded_h
+            start_h = 36 if not collapsed else exp_h
         if not collapsed:
             restore.setVisible(False)
             dock.setVisible(True)
@@ -5948,27 +5913,99 @@ class MainWindow(QMainWindow):
         self._stat_time.setText(self._format_hms(session_time))
 
     # ═══════════════════════════════════════════════════════
+    #  STARTUP AUX WINDOW CLEANUP
+    # ═══════════════════════════════════════════════════════
+
+    def _start_startup_window_guard(self):
+        """Remove tiny stray top-level Qt helper windows during startup.
+
+        The main fix is to stop creating Qt.Tool helpers, but some older Qt/
+        PyInstaller combinations can still briefly expose a native helper window
+        while the app is being restored.  This guard runs only during the first
+        few seconds after startup so normal dialogs, menus, and combo popups are
+        not affected during regular use.
+        """
+        try:
+            self._startup_window_guard_ticks = 0
+            self._startup_window_guard = QTimer(self)
+            self._startup_window_guard.setInterval(500)
+            self._startup_window_guard.timeout.connect(self._remove_startup_aux_windows)
+            self._startup_window_guard.setSingleShot(True)
+            self._startup_window_guard.start()
+            QTimer.singleShot(1500, self._remove_startup_aux_windows)
+        except Exception:
+            pass
+
+    def _remove_startup_aux_windows(self):
+        try:
+            self._startup_window_guard_ticks = int(getattr(self, "_startup_window_guard_ticks", 0)) + 1
+            app = QApplication.instance()
+            if app is None:
+                return
+            for widget in list(app.topLevelWidgets()):
+                if widget is None or widget is self:
+                    continue
+                try:
+                    if not widget.isVisible():
+                        continue
+                    title = str(widget.windowTitle() or "").strip()
+                    object_name = str(widget.objectName() or "").strip()
+                    class_name = str(widget.metaObject().className() or widget.__class__.__name__)
+                    geom = widget.frameGeometry()
+                    width = max(int(geom.width()), int(widget.width()))
+                    height = max(int(geom.height()), int(widget.height()))
+                    flags = widget.windowFlags()
+                    is_known_aux = object_name in {"timeline_search_popup", "rec_badge_overlay"}
+                    is_tiny_untitled = (not title) and width <= 120 and height <= 180
+                    is_aux_flagged = bool(
+                        flags & Qt.WindowType.Tool
+                    )
+                    # Do not touch normal app dialogs.  The target symptom is a
+                    # tiny, untitled helper window that looks like a vertical
+                    # scrollbar/pill and appears beside the main client.
+                    if is_known_aux or (is_tiny_untitled and is_aux_flagged):
+                        logger.info(
+                            "Closing stray startup Qt helper window: "
+                            f"class={class_name!r} object={object_name!r} size={width}x{height}"
+                        )
+                        widget.hide()
+                        widget.close()
+                        widget.deleteLater()
+                except Exception:
+                    continue
+        finally:
+            try:
+                if int(getattr(self, "_startup_window_guard_ticks", 0)) >= 24:
+                    timer = getattr(self, "_startup_window_guard", None)
+                    if timer is not None:
+                        timer.stop()
+                        timer.deleteLater()
+                    self._startup_window_guard = None
+            except Exception:
+                pass
+
+    # ═══════════════════════════════════════════════════════
     #  SYSTRAY
     # ═══════════════════════════════════════════════════════
 
     def _setup_tray(self):
-        try:
-            from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-            from PyQt6.QtGui import QIcon
-            self._tray_menu = QMenu()
-            self._tray_menu.addAction("Show", self.showNormal)
-            self._tray_menu.addAction("Quit", self._real_exit)
-            self._tray_icon = QSystemTrayIcon(self)
-            self._tray_icon.setContextMenu(self._tray_menu)
-            self._tray_icon.setIcon(self.windowIcon())
-            self._tray_icon.activated.connect(self._tray_activated)
-            self._tray_icon.show()
-        except Exception as e:
-            logger.debug(f"Tray not available: {e}")
+        """Disable the system tray helper window.
+
+        The tray icon is optional, and on some Windows/PyInstaller/PyQt builds
+        QSystemTrayIcon can create a tiny native helper window that appears as a
+        second MacroForge.exe window.  Keep startup single-window only.
+        """
+        self._tray_icon = None
+        self._tray_menu = None
+        logger.info("System tray disabled: single-window startup mode")
 
     def _tray_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.showNormal()
+        try:
+            from PyQt6.QtWidgets import QSystemTrayIcon
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+                self.showNormal()
+        except Exception:
+            pass
 
     # ═══════════════════════════════════════════════════════
     #  UTILITIES

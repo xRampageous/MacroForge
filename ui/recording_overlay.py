@@ -35,11 +35,15 @@ class RecordingOverlay(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
-        )
+        # Do not use Qt.Tool here.  Windows may expose Qt.Tool widgets as
+        # separate MacroForge.exe windows in Alt-Tab/taskbar previews.
+        # If this overlay is ever used again, it should be either a normal
+        # child of the main window or an intentional non-tool frameless window.
+        if parent is None:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.WindowStaysOnTopHint
+            )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         
